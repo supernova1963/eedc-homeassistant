@@ -929,7 +929,8 @@ Werte bleiben oder verworfen werden:
   Tage, sonst zählt sie keinen Zuwachs. Sofort gewählt oder später nachgetragen („Grund nachtragen“), nimmt eedc dieselben
   zwei Stände um die Zeit des Wechsels — außer der Stand wechselt in dieser Stunde eindeutig die Höhe, dann dort. Ändert sich
   der Stand in dieser Stunde zu einer anderen Zeit mit einem einzelnen großen Schritt, nennt der Dialog des Nachtrags ihn:
-  „Bisherige Werte bleiben“ zählt ihn mit; war es ein Tausch, trägst du ihn danach unter „Zähler getauscht“ ein. **Zwischen einem Sensor aus Home Assistant und MQTT** rechnet eedc den Wechsel wie
+  „Bisherige Werte bleiben“ zählt ihn mit. Sendet der neue Zähler schon vor der verzeichneten Zeit des Wechsels und springt
+  dabei, können „sofort“ und „später nachgetragen“ die Stunde verschieden zählen. **Zwischen einem Sensor aus Home Assistant und MQTT** rechnet eedc den Wechsel wie
   bisher: der Unterschied zählt nicht als Menge, und wo eedc aus den gespeicherten Zählerständen rechnet, zählt die Stunde des
   Wechsels keinen Zuwachs; der Dialog sagt es unter „Bisherige Werte bleiben“.
 - **„Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet"** — du gibst an, seit wann (**„Falsch seit"**, vorbelegt mit dem Beginn der
@@ -994,18 +995,21 @@ eigenen Werten nicht, sondern nennen es; seine Quelle wechselst du hier am Feld.
   Stunde von „Getauscht am“ eindeutig die Höhe, setzt eedc den Eintrag dorthin — der Dialog nennt die Zeit und den Stand davor
   und danach. Wechselt der Stand in der Stunde mehrmals die Höhe (das Gerät meldet kurz 0, ein anderes Gerät sendet kurz seinen
   Stand), nimmt eedc den letzten Stand vor dem ersten und den ersten nach dem letzten Wechsel dieser Stunde; die Minuten
-  dazwischen zählen nicht. Geschieht das an einem Tag zweimal, trägst du jedes für sich ein. Sonst nimmt eedc den Zählerstand zur
-  gewählten Zeit und den nächsten anderen Stand danach (ein Stand, der nur wiederholt wurde, zählt nicht als neuer), rückt
-  „Getauscht am“ dorthin, zeigt beide Stände und die Menge dazwischen – sie zählt nach dem Eintrag nicht. Sieht eedc an der Zeit
-  keinen Sprung, sagt der Dialog das („Einen Sprung sieht eedc an dieser Zeit nicht.“); eintragen kannst du trotzdem. Hebt
-  sich der Schritt deutlich von den Schritten der 24 Stunden davor ab, sagt er „Ob das ein Tausch ist oder eine gezählte Menge,
-  erkennt eedc nicht.“ Der Unterschied zwischen altem und neuem Zählerstand zählt nicht als Menge; die Stunde des Tauschs zählt,
+  dazwischen zählen nicht. Geschieht das an einem Tag zweimal, trägst du jedes für sich ein. Sonst nimmt eedc den letzten Zählerstand
+  vor der gewählten Zeit und den nächsten anderen Stand danach (ein Stand, der nur wiederholt wurde, zählt nicht als neuer — auch
+  wenn er erst Tage später kommt), trägt den Tausch an der Zeit dieses Stands ein (der Dialog nennt beide Zeiten; das Feld
+  „Getauscht am“ behält deine Eingabe), zeigt beide Stände und die Menge dazwischen – sie zählt nach dem Eintrag nicht. Liegt
+  dieser Stand in einer Stunde, in der der Stand eindeutig die Höhe wechselt, setzt eedc den Eintrag dorthin wie oben. Hat der neue Zähler nach der gewählten Zeit noch keinen anderen Stand gemeldet, trägt eedc noch nichts ein und sagt es:
+  trag den Tausch ein, sobald er meldet. Je Stunde und Feld geht ein Eintrag — ein zweiter Tausch in derselben Stunde, auch nach
+  „Bisherige Werte bleiben“ in dieser Stunde, ist nicht eintragbar (der Dialog sagt „Dieser Tausch ist schon eingetragen.“). Sieht eedc an der Zeit
+  keinen Sprung, sagt der Dialog das („Einen Sprung sieht eedc an dieser Zeit nicht.“); eintragen kannst du trotzdem. Trägt
+  der Schritt fast den ganzen Zuwachs seiner Stunde und ist er mehr als zehnmal so groß wie die Schritte der 24 Stunden davor, sagt
+  er „Ob das ein Tausch ist oder eine gezählte Menge, erkennt eedc nicht.“ Der Unterschied zwischen altem und neuem Zählerstand zählt nicht als Menge; die Stunde des Tauschs zählt,
   was der alte Zähler bis zu seinem letzten und der neue ab seinem ersten Stand gezählt hat. Ist die Stunde schon gespeichert,
   nennt der Dialog, was sie danach statt bisher zählt; nur wenn sie danach weniger als nichts zählte, trägt eedc nichts ein und
   sagt es. Der Knopf **„Zähler getauscht“** am Befund „Zählerstand springt (MQTT)“
   ([Daten-Checker §4.8k](HANDBUCH_DATEN_CHECKER.md#48k-zaehlerstaende--zaehlerstand-springt-mqtt)) öffnet diesen Dialog mit der
-  Zeit des Schritts. Ist nach „Getauscht am“ noch kein anderer Stand gespeichert, trägt eedc
-  den Tausch ein und nimmt die zwei Stände, sobald der neue gespeichert ist. Gespeicherte Zählerstände reichen 31 Tage zurück;
+  Zeit des Schritts. Gespeicherte Zählerstände reichen 31 Tage zurück;
   für einen älteren Tausch zählt die Stunde des Tauschs keinen Zuwachs. Die Live-Anzeige rechnet direkt aus den
   Zählerständen und zeigt den Sprung am Tag des Tauschs unter „heute“ und am Tag danach unter „gestern“ weiter.
 - **Ein Feld ohne Spiegel aus Home Assistant** (vor dem Kanal, ohne Zählerstände über MQTT): du klickst **„Eintragen"** —
@@ -1036,8 +1040,8 @@ A → X → A, nach dem noch ein Wechsel der Quelle verzeichnet ist), steht die 
 „Falsch seit" gibt es dort nicht. Am Wechsel A → X selbst lässt sich keine Korrektur nachtragen. Ist der Grund eingetragen, nennt
 der Daten-Checker den Wechsel nicht mehr. Nach „Bisherige Werte bleiben" zwischen zwei Sensoren aus Home Assistant bildet
 eedc die Tage ab dem Wechsel neu, wie oben. Zwischen zwei MQTT-Quellen zählt die Stunde des Wechsels danach, was die
-bisherige Quelle bis zu ihrem letzten und die neue ab ihrem ersten Zählerstand gemeldet hat — springt der Stand in dieser
-Stunde, nimmt eedc die zwei Stände an diesem Sprung (wie oben). Bei jeder anderen Quelle zählt der Unterschied am Tag des
+bisherige Quelle bis zu ihrem letzten und die neue ab ihrem ersten Zählerstand gemeldet hat — wechselt der Stand in dieser
+Stunde eindeutig die Höhe, nimmt eedc die zwei Stände an diesem Wechsel, sonst die zwei um die Zeit des Wechsels (wie oben). Bei jeder anderen Quelle zählt der Unterschied am Tag des
 Wechsels nicht mehr, wo eedc diesen Tag aus seinen gespeicherten Stundenwerten bildet; hat eedc für ihn schon einen festen
 Tageswert gespeichert, bleibt der, wie er ist, und kann den Unterschied weiter enthalten.
 

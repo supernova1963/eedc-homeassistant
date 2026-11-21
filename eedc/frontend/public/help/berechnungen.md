@@ -5107,8 +5107,12 @@ Rand-Stände (G5; core/berechnungen/rohstand_rand.py, Laden services/zuordnung_w
                               Stand nach dem LETZTEN Höhenwechsel der Stunde (U3-K B1, sprung_der_stunde, rohstand.sprung_um;
                               die Stände dazwischen gehören keinem der zwei Zähler); Satz SATZ_FORTSETZUNG_ROH
             R2 (Dialog)     = sonst: letzter Rohstand vor «Getauscht am» und der NÄCHSTE Rohstand danach mit ANDEREM Wert
-                              (rohstand.naechster_anderer_um, rohstand_rand.naechster_anderer; ein still wiederholter Stand ist
-                              kein Stand des neuen Zählers; höchstens 24 h); «Getauscht am» rückt auf den anderen Stand; Paar =
+                              (rohstand.naechster_anderer_um; ein still wiederholter Stand ist kein Stand des neuen Zählers;
+                              Sitzung 5, Bauplan Nr. 168: ohne Zeitgrenze, bis zum letzten gespeicherten Rohstand); liegt er in
+                              einer Stunde mit eindeutigem Höhenwechsel (auch jedem Rückgang), gilt dort R1 (K4-B2); gibt es
+                              keinen, trägt der Dialog nicht ein (noch_nicht_gemeldet, SATZ_NOCH_NICHT_GEMELDET); «Getauscht
+                              am» rückt auf den anderen Stand; dazu SATZ_EIN_EINTRAG («Für die Stunde bis … Uhr ist danach kein
+                              weiterer Tausch eintragbar.» — zaehler_getauscht._schon vergleicht ab_ts); Paar =
                               (Stand unmittelbar davor, anderer Stand); Satz SATZ_SCHRITT («ändert sich zwischen … und … Uhr von
                               … auf …») bzw. SATZ_SCHRITT_STILL (der Stand davor wurde mindestens einmal wiederholt, still_seit)
                               mit der Menge, die nach dem Eintrag nicht zählt (menge_des_schritts, zwei Nachkommastellen), dazu
@@ -5118,12 +5122,14 @@ Rand-Stände (G5; core/berechnungen/rohstand_rand.py, Laden services/zuordnung_w
                               ≥ EINZELSCHRITT_ANTEIL (0,9) × Σ der Schritte nach oben seiner Stunde UND seine MENGE >
                               SPRUNG_FAKTOR (10) × die größte Menge der gewöhnlichen Schritte nach oben (selbst kein
                               Höhenwechsel) der 24 h davor (hebt_sich_ab; ohne solchen Schritt ja)
-          gesperrt bleiben nur: eine negative Menge der Naht-Stunde (negative_menge; naht.nachtrag_fortsetzung schreibt sie nie)
-          und «Dieser Tausch ist schon eingetragen.»; die Ablehnung «kein Sprung zu sehen» (kein_sprung, U3 b bis U3-K4)
-          entfällt. Nach «Getauscht am» noch kein (anderer) Stand: eingetragen, die Rand-Stände setzt der Stundenlauf, der die
-          Naht anwendet (rohstand.rand_im_stundenlauf mit rohstand.rand_der_naht: R1, endet die Spanne an der Naht; an einem
-          Eintrag «Zähler getauscht» — dieselbe Quelle davor und danach, rohstand.ist_getauscht_an — R2, dieselbe
-          Paar-Funktion wie der Dialog; sonst rand_um).
+          gesperrt bleiben nur: eine negative Menge der Naht-Stunde (negative_menge; naht.nachtrag_fortsetzung schreibt sie nie),
+          ein noch nicht gemeldeter neuer Zähler (Sitzung 5) und «Dieser Tausch ist schon eingetragen.»; die Ablehnung «kein Sprung
+          zu sehen» (kein_sprung, U3 b bis U3-K4) entfällt. Ein Eintrag «Zähler getauscht» trägt seine Rand-Stände seit Sitzung 5
+          immer selbst; der Stundenlauf (rohstand.rand_im_stundenlauf mit rohstand.rand_der_naht: R1, endet die Spanne an der
+          Naht, sonst rand_um) setzt sie nur noch für «bleiben». Gemessen (Sitzung 5): 30 h stumm, gewählt 07.06. 10:00, neuer
+          Zähler 08.06. 11:10 ⇒ Eintrag dort, Tag 7,65 (U3-K4: Eintrag ohne Wirkung, 97,65); Eintrag um 10:32 für 10:22, neuer
+          Stand erst 13:20 ⇒ um 10:32 kein Eintrag, ab 13:20 12,6 in Kanal, Reihe und Tagesansicht (U3-K4: 312,6); gewählt 09:30,
+          neuer Zähler ab 0 bzw. +2 000 um 10:20 ⇒ R1-Satz, 13,2 (U3-K4: Satz mit −5 048,20 kWh).
           Gemessen (Welten der Nachmessung U3-K3, 0,6 kWh je Stunde, Takt = Minuten zwischen zwei gemeldeten Ständen):
           Takt 60 gewöhnlich, «Getauscht am» 10:20 ⇒ eintragbar am Schritt 11:00 (0,60 kWh, «Einen Sprung sieht eedc …»),
           danach 13,8; Takt 60 Tausch +2 000 bzw. +90 um 10:20 (sichtbar 11:00) ⇒ ein Eintrag am Schritt 11:00, 13,8;
@@ -5135,7 +5141,8 @@ Rand-Stände (G5; core/berechnungen/rohstand_rand.py, Laden services/zuordnung_w
           sofort (gemessen: Takt 60 14,4 · ganzzahlig 15,0 · Last 6 kWh im Takt 15 20,4 · Takt 5 14,35; U3-K3 nachgetragen
           13,8 · 14,0 · 14,25 · 14,35). Hebt sich in der Stunde ein Schritt ab, der nicht im Paar um den Zeitpunkt liegt,
           nennt die Prüf-Antwort des Nachtrags ihn (rohstand.SATZ_BLEIBEN_SCHRITT: «Mit „Bisherige Werte bleiben“ zählt eedc
-          diese … kWh mit. War das ein Tausch, trag ihn danach unter „Zähler getauscht“ ein.»)
+          diese … mit.», Einheit des Felds; Sitzung 5: ohne den Satz «trag ihn danach unter „Zähler getauscht“ ein» — nach
+          «bleiben» ist in derselben Stunde kein Tausch eintragbar, benannte Grenze (j))
   ohne Rohstände (älter als 31 Tage): wie vor U3 (die Naht-Stunde zählt keinen Zuwachs)
 
 Zählerstand springt (MQTT) (G4; Erzeuger services/daten_checker/datenquelle/mqtt_standsprung.py):
@@ -5190,18 +5197,25 @@ sendenden Publisher bei einer Ladung über mehrere Stunden (22 kWh je Stunde, 10
 der Befund nennt 11:00, nicht 12:00 und 13:00 (Bericht U3-K4 H-1); (h) entfällt seit U3-K2 (P-2) — eine Nachholmenge nach langer
 Stille ist kein Höhenwechsel; seit U3-K4 ist sie im Dialog eintragbar mit dem Satz zur stillen Zeit und der Menge; (i) die Spanne gilt je Stunde — ein
 fremder Stand über die volle Stunde hinweg (10:50 bis 11:10) braucht zwei Einträge, G4 nennt nach dem ersten die zweite Stunde
-(U3-K3 K2-B5, gemessen: 14,15).
+(U3-K3 K2-B5, gemessen: 14,15); (j) seit Sitzung 5 benannt: **je Stunde und Feld ein Eintrag** — ein zweiter «Zähler getauscht»
+in derselben Stunde und «Zähler getauscht» nach «Bisherige Werte bleiben» in derselben Stunde sagen «Dieser Tausch ist schon
+eingetragen.» (zaehler_getauscht._schon vergleicht ab_ts; zwei Nähte je Stunde sind nicht gemessen); (k) «bleiben» sofort ≠
+nachgetragen, wenn der neue Zähler schon vor dem verzeichneten Wechsel auf demselben Schlüssel sendet (Nachmessung U3-K4, K4-B3:
+neuer Publisher ab 10:20, Wechsel 10:22 verzeichnet; +2 000: nachgetragen 14,35, sofort 2 014,35, kein Befund; ab 0: nachgetragen
+14,35, sofort Kanal 14,3, Reihe «—» — der Stundenlauf nimmt die Spanne nur, wenn sie genau am Zeitpunkt endet); (l) der Eintrag
+«Zähler getauscht» geht erst, wenn der neue Zähler gemeldet hat (Sitzung 5) — davor sagt der Dialog es und trägt nichts ein.
 **Gemessen U3-K** (`golden-master/sensorwechsel-saat/u3k/`, 20 Tage Vorlauf, Netzbezug 0,5 kWh je Stunde, Ereignis 10:20): Gerät
 meldet fünf Minuten 0 · anderes Gerät zehn Minuten 300 · neues Gerät erst 0, dann 300 ⇒ nach dem Eintrag 11,917 · 11,875 · 11,917
 in Kanal, Reihe und Tagesansicht (U3 b: −5 005,208 · −4 705,25 · 311,958); Wallbox 22 kW nach 20 Tagen Standby: G4 still, der
-Dialog lehnt ab (U3 b: 1,833 kWh echter Verbrauch gestrichen); ein Gerät sendet eine Stunde den halben Stand: G4 nennt Neubeginn
+Dialog lehnte damals ab (U3 b: 1,833 kWh echter Verbrauch gestrichen; seit U3-K4 trägt er auf das Wort des Anwenders ein und
+nennt die Menge); ein Gerät sendet eine Stunde den halben Stand: G4 nennt Neubeginn
 und Sprung (U3 b: still, Tag 5 257,1).
 **Gemessen U3-K2** (`golden-master/sensorwechsel-saat/u3k2/test_p3_mess.py`, MQTT-Kanal mit 400 Tagen Geschichte, Rohstände der
 letzten zwei Tage, Schritt um 10:20): reifer Zähler 1,5 kWh am Tag, 200 kWp (Grenze 300 kW), +20 kWh in fünf Minuten (240 kW) —
 G4 nennt die Stunde (Maß 13,4), am HEAD öffnete der Knopf den Dialog mit 10:00 und der Dialog lehnte ab, jetzt nennt G4 10:20 und
 der Dialog trägt ein; reifer Zähler 1,2 kWh am Tag, Stand nur zur vollen Stunde, +15 kWh nach 20 Minuten Stand (45 kW, Maß 12,6)
-ebenso; Wallbox 22 kW nach Standby und Nachholmenge nach 1 h · 3 h · 30 h Stille: kein Befund, der Dialog lehnt ab (am HEAD nahm
-er die Nachholmenge nach 30 h an).
+ebenso; Wallbox 22 kW nach Standby und Nachholmenge nach 1 h · 3 h · 30 h Stille: kein Befund, der Dialog lehnte damals ab (am HEAD nahm
+er die Nachholmenge nach 30 h an; seit U3-K4 eintragbar mit dem Satz zur stillen Zeit und der Menge).
 **Gemessen U3-K3** (`golden-master/sensorwechsel-saat/u3k3/`, Welten der Nachmessung `nm-u3k2/test_nm_k2_mqtt*.py`: Netzbezug
 0,6 kWh je Stunde, Tag 14,4, Ereignis 10:20): zwei kurze Nullstände 10:20 und 15:20 ⇒ zwei Befunde (10:25, 15:25), nach beiden
 Einträgen 14,2 in Kanal, Reihe und Tagesansicht (U3-K2: 5 066,65, die Reihe kippte); 23 h später ⇒ 14,3 · 14,3; zwei in einer
@@ -5878,7 +5892,10 @@ Geschichte): keine «Regel 2».
 Kanal setzt am Nullpunkt an, die **Korrektur-Zeile** trägt den Nullpunkt als `stand_neu_null` (ohne `ansatz`; die Rand-Stände an
 «Falsch seit», `_rand_an_falsch_seit`, entfallen dort — HA führt davor keine Zeile), `nullpunkt.abschnitte` liest sie (G =
 `falsch_seit_ts`), die Stände liest der Lauf ab `h + 1 h` (`_erster_neuer_stand`, ohne Lücke ab «Falsch seit»). Ohne Werte davor
-nennt die Vorschau `SATZ_STAENDE_AB_MONAT`. Gemessen (`handgriff_d`, «Falsch seit» 03.11. 23:00): Kanal-Stunde 23 Uhr 0,4 · Tag
+nennt die Vorschau `SATZ_STAENDE_AB_MONAT` — **benannte Grenze (K4-B5, Nachmessung U3-K4):** beginnt auch der bisherige Sensor in
+HA erst an dieser Zeile (das Feld hat davor keinen Wert), greift die Regel nicht (kein prüfbarer Vorlauf): die Vorschau sagt «Kein
+Tag muss neu gebildet werden …», die Korrektur legt eine Lücken-Zeile bis zur nächsten vollen Stunde an, November 1,2 statt 1,6 in
+allen Wegen (Rand-Thema U4). Gemessen (`handgriff_d`, «Falsch seit» 03.11. 23:00): Kanal-Stunde 23 Uhr 0,4 · Tag
 03.11. Kanal = Tagesansicht 14,2 · November 44,2 in Monatssicht, «Aus HA laden», Monatsabschluss und Kanal (U3-K3: Lücke 23–00 Uhr,
 0,0 · 13,8 · 43,8); die Vorschau nennt weder Lücke noch Handgriff D; `handgriff_d_0000`, `handgriff_d_2200`, `vorlauf`,
 `geschichte` unverändert. **U3-K4 (K3-B5):** führt später ein angesetzter Wechsel «bleiben» vom richtigen Sensor weiter, gilt der

@@ -42,8 +42,9 @@ die Prüfung ab (``negative_menge``) — eine negative Menge wird nie geschriebe
 den Rohständen der Stunde (``rohstand.sprung_um``) den Schritt, an dem der Zählerstand die Höhe wechselt, und trägt den Tausch
 genau dort ein — mit dem letzten Rohstand davor und dem ersten danach als Rand-Ständen (``ansatz = schnitt``). Die Stunde des
 Tauschs zählt dann, was in den Rohständen steht (Kanal: ``naht.nachtrag_fortsetzung`` mit ``rand``; Reihe: ``rand_versatz``),
-statt keinen Zuwachs. Ist nach dem Zeitpunkt noch kein (anderer) Rohstand gespeichert, wird eingetragen und der Stundenlauf
-setzt die Rand-Stände; ohne Rohstände (älter als 31 Tage) wie bisher.
+statt keinen Zuwachs. Ist nach dem Zeitpunkt noch kein (anderer) Rohstand gespeichert, trägt der Dialog nicht ein
+(``noch_nicht_gemeldet``, Bauplan Nr. 168: der Eintrag geht erst, wenn der neue Zähler gemeldet hat); ohne Rohstände (älter als 31
+Tage) wie bisher.
 
 **Bauplan Nr. 166 (Entscheid Gernot 20.11.2026): bei MQTT entscheidet der Anwender; die Erkennung zeigt, sie entscheidet
 nicht.** Wechselt der Stand in der Stunde eindeutig die Höhe (R1), liegt der Eintrag dort. Sonst (R2) nimmt eedc den letzten
@@ -51,8 +52,9 @@ Stand vor der gewählten Zeit und den **nächsten Stand danach mit anderem Wert*
 «Getauscht am» dorthin und nennt beide Zeiten, beide Stände und die Menge, die nach dem Eintrag nicht zählt (``SATZ_SCHRITT``;
 stand der Stand davor still, ``SATZ_SCHRITT_STILL``), dazu einen Hinweis: hebt sich der Schritt ab
 (``rohstand.abgehoben_am``), ``SATZ_HINWEIS_UNKLAR``, sonst ``SATZ_HINWEIS_KEIN_SPRUNG``. Es gibt keine Ablehnung «kein Sprung
-zu sehen» mehr (U3 b bis U3-K4); gesperrt bleiben nur eine negative Menge (``SATZ_NEGATIV``) und ein schon eingetragener Tausch
-(``SATZ_SCHON``).
+zu sehen» mehr (U3 b bis U3-K4); gesperrt bleiben nur eine negative Menge (``SATZ_NEGATIV``), ein noch nicht gemeldeter neuer Zähler und ein schon eingetragener Tausch
+(``SATZ_SCHON``). Landet der nächste andere Stand in einer Stunde, in der der Stand eindeutig die Höhe wechselt, gilt dort R1
+(Nr. 168, K4-B2); bei R2 sagt der Dialog, dass für diese Stunde danach kein weiterer Tausch eintragbar ist (``SATZ_EIN_EINTRAG``).
 
 Zweimal dasselbe ist einmal: eine Fortsetzungs-Zeile mit gleichem ``ab_ts`` wird nicht doppelt angelegt; der Nachtrag ist
 idempotent (Sitzung 2, §9 Nr. 25).
@@ -78,6 +80,8 @@ WEG_VOR_ERSTEM_WERT = "vor_erstem_wert"
 WEG_NICHT_MOEGLICH = "nicht_moeglich"
 #: U3-K (B1): die Stunde des Tauschs zählte nach dem Eintrag eine negative Menge — nicht eingetragen.
 WEG_NEGATIV = "negative_menge"
+#: Bauplan Nr. 168 (K4-B1, H-3): nach der gewählten Zeit ist (noch) kein anderer Zählerstand gespeichert — nicht eingetragen.
+WEG_NOCH_NICHT_GEMELDET = "noch_nicht_gemeldet"
 
 #: Wortlaute (Sitzung 3b, Korrekturrunde 3b-K; Gernot liest sie vor dem Commit).
 SATZ_HA = ("Dieser Zähler kommt aus Home Assistant, und eedc übernimmt seine Summe so, wie Home Assistant sie führt. Einen "
@@ -129,11 +133,13 @@ SATZ_SCHRITT_STILL = ("Der Zählerstand steht von {seit} bis {bis} Uhr still und
 #: Danach genau einer der Hinweise (``rohstand.abgehoben_am``: hebt sich der Schritt ab?).
 SATZ_HINWEIS_UNKLAR = "Ob das ein Tausch ist oder eine gezählte Menge, erkennt eedc nicht."
 SATZ_HINWEIS_KEIN_SPRUNG = "Einen Sprung sieht eedc an dieser Zeit nicht."
-SATZ_NOCH_KEIN_STAND = ("Nach {zeit} Uhr ist noch kein Zählerstand gespeichert. eedc trägt den Tausch ein und nimmt den letzten "
-                        "Stand davor und den ersten danach, sobald er gespeichert ist.")
-#: Bauplan Nr. 166 (eigene Fassung U3-K4): nach der Zeit ist nur der still wiederholte Stand gespeichert.
-SATZ_NOCH_KEIN_ANDERER = ("Nach {zeit} Uhr hat sich der Zählerstand noch nicht geändert. eedc trägt den Tausch ein und nimmt den "
-                          "letzten Stand davor und den ersten anderen danach, sobald er gespeichert ist.")
+#: Bauplan Nr. 168 (Wortlaut des Masters): MQTT, nach der gewählten Zeit kein anderer Zählerstand — nicht eingetragen.
+SATZ_NOCH_NICHT_GEMELDET = ("Seit {zeit} Uhr ist kein anderer Zählerstand gespeichert – der neue Zähler hat noch nichts gemeldet. eedc "
+                            "trägt deshalb noch nichts ein. Trag den Tausch ein, sobald er meldet: eedc nimmt dann den letzten "
+                            "Stand davor und seinen ersten.")
+#: Bauplan Nr. 168 (K4-B4, H-2; am Code geprüft: ``_schon`` vergleicht ``ab_ts`` — ein Tausch zwischen der vollen Stunde davor
+#: und ``ab`` hat dasselbe ``ab_ts``): bei R2 genannt.
+SATZ_EIN_EINTRAG = "Für die Stunde bis {bis} Uhr ist danach kein weiterer Tausch eintragbar."
 #: U3 b (Entscheid E4): Live rechnet bei MQTT aus den Rohständen selbst (``mqtt_energy_history_service``) — der Eintrag ändert
 #: daran nichts; nur genannt, wenn der Tausch heute oder gestern liegt.
 SATZ_LIVE = ("Die Live-Anzeige rechnet direkt aus den Zählerständen: sie zeigt den Sprung am Tag des Tauschs unter „heute“ "
@@ -167,7 +173,7 @@ class Lage:
     rand: Optional[tuple] = None
     neu: Optional[float] = None
     #: U3 b (G5) / Bauplan Nr. 166: ``sprung`` (R1, ``rand`` ist die Spanne) · ``schritt`` (R2, ``rand`` ist der Stand davor und
-    #: der nächste andere) · ``noch_kein_stand`` (eintragen, der Stundenlauf setzt die Rand-Stände) · ``ohne``.
+    #: der nächste andere) · ``noch_kein_stand`` (nicht eingetragen, Bauplan Nr. 168) · ``ohne``.
     rohstand: Optional[str] = None
     heute: Optional[date] = None
     #: R2: seit wann der Stand davor unverändert gespeichert ist (``rohstand.still_seit``) und ob der Schritt sich abhebt.
@@ -297,6 +303,8 @@ async def lage(db, anlage, sensor_key: Optional[str], getauscht_am: datetime, *,
         return Lage(sensor_key, weg, q, getauscht_am, stand=stand)
     kwh = kanal is None or kanal.einheit in (None, "", "kWh")
     rohstand, rand = await _rohstand(db, anlage.id, sensor_key, q_zeit, getauscht_am, kwh=kwh)
+    if rohstand == "noch_kein_stand":          # Bauplan Nr. 168: noch nichts einzutragen
+        return Lage(sensor_key, WEG_NOCH_NICHT_GEMELDET, q, getauscht_am, rohstand=rohstand)
     if rand is not None:                       # U3 b (G5): der Tausch liegt am Höhenwechsel der Rohstände
         getauscht_am = rand[1][0].replace(microsecond=0)
         ab = ab_ts_aus(getauscht_am)
@@ -330,17 +338,19 @@ def _schon(wechsel, ab: datetime) -> bool:
     return any(w.grund == GRUND_FORTSETZUNG and w.aufgehoben_durch is None and w.ab_ts == ab for w in wechsel)
 
 
-#: Bauplan Nr. 166: R2 — der Stand vor der Zeit und der nächste andere danach; ``noch_kein_anderer``: danach nur der wiederholte.
+#: Bauplan Nr. 166: R2 — der Stand vor der Zeit und der nächste andere danach.
 ROH_SCHRITT = "schritt"
-ROH_NOCH_KEIN_ANDERER = "noch_kein_anderer"
 
 
 async def _rohstand(db, anlage_id: int, sensor_key: str, quelle, t: datetime, *,
                    kwh: bool = True) -> tuple[Optional[str], Optional[tuple]]:
-    """U3 b (G5), Bauplan Nr. 166: gilt zur Zeit des Tauschs MQTT, die Rand-Stände um ``t`` — R1 (``rohstand.sprung_um``: der
-    Stand wechselt in der Stunde eindeutig die Höhe) oder R2 (``rohstand.naechster_anderer_um``: der nächste andere Stand;
-    ohne ihn ``noch_kein_stand``)."""
-    from backend.services.zuordnung_wechsel.rohstand import KEIN_HOEHENWECHSEL, mqtt_key_der_quelle, naechster_anderer_um, sprung_um
+    """U3 b (G5), Bauplan Nr. 166/168: gilt zur Zeit des Tauschs MQTT, die Rand-Stände um ``t`` — R1 (``rohstand.sprung_um``: der
+    Stand wechselt in der Stunde eindeutig die Höhe) oder R2 (``rohstand.naechster_anderer_um``: der nächste andere Stand); landet
+    R2 in einer Stunde, in der der Stand eindeutig die Höhe wechselt (auch jeder Rückgang), gilt dort R1 (K4-B2). Gibt es nach
+    ``t`` noch keinen (anderen) Stand: ``noch_kein_stand`` (der Dialog trägt nicht ein, K4-B1/H-3)."""
+    from backend.services.zuordnung_wechsel.rohstand import (
+        KEIN_HOEHENWECHSEL, NOCH_KEIN_STAND, SPRUNG, mqtt_key_der_quelle, naechster_anderer_um, sprung_um,
+    )
 
     mk = mqtt_key_der_quelle(quelle, sensor_key)
     if mk is None:
@@ -349,7 +359,12 @@ async def _rohstand(db, anlage_id: int, sensor_key: str, quelle, t: datetime, *,
     if art != KEIN_HOEHENWECHSEL:
         return art, paar
     paar = await naechster_anderer_um(db, anlage_id, mk, t)
-    return (ROH_SCHRITT, paar) if paar is not None else (ROH_NOCH_KEIN_ANDERER, None)
+    if paar is None:
+        return NOCH_KEIN_STAND, None
+    art2, spanne = await sprung_um(db, anlage_id, mk, paar[1][0], kwh=kwh)
+    if art2 == SPRUNG and spanne is not None:
+        return SPRUNG, spanne
+    return ROH_SCHRITT, paar
 
 
 async def tag_fest(db, anlage, sensor_key: str, ab: datetime) -> Optional[tuple[date, float]]:
@@ -380,7 +395,8 @@ def _saetze_schritt(la: Lage) -> list[str]:
         satz = SATZ_SCHRITT_STILL.format(seit=_zeit(la.still_seit), **werte)
     else:
         satz = SATZ_SCHRITT.format(von=_zeit(la.rand[0][0]), **werte)
-    return [satz, SATZ_HINWEIS_UNKLAR if la.abgehoben else SATZ_HINWEIS_KEIN_SPRUNG]
+    return [satz, SATZ_HINWEIS_UNKLAR if la.abgehoben else SATZ_HINWEIS_KEIN_SPRUNG,
+            SATZ_EIN_EINTRAG.format(bis=_zeit(ab_ts_aus(la.getauscht_am)))]
 
 
 def _saetze_fortsetzung(la: Lage) -> list[str]:
@@ -393,9 +409,6 @@ def _saetze_fortsetzung(la: Lage) -> list[str]:
                                          neu=fmt_zahl(la.rand[1][1], 1), einheit=la.einheit or "kWh")]
     else:
         s = [SATZ_FORTSETZUNG.format(zeit=_zeit(la.getauscht_am))]
-        if la.rohstand in ("noch_kein_stand", ROH_NOCH_KEIN_ANDERER):
-            satz = SATZ_NOCH_KEIN_STAND if la.rohstand == "noch_kein_stand" else SATZ_NOCH_KEIN_ANDERER
-            s.append(satz.format(zeit=_zeit(la.getauscht_am)))
     if la.nachtrag_ts is not None and la.rand is not None and la.neu is not None and la.zuwachs is not None:
         s.append(SATZ_NACHTRAG_ROH.format(stunde=_zeit(datetime.fromtimestamp(la.nachtrag_ts)), neu=fmt_zahl(la.neu, 2),
                                           bisher=fmt_zahl(la.zuwachs, 2), einheit=la.einheit or "kWh"))
@@ -422,6 +435,8 @@ def saetze(la: Lage) -> list[str]:
         return [SATZ_VOR_ERSTEM_WERT.format(zeit=_zeit(la.erster_wert))]
     if la.weg == WEG_NICHT_MOEGLICH:
         return [satz_nicht_moeglich(la)]
+    if la.weg == WEG_NOCH_NICHT_GEMELDET:
+        return [SATZ_NOCH_NICHT_GEMELDET.format(zeit=_zeit(la.getauscht_am))]
     if la.weg == WEG_NEGATIV:
         return [SATZ_NEGATIV.format(zeit=_zeit(la.getauscht_am), stunde=_zeit(datetime.fromtimestamp(la.nachtrag_ts)),
                                     neu=fmt_zahl(la.neu, 2), einheit=la.einheit or "kWh")]

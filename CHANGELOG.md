@@ -11,15 +11,34 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Added
 
-- **Daten-Checker: „Zählerstände – versetzter Abschnitt“.** Hat eedc eine Zeit lang die Zählerstände eines anderen
-  Sensors gespeichert (etwa nach einem Wechsel der Zuordnung), springt die Reihe um einen festen Betrag nach oben und fällt
-  später um etwa denselben Betrag zurück — am ersten Tag ist der Tageswert zu hoch, am letzten fehlt er („Zähler
-  zurückgesprungen“). Der neue Befund nennt Gerät, Feld, Zeitraum, Höhe des Versatzes und die betroffenen Tage — nur für
-  Felder, deren Tageswert die Tagesansicht aus den gespeicherten Ständen bildet (PV- und Netz-Ladung von Wallbox und E-Auto,
-  Netzladung des Speichers, Wärmepumpen-Zähler, Netzbezug zum eigenen Tarif), und nur, wenn diese Tage ihren Wert wirklich
-  daraus rechnen. Stimmen die Stände vor und nach dem Abschnitt
-  mit Home Assistant überein, holt „Tage neu aufbauen“ die Stände neu (höchstens 31 Tage je Klick, danach nennt der Befund
-  den Rest); sonst sagt der Befund, was gilt. Gespeicherte Monatswerte ändert das nicht.
+- **Sensorwechsel: eedc fragt, warum die Quelle eines Felds wechselt.** Änderst du unter *Einstellungen → Datenquellen* die
+  Zuordnung eines Felds, das schon eigene Werte hat, öffnet sich der Dialog „Warum wechselt die Quelle?“ mit zwei Antworten:
+  „Bisherige Werte bleiben — der neue Sensor setzt fort (Zähler oder Gerät getauscht, anderer Sensor für dasselbe Gerät)“
+  oder „Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet“. Unter „Was danach geschieht“ steht, bevor
+  etwas geändert wird, was eedc tut. „Bleiben“ zwischen zwei Sensoren aus Home Assistant rechnet wie Home Assistant mit
+  beiden (die Stunde des Wechsels zählt beide Sensoren; haben sie eine Zeit lang gleichzeitig gezählt, wählst du unter „Der
+  neue Sensor zählt ab“ die Stunde). „Verwerfen“ fragt „Falsch seit“, verwirft die Zählerstände dieser Zeit, übernimmt die
+  Geschichte des richtigen Sensors, soweit Home Assistant sie führt, und bildet die betroffenen Tage im Hintergrund neu;
+  gespeicherte Monatsabschlüsse bleiben. Beides lässt sich in eedc nicht zurücknehmen — der Dialog sagt es vorher.
+- **„Zähler getauscht (gleiche Quelle)“ am Feld.** Für einen Zähler aus Home Assistant nennt der Dialog den Weg in Home
+  Assistant („Summe anpassen“) und trägt nichts ein. Bei MQTT entscheidest du, ob an einer Zeit ein Tausch eingetragen wird:
+  eedc zeigt die Zählerstände vor und nach der gewählten Zeit und die Menge, die danach nicht zählt, und sagt, ob es dort einen
+  Sprung sieht; eingetragen wird erst, wenn der neue Zähler einen Stand gemeldet hat. Je Stunde und Feld geht ein Eintrag.
+- **„Grund nachtragen“** für einen Wechsel, den eedc schon verzeichnet hat, aber ohne Grund — derselbe Dialog.
+- **Neue Daten-Checker-Befunde** zur Herkunft der Zählerstände: „Zählerstände – Zuordnung geändert, Grund fehlt“ und
+  „Zählerstände – versetzter Abschnitt“ (Knopf „Grund nachtragen“), „Zählerstände – Zählerstand springt“ (Knopf „Aus Home
+  Assistant neu übernehmen“), „Zählerstände – Zählerstand springt (MQTT)“ (Knopf „Zähler getauscht“), „Zählerstände – Zeit
+  verworfen“ (Auskunft „Was gilt“) und „Zählerstände – Gespeicherter Monatswert passt nicht mehr“ (Knopf „Monat öffnen“).
+- **Menüwege von Home Assistant 2026.11** in Befunden, Lösungswegen, Handbüchern und Dialogen: „Einstellungen → Werkzeuge →
+  Statistik (in älteren Home-Assistant-Versionen: Entwicklerwerkzeuge → Statistik)“, „Summe anpassen“, „Zeitpunkt auswählen“,
+  „Neuer Wert“, „Anpassen“.
+- **Was sich an bestehenden Zahlen ändern kann:** nur an Feldern mit einem eingetragenen Wechsel — die Stunde und der Tag des
+  Wechsels zählen wie Home Assistant bzw. aus den Zählerständen vor und nach dem Tausch, eine verworfene Zeit zeigt keinen
+  Wert oder die Werte des richtigen Sensors. Der Monatsabschluss nennt am Vorschlag „Zählerstand“, wenn im Monat ein Wechsel
+  eingetragen ist. Ohne eingetragenen Wechsel bleibt jede Zahl, wie sie war. Ein leerer Tag sagt jetzt nur „Zähler
+  zugeordnet, aber für diesen Tag liegen keine Zählerstände vor — eedc bildet für diesen Tag deshalb keinen Tageswert.“
+  (bisher versprach der Satz ein Nachrechnen in der Reparatur-Werkbank). Der Hinweis nach einer geänderten Zuordnung, der
+  vorher an dieser Stelle stand, entfällt; an seine Stelle tritt der Dialog.
 
 ### Changed
 
@@ -82,12 +101,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Anlage mit Speicher zu Feldern, die das Monatsformular mit Speicher nicht zeigt — jetzt in die Zeile des Speichers.
   Befunde zur PV-Erzeugung eines Monats sprangen bei PV-Modulen ohne eigenen Gesamtwert ins Leere, weil dort nur die
   berechnete Summe steht — jetzt in die Zeile des ersten PV-Moduls.
-- **Datenquellen: der Hinweis nach einer geänderten Zuordnung rät keinen Teil-Neuaufbau mehr.** Er empfahl, die
-  zurückliegenden Tage in der Reparatur-Werkbank neu zu rechnen („Mehrere Tage neu aggregieren“, bis zu 31 Tage je Lauf).
-  Zählt der neue Zähler auf einer anderen Höhe als der alte, legt genau das in den gespeicherten Zählerständen einen
-  Abschnitt auf einer anderen Höhe an. Jetzt sagt der Hinweis, dass die bisherigen Werte bleiben, wie sie waren, und dass
-  der Daten-Checker prüft, ob ein versetzter Abschnitt entstanden ist; der Knopf führt dorthin. Findet der Daten-Checker
-  keinen, steht „Zählerstände – versetzter Abschnitt“ jetzt unter den bestandenen Prüfungen.
+- **Home Assistant: nach dem Abschalten der Remote-Verbindung fragt eedc Home Assistant nicht weiter ab.** Wurde die
+  Verbindung zu einem entfernten Home Assistant abgeschaltet, behielt eedc Adresse und Zugang bis zum nächsten Neustart und
+  galt weiter als verbunden. Jetzt kehrt eedc sofort zur Verbindung beim Start zurück.
 - **Daten-Checker „Zählerstände – versetzter Abschnitt“: drei Grenzen benannt.** Der Lösungsweg sagt jetzt, was der
   Befund nicht erkennt: einen einzelnen alten Wechsel ohne Rückgang; die Netzladung des Speichers in Monaten ohne
   gespeicherte Monatswerte des Speichers, die eedc aus den gespeicherten Zählerständen liest; und dass ohne Stundenwerte

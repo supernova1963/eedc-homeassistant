@@ -86,10 +86,11 @@ GRUND_LUECKE_VERWORFEN: Final[str] = "luecke_verworfen"
 #: ([[feedback_eedc_ist_nicht_die_strom_polizei]]).
 TAGESWERT_GRUND_TEXT: Final[dict[str, str]] = {
     GRUND_NICHT_ZUGEORDNET: "Kein Zähler zugeordnet",
+    # Sensorwechsel Sitzung 5 (Bauplan B-9, Nr. 149): kein Versprechen, frühere Tage nachzurechnen — vor dem Beginn
+    # der Zählerstände gibt keine Quelle einen Tageswert her (Grundregel Quellentreue).
     GRUND_KEINE_ZAEHLERSTAENDE: (
-        "Zähler zugeordnet, aber für diesen Tag liegen keine Zählerstände vor. "
-        "Tageswerte entstehen ab der Zuordnung; frühere Tage lassen sich in der "
-        "Reparatur-Werkbank nachrechnen."
+        "Zähler zugeordnet, aber für diesen Tag liegen keine Zählerstände vor — "
+        "eedc bildet für diesen Tag deshalb keinen Tageswert."
     ),
     GRUND_ZAEHLER_RUECKSPRUNG: (
         "Der Zähler ist an diesem Tag zurückgesprungen — für diesen Tag gibt es "

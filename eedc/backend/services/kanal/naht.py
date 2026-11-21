@@ -83,12 +83,11 @@ async def zeilen_mit_naehten(db: AsyncSession, k, st, sensor_key: str, mqtt_key:
     naehte = await offene_naehte(db, k.anlage.id, sensor_key, mqtt_key, von, staende[-1][0])
     if not naehte:
         return await zeilen_der_periode(db, k, st, sensor_key, mqtt_key, staende)
-    from backend.services.zuordnung_wechsel.rohstand import ist_getauscht_an, rand_der_naht, rand_im_stundenlauf
+    from backend.services.zuordnung_wechsel.rohstand import rand_der_naht, rand_im_stundenlauf
 
     art, out = st.kanal.art, []
     for e in naehte:
-        paar = await rand_der_naht(db, k.anlage.id, mqtt_key, e,
-                                   getauscht=await ist_getauscht_an(db, k.anlage.id, sensor_key, e))   # Bauplan Nr. 166
+        paar = await rand_der_naht(db, k.anlage.id, mqtt_key, e)
         await rand_im_stundenlauf(db, k.anlage.id, sensor_key, mqtt_key, e, paar)     # U3 b (G5): die Rand-Stände der Naht
         # U3-K (B1): Stände zwischen den Rand-Ständen (mehrere Höhenwechsel in der Stunde) gehören keinem der zwei Zähler.
         bis_alt = paar[0][0] if paar is not None else None

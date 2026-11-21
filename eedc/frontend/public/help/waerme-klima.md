@@ -305,7 +305,7 @@ Das ist die unangenehmste Eigenschaft dieser Fläche und zugleich ihre wichtigst
 Sie beantworten die Frage „Warum ist der Tag leer, obwohl der Monat gefüllt ist?" (siehe [§2](#2-voraussetzungen--welcher-zähler-für-welche-anzeige)):
 
 - **Kein Zähler zugeordnet** — mit dem Weg dorthin.
-- **Zähler zugeordnet, aber für diesen Tag liegen keine Zählerstände vor. Tageswerte entstehen ab der Zuordnung; frühere Tage lassen sich in der Reparatur-Werkbank nachrechnen.** ⭐ **Seit v4.0.45 nur noch, wenn im Tag wirklich kein einziger Stand liegt** — beginnt die Reihe mitten am Tag, zeigt eedc die Menge und schreibt *„gemessen ab hh:mm Uhr"* dazu (Kasten in [§2](#2-voraussetzungen--welcher-zähler-für-welche-anzeige)).
+- **Zähler zugeordnet, aber für diesen Tag liegen keine Zählerstände vor — eedc bildet für diesen Tag deshalb keinen Tageswert.** ⭐ **Seit v4.0.45 nur noch, wenn im Tag wirklich kein einziger Stand liegt** — beginnt die Reihe mitten am Tag, zeigt eedc die Menge und schreibt *„gemessen ab hh:mm Uhr"* dazu (Kasten in [§2](#2-voraussetzungen--welcher-zähler-für-welche-anzeige)).
 - **Der Zähler ist an diesem Tag zurückgesprungen — für diesen Tag gibt es deshalb keine Aussage.**
 - **Für diesen Tag liegen keine Zählerstände vor: eine Korrektur hat die Zählerstände dieser Zeit verworfen.** Er steht an einem Tag in einer Zeit, deren Zählerstände eine Korrektur über einen falsch zugeordneten Sensor verworfen hat und die nichts (oder noch nichts) neu gefüllt hat (siehe [Einstellungen §7.7](HANDBUCH_EINSTELLUNGEN.md#77-eine-geänderte-zuordnung-gilt-ab-jetzt--nicht-rückwirkend)); dort gibt es nichts nachzurechnen.
 

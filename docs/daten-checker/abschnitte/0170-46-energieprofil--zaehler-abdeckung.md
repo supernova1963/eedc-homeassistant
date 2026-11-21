@@ -49,7 +49,7 @@ dem Energieprofil. Live-Anzeigen aus den Leistungs-Sensoren (W) funktionieren we
 > ist eine Aufgabe für dich: *Kein Zähler zugeordnet* · *Zähler zugeordnet, aber für diesen Tag liegen keine Zählerstände
 > vor* · *Der Zähler ist an diesem Tag zurückgesprungen*. Der mittlere Fall ist der Regelfall kurz nach einer Zuordnung:
 > Der **Monats**wert steht da, weil er aus der Langzeitstatistik von Home Assistant kommt — **Tages**werte entstehen erst
-> ab der Zuordnung. Frühere Tage lassen sich in der Reparatur-Werkbank nachrechnen.
+> ab der Zuordnung. Für einen Tag ohne Zählerstände bildet eedc keinen Tageswert.
 
 > **Wer hier ausgenommen ist:** **Split-Klimaanlagen** (Wärmepumpenart *Luft-Luft*) werden nicht nach Wärme gefragt, eine
 > **Brauchwasser-Wärmepumpe** nicht nach Heizwärme. Das **E-Auto** wird für den Ladezähler übersprungen, wenn eine

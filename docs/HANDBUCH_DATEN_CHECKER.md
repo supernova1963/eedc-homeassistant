@@ -2543,7 +2543,7 @@ dem Energieprofil. Live-Anzeigen aus den Leistungs-Sensoren (W) funktionieren we
 > ist eine Aufgabe für dich: *Kein Zähler zugeordnet* · *Zähler zugeordnet, aber für diesen Tag liegen keine Zählerstände
 > vor* · *Der Zähler ist an diesem Tag zurückgesprungen*. Der mittlere Fall ist der Regelfall kurz nach einer Zuordnung:
 > Der **Monats**wert steht da, weil er aus der Langzeitstatistik von Home Assistant kommt — **Tages**werte entstehen erst
-> ab der Zuordnung. Frühere Tage lassen sich in der Reparatur-Werkbank nachrechnen.
+> ab der Zuordnung. Für einen Tag ohne Zählerstände bildet eedc keinen Tageswert.
 
 > **Wer hier ausgenommen ist:** **Split-Klimaanlagen** (Wärmepumpenart *Luft-Luft*) werden nicht nach Wärme gefragt, eine
 > **Brauchwasser-Wärmepumpe** nicht nach Heizwärme. Das **E-Auto** wird für den Ladezähler übersprungen, wenn eine
@@ -3447,7 +3447,7 @@ oder ist Home Assistant eingerichtet, aber gerade nicht erreichbar, trägt der B
 «Was gilt». Der Befund nennt nur die Tage, deren Wert eedc wirklich aus diesen Ständen bildet — liegt ein
 Rückgang im Fenster eines Tages, fehlt dessen Wert, auch wenn im selben Fenster ein Sprung liegt.
 
-**In einer MQTT-Reihe** (seit Sensorwechsel U3): führt eedc für ein Feld eine eigene Summe aus den Zählerständen, die der
+**In einer MQTT-Reihe:** führt eedc für ein Feld eine eigene Summe aus den Zählerständen, die der
 Publisher sendet, prüft es auch diese Stände. Dort zählt eedc den Sprung und den Rückgang als Menge der Stunde — die
 Tageswerte an beiden Tagen sind falsch. «Grund nachtragen» bietet dann beide Antworten: „Bisherige Werte bleiben“ trägt am
 Sprung und am Rückgang je einen Zählertausch ein (die Werte des Abschnitts zählen, die zwei Sprünge nicht); „Bisherige Werte
@@ -3556,8 +3556,10 @@ das vorher noch keine Werte hatte.
    Stunden eedc neu liest und Tage neu bildet — auch den Tag des Wechsels. Haben beide Sensoren eine Zeit lang gleichzeitig
    gezählt, erscheint das Feld **„Der neue Sensor zählt ab"**, vorbelegt mit der Stunde des Wechsels; eine frühere Stunde
    nimmst du, wenn der neue Sensor schon ab dann die Werte des Geräts gemessen hat. Bei jeder anderen Quelle (etwa MQTT)
-   bleiben die bisherigen Werte, und der Unterschied zwischen altem und neuem Zählerstand zählt nicht als Menge; wo eedc aus
-   den gespeicherten Zählerständen rechnet, zählt die Stunde des Wechsels keinen Zuwachs. Für den Tag des Wechsels gilt
+   bleiben die bisherigen Werte, und der Unterschied zwischen altem und neuem Zählerstand zählt nicht als Menge. Zwischen zwei
+   MQTT-Quellen zählt die Stunde des Wechsels, was die bisherige Quelle bis zu ihrem letzten und die neue ab ihrem ersten
+   Zählerstand gemeldet hat (aus den gespeicherten Zählerständen der letzten 31 Tage); sonst zählt sie dort keinen Zuwachs, wo
+   eedc aus den gespeicherten Zählerständen rechnet. Für den Tag des Wechsels gilt
    dort: bildet eedc ihn aus seinen gespeicherten Stundenwerten, zählt der Unterschied danach nicht mehr; hat eedc für diesen
    Tag schon einen festen Tageswert gespeichert, bleibt der, wie er ist, und kann den Unterschied weiter enthalten.
 3. Waren die Werte vor dem Wechsel falsch: **„Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet"** wählen, unter
@@ -3596,7 +3598,7 @@ Wird das Gerät hinter einem Zähler getauscht und Home Assistant führt **dense
 der neue Zähler mehr als der alte, zählt Home Assistant den Unterschied als Verbrauch bzw. Erzeugung der Stunde des Tauschs;
 beginnt der neue Zähler nicht bei 0, hält Home Assistant das für einen neuen Zählerlauf und zählt seinen ganzen Stand. eedc
 übernimmt die Statistik so, wie das Energie-Dashboard von Home Assistant sie zeigt, und berichtigt nichts — der Sprung steht in
-Tag, Monat und Jahr. Diese Kategorie nennt jede solche Stunde mit Feld, Sensor, Stunde und Menge. Geprüft wird die ganze
+Tag, Monat und Jahr. Diese Kategorie nennt bis zu fünf solche Stunden mit Feld, Sensor, Stunde und Menge; weitere zählt die letzte Zeile. Geprüft wird die ganze
 übernommene Statistik.
 
 **Woran eedc einen Sprung erkennt.** Die Menge der Stunde wird mit dem größten Tagesverbrauch des Zählers im Jahr davor
@@ -3751,7 +3753,7 @@ Gerät sendet auf demselben Topic —, zählt diese Regel den Unterschied als Me
 Neubeginn, der nicht bei 0 liegt, mit dem ganzen neuen Stand, einen Fall um weniger als ein Zehntel als negative Menge. Meldet
 das Gerät innerhalb einer Stunde kurz 0 oder sendet ein anderes Gerät kurz seinen Stand, zählt sie den ganzen Stand, obwohl am
 Ende der Stunde wieder der alte Zähler steht. Diese
-Kategorie nennt jede solche Stunde mit Feld, Zeit und Menge; der Knopf «Zähler getauscht» öffnet in den Datenquellen den Dialog
+Kategorie nennt bis zu fünf solche Stunden mit Feld, Zeit und Menge (weitere zählt die letzte Zeile); der Knopf «Zähler getauscht» öffnet in den Datenquellen den Dialog
 mit der Zeit des Sprungs. Geprüft werden alle Stunden, die eedc für das Feld aus MQTT führt.
 
 **Woran eedc einen Sprung erkennt.** Wie in [§4.8h](#48h-zaehlerstaende--zaehlerstand-springt): die Menge der Stunde wird mit
@@ -3759,7 +3761,9 @@ dem größten Tagesverbrauch des Zählers im Jahr davor verglichen und durch die
 Sprung nach oben ist ein Befund ab dem Zehnfachen — wenn der Zähler schon ein Jahr mit gewöhnlichem Betrieb kennt oder die Menge
 mehr ist, als eine Anlage in einer Stunde leisten kann —, ein Neubeginn ab dem Dreifachen. Ein Rückgang (die Stunde zählt weniger
 als −0,01 kWh) ist immer ein Befund, ebenso eine Stunde, deren Menge um mindestens neun Zehntel des Stands davor über dem liegt,
-was der Zählerstand selbst gewachsen ist (kurz eine andere Höhe).
+was der Zählerstand selbst gewachsen ist (kurz eine andere Höhe). Für die letzten 31 Tage gilt ein Sprung nach oben nur, wenn
+der Stand in der Stunde eindeutig die Höhe wechselt oder sich mit einem einzelnen Schritt ändert, der fast die ganze Menge der
+Stunde trägt und mehr als zehnmal so groß ist wie die Schritte der 24 Stunden davor.
 
 **Was kein Befund ist.** Ein Zähler, der täglich oder monatlich bei 0 neu beginnt
 ([§4.8a](#48a-zaehlerstaende--ruecksprung)); eine Stunde, die nach einer Lücke die Menge mehrerer Stunden nachträgt;
@@ -3786,15 +3790,17 @@ Details, dass eedc einen Tausch nicht von gezählter Menge unterscheiden kann.
 **Lösungsweg**
 1. Am Befund **«Zähler getauscht»** klicken — in den Datenquellen öffnet sich beim Feld der Dialog **«Zähler getauscht (gleiche
    Quelle)»**; **«Getauscht am»** steht auf der Zeit, zu der der Zählerstand springt bzw. zurückkehrt.
-2. Die Sätze im Dialog lesen: Sie nennen die Zeit des Sprungs, den Stand davor und danach, die Menge, die nach dem Eintrag
-   nicht zählt, und — ist die Stunde schon gespeichert — was sie danach zählt. Kann eedc den Schritt nicht von gezähltem
+2. Die Sätze im Dialog lesen: Sie nennen die Zeit, zu der der Stand springt, und den Stand davor und danach – bei einem
+   einzelnen Schritt auch die Menge, die nach dem Eintrag nicht zählt, und dass für diese Stunde danach kein weiterer Tausch
+   eintragbar ist –, und — ist die Stunde schon gespeichert — was sie danach zählt. Kann eedc den Schritt nicht von gezähltem
    Verbrauch unterscheiden, steht dort «Ob das ein Tausch ist oder eine gezählte Menge, erkennt eedc nicht.»
-3. Nur bei einem Tausch: **«Eintragen»** klicken. Darunter steht «Ein Eintrag lässt sich nicht zurücknehmen.» Nennen die
+3. Nur bei einem Tausch: **«Eintragen»** klicken. Darüber steht «Ein Eintrag lässt sich nicht zurücknehmen.» Nennen die
    Details einen einzelnen Schritt («eedc erkennt den Unterschied nicht») und war es gezählte Menge (etwa eine Ladung), nichts
    eintragen — der Wert stimmt.
 4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach dem Eintrag ist die Stunde aus der Liste verschwunden. Steht im
    Dialog statt **«Eintragen»** ein Satz, dass die Stunde danach weniger als nichts zählte, ist nichts eingetragen: die Zeit
-   unter **«Getauscht am»** prüfen.
+   unter **«Getauscht am»** prüfen. Sagt er, dass der neue Zähler noch nichts gemeldet hat, den Tausch eintragen, sobald er
+   meldet.
 
 Stimmt der Sprung (der Zähler hat wirklich so viel gezählt), ist nichts zu tun. Für die letzten 31 Tage prüft eedc dazu die
 gespeicherten Zählerstände: die Prüfung nennt eine Stunde nur, wenn der Stand dort die Höhe wechselt oder sich mit einem

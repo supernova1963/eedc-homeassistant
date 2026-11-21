@@ -406,22 +406,26 @@ async def test_g5_spaet_eingetragen_kanal_und_reihe_11958(db, monkeypatch, stand
         assert await kanal_tag(db, aid, TAG_E + timedelta(days=1)) == pytest.approx(12.0)
 
 
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_stundenlauf_ohne_rand"])
+@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_eintragen_ohne_neuen_stand"])
 async def test_g5_sofort_vor_dem_ersten_neuen_stand_setzt_der_stundenlauf_die_rand_staende(db, monkeypatch, sprengsatz):
-    """Eingetragen um 10:18, bevor der neue Zähler einen Stand gemeldet hat (``noch_kein_stand``): der Stundenlauf, der die Naht
-    anwendet, setzt die Rand-Stände aus denselben Rohständen — Kanal und Reihe 11,958."""
-    from backend.services.zuordnung_wechsel import rohstand
+    """Um 10:18, bevor der neue Zähler einen Stand gemeldet hat: Sitzung 5 (Bauplan Nr. 168, neue Erwartung — bis U3-K4 trug der
+    Dialog ein und der Stundenlauf setzte die Rand-Stände): der Dialog trägt noch nicht ein und sagt es; nach dem Betrieb (der
+    neue Zähler hat um 10:20 gemeldet) trägt er ein — Kanal und Reihe 11,958. Sprengsatz: der Weg gälte als eintragbar."""
+    from backend.services.zuordnung_wechsel import zaehler_getauscht as zg
 
     if sprengsatz:
-        async def nichts(*a, **k):
-            return None
-        monkeypatch.setattr(rohstand, "rand_im_stundenlauf", nichts)
+        monkeypatch.setattr(zg, "WEG_NOCH_NICHT_GEMELDET", zg.WEG_FORTSETZUNG)
     t = E - timedelta(minutes=2)
     aid = (await _anlage(db)).id
     antw = await betrieb(db, aid, Saat(_hoch(), handlungen=[(t, getauscht(t))]))
-    assert any("noch kein Zählerstand gespeichert" in s for s in antw[0]["pruefen"]["saetze"])
+    if sprengsatz:
+        assert antw[0]["pruefen"]["eintragen"] is True
+        return
+    assert antw[0]["pruefen"]["weg"] == "noch_nicht_gemeldet" and antw[0]["eintragen"]["eingetragen"] is False
+    assert antw[0]["pruefen"]["saetze"][0].startswith("Seit 08.06.2026 10:18 Uhr ist kein anderer Zählerstand gespeichert")
+    assert (await getauscht(t)(db, aid))["eintragen"]["eingetragen"] is True
     assert await kanal_tag(db, aid, TAG_E) == pytest.approx(11.958, abs=0.001)
-    assert await reihe_tag(db, aid, TAG_E) == pytest.approx(11.5 if sprengsatz else 11.958, abs=0.001)
+    assert await reihe_tag(db, aid, TAG_E) == pytest.approx(11.958, abs=0.001)
 
 
 @pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_zeit_wie_eingegeben"])

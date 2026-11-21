@@ -34,7 +34,8 @@ Benutzer, ob neu angefangen wird»). Zwei Regeln für die Rand-Stände:
 1. **R1** — wechselt der Stand in der Stunde eindeutig die Höhe (Höhenwechsel nach Leistung, oben), liegt der Eintrag dort: die
    Spanne der Stunde (``sprung_der_stunde``, unten). Gilt für alle Wege (Dialog «Zähler getauscht», «bleiben», Stundenlauf).
 2. **R2** (Dialog «Zähler getauscht», sonst): der letzte Rohstand vor der gewählten Zeit und der **nächste Rohstand danach mit
-   anderem Wert** (``naechster_anderer``) — ein still wiederholter Stand ist kein Stand des neuen Zählers. «Bleiben» nimmt sonst
+   anderem Wert** (``rohstand.naechster_anderer_um``, ohne Zeitgrenze) — ein still wiederholter Stand ist kein Stand des neuen
+   Zählers; gibt es noch keinen, trägt der Dialog nicht ein (Bauplan Nr. 168). «Bleiben» nimmt sonst
    die zwei Stände um den Zeitpunkt (``rohstand.rand_um``).
 
 **«Hebt sich ab»** (``abgehoben``; nur für den Hinweis des Dialogs, den Hinweis von «bleiben» und den Befund «Zählerstand
@@ -175,19 +176,6 @@ def abgehobener_schritt_der_stunde(rohstaende: Sequence[Roh], stunde: datetime,
     return g if abgehoben(rohstaende, g, grenze_kw) else None
 
 
-def naechster_anderer(rohstaende: Sequence[Roh], t: datetime) -> Optional[tuple[Roh, Roh]]:
-    """R2 (Bauplan Nr. 166): ``(Stand davor, Stand danach)`` — der erste Rohstand ab ``t``, dessen Wert sich vom letzten Rohstand
-    vor ``t`` unterscheidet, und der Rohstand unmittelbar davor (dessen Wert = der vor ``t``; ein still wiederholter Stand ist
-    kein Stand des neuen Zählers). ``None``, wenn es vor ``t`` keinen Rohstand gibt oder danach (noch) keinen anderen."""
-    vor = [r for r in rohstaende if r[0] < t]
-    if not vor:
-        return None
-    for i, r in enumerate(rohstaende):
-        if r[0] >= t and r[1] != vor[-1][1]:
-            return rohstaende[i - 1], r
-    return None
-
-
 def hebt_sich_ab(rohstaende: Sequence[Roh], g: int, alle: Sequence[bool]) -> bool:
     """U3-K4 (K3-B3): hebt sich der Schritt ``(g − 1, g)`` ab? Seine **Menge** liegt über ``SPRUNG_FAKTOR`` × der größten Menge
     der gewöhnlichen Schritte nach oben (kein Höhenwechsel), die vor ihm enden und in die ``BEZUG`` davor fallen — Menge, nicht
@@ -236,5 +224,5 @@ def bruecke(kanalwert_davor: float, stand_davor: float, stand_danach: float, wer
 
 __all__ = ["BEZUG", "EINZELSCHRITT_ANTEIL", "RUECKGANG_MIN", "SPRUNG_FAKTOR", "SPRUNG_MIN", "abgehoben",
            "abgehobener_schritt_der_stunde", "bruecke", "hebt_sich_ab", "hoehenwechsel", "hoehenwechsel_der_stunde", "leistung",
-           "menge_der_naht", "menge_des_schritts", "naechster_anderer", "seit_dem_letzten_anderen", "sprung_der_stunde",
+           "menge_der_naht", "menge_des_schritts", "seit_dem_letzten_anderen", "sprung_der_stunde",
            "verschiebung_der_naht"]

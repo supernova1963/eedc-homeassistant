@@ -14,15 +14,17 @@ Details, dass eedc einen Tausch nicht von gezählter Menge unterscheiden kann.
 ## Lösungsweg
 1. Am Befund **«Zähler getauscht»** klicken — in den Datenquellen öffnet sich beim Feld der Dialog **«Zähler getauscht (gleiche
    Quelle)»**; **«Getauscht am»** steht auf der Zeit, zu der der Zählerstand springt bzw. zurückkehrt.
-2. Die Sätze im Dialog lesen: Sie nennen die Zeit des Sprungs, den Stand davor und danach, die Menge, die nach dem Eintrag
-   nicht zählt, und — ist die Stunde schon gespeichert — was sie danach zählt. Kann eedc den Schritt nicht von gezähltem
+2. Die Sätze im Dialog lesen: Sie nennen die Zeit, zu der der Stand springt, und den Stand davor und danach – bei einem
+   einzelnen Schritt auch die Menge, die nach dem Eintrag nicht zählt, und dass für diese Stunde danach kein weiterer Tausch
+   eintragbar ist –, und — ist die Stunde schon gespeichert — was sie danach zählt. Kann eedc den Schritt nicht von gezähltem
    Verbrauch unterscheiden, steht dort «Ob das ein Tausch ist oder eine gezählte Menge, erkennt eedc nicht.»
-3. Nur bei einem Tausch: **«Eintragen»** klicken. Darunter steht «Ein Eintrag lässt sich nicht zurücknehmen.» Nennen die
+3. Nur bei einem Tausch: **«Eintragen»** klicken. Darüber steht «Ein Eintrag lässt sich nicht zurücknehmen.» Nennen die
    Details einen einzelnen Schritt («eedc erkennt den Unterschied nicht») und war es gezählte Menge (etwa eine Ladung), nichts
    eintragen — der Wert stimmt.
 4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach dem Eintrag ist die Stunde aus der Liste verschwunden. Steht im
    Dialog statt **«Eintragen»** ein Satz, dass die Stunde danach weniger als nichts zählte, ist nichts eingetragen: die Zeit
-   unter **«Getauscht am»** prüfen.
+   unter **«Getauscht am»** prüfen. Sagt er, dass der neue Zähler noch nichts gemeldet hat, den Tausch eintragen, sobald er
+   meldet.
 
 Stimmt der Sprung (der Zähler hat wirklich so viel gezählt), ist nichts zu tun. Für die letzten 31 Tage prüft eedc dazu die
 gespeicherten Zählerstände: die Prüfung nennt eine Stunde nur, wenn der Stand dort die Höhe wechselt oder sich mit einem

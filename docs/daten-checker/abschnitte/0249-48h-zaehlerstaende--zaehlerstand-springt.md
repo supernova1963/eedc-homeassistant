@@ -5,7 +5,7 @@ Wird das Gerät hinter einem Zähler getauscht und Home Assistant führt **dense
 der neue Zähler mehr als der alte, zählt Home Assistant den Unterschied als Verbrauch bzw. Erzeugung der Stunde des Tauschs;
 beginnt der neue Zähler nicht bei 0, hält Home Assistant das für einen neuen Zählerlauf und zählt seinen ganzen Stand. eedc
 übernimmt die Statistik so, wie das Energie-Dashboard von Home Assistant sie zeigt, und berichtigt nichts — der Sprung steht in
-Tag, Monat und Jahr. Diese Kategorie nennt jede solche Stunde mit Feld, Sensor, Stunde und Menge. Geprüft wird die ganze
+Tag, Monat und Jahr. Diese Kategorie nennt bis zu fünf solche Stunden mit Feld, Sensor, Stunde und Menge; weitere zählt die letzte Zeile. Geprüft wird die ganze
 übernommene Statistik.
 
 **Woran eedc einen Sprung erkennt.** Die Menge der Stunde wird mit dem größten Tagesverbrauch des Zählers im Jahr davor

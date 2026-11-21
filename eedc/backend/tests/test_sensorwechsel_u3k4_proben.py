@@ -88,16 +88,6 @@ def test_p1_hebt_sich_ab_ohne_schritt_davor():
     assert rr.hebt_sich_ab(roh, len(roh) - 1, [False] * len(roh)) is True
 
 
-def test_p1_naechster_anderer_rein():
-    """R2: der erste Rohstand ab ``t`` mit anderem Wert als der letzte vor ``t`` und der Stand unmittelbar davor; ein still
-    wiederholter Stand ist kein Stand des neuen Zählers; ohne anderen Stand ``None``."""
-    t0 = datetime(2026, 6, 8, 10)
-    roh = [(t0 + timedelta(minutes=5 * i), 5.0 if i < 8 else 6.0) for i in range(12)]
-    assert rr.naechster_anderer(roh, t0 + timedelta(minutes=20)) == (roh[7], roh[8])
-    assert rr.naechster_anderer(roh[:8], t0 + timedelta(minutes=20)) is None
-    assert rr.naechster_anderer(roh, t0) is None
-
-
 @pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_hebt_sich_immer_ab"])
 @pytest.mark.parametrize("takt,am,tag", [(60, "2026-06-08T11:00:00", 13.8), (30, "2026-06-08T10:30:00", 14.1),
                                          (15, "2026-06-08T10:30:00", 14.25)])
@@ -143,7 +133,10 @@ async def test_p1_takt60_echter_tausch(db, plus, befund):
     assert [(x.werte["stunde"], x.werte["getauscht"]) for x in b] == ([("2026-06-08T11:00", "2026-06-08T11:00")] if befund else [])
     p = await _dialog(db, aid, T)
     assert (p["weg"], p["eintragen"], p["getauscht_am"]) == ("fortsetzung", True, "2026-06-08T11:00:00")
-    assert p["saetze"][1] == UNKLAR
+    if befund:                              # Sitzung 5 (K4-B2): der andere Stand liegt am Höhenwechsel — R1, ohne Hinweis
+        assert p["saetze"][0].startswith("eedc trägt den Tausch am 08.06.2026 11:00 Uhr ein") and UNKLAR not in p["saetze"]
+    else:
+        assert p["saetze"][1] == UNKLAR
     assert (await _dialog(db, aid, T, eintragen=True))["eingetragen"] is True
     k, r, t = await _drei(db, aid)
     assert k[0] == r[0] == t[0] == 13.8
@@ -185,36 +178,8 @@ async def test_p1_zwei_rohstaende_der_stunde(db):
     assert k[0] == r[0] == t[0] == 13.85
 
 
-async def test_p1_noch_kein_anderer_stand_stundenlauf(db):
-    """Eingetragen um 10:32 für 10:22; der Publisher meldet ab 10:20 drei Stunden denselben Stand (der Scheduler wiederholt ihn),
-    um 13:20 kommt der neue Zähler mit 300 kWh. Der Dialog sagt «hat sich der Zählerstand noch nicht geändert» und trägt ein.
-    **Gemessen (Bericht U3-K4, Halt H-3):** der Stundenlauf wendet die Naht im ersten Lauf danach an (der wiederholte Stand
-    liegt ab 10:25 vor) — R2 findet dort keinen anderen Stand, die Zeile bleibt ohne Rand-Stände, und der Kanal zählt den
-    Sprung um 13:20 (Stunde 13 Uhr 300,35, Tag 312,6; die Reihe zeigt keinen Wert). Ein zweiter Eintrag um 13:20 geht: Kanal
-    und Tagesansicht 12,6, Reihe 12,4."""
-    u, t2 = T + timedelta(minutes=2), T + timedelta(hours=3)
-
-    def stand(t):
-        if t < T:
-            return w(t)
-        return w(T) if t < t2 else round(300.0 + R * (t - t2).total_seconds() / 3600, 6)
-    antw = []
-
-    async def eintrag(db_, aid_):
-        antw.append(await _dialog(db_, aid_, u))
-        assert (await _dialog(db_, aid_, u, eintragen=True))["eingetragen"] is True
-    aid = (await _anlage(db)).id
-    await betrieb(db, aid, Saat(stand, start=ST, ende=EN, handlungen=[(u + timedelta(minutes=10), eintrag)]))
-    assert antw[0]["saetze"][1].startswith("Nach 08.06.2026 10:22 Uhr hat sich der Zählerstand noch nicht geändert.")
-    (z,) = await _wechsel_zeilen(db, aid)
-    assert (z.ansatz, z.stand_alt_ende, z.stand_neu_null) == (None, None, None)
-    assert await kanal_stunde(db, aid, H10 + timedelta(hours=3)) == 300.35
-    assert (await _drei(db, aid))[0][0] == 312.6
-    p = await _dialog(db, aid, t2)
-    assert (p["weg"], p["eintragen"], p["getauscht_am"]) == ("fortsetzung", True, "2026-06-08T13:20:00")
-    assert (await _dialog(db, aid, t2, eintragen=True))["eingetragen"] is True
-    k, r, t = await _drei(db, aid)
-    assert (k[0], r[0], t[0]) == (12.6, 12.4, 12.6)        # gemessen: die Reihe teilt an der ersten Zeile ohne Rand-Stände
+# ``test_p1_noch_kein_anderer_stand_stundenlauf`` (U3-K4) ersetzt Sitzung 5 durch
+# ``test_sensorwechsel_s5_proben.test_a1_noch_nicht_gemeldet_traegt_nicht_ein`` (Bauplan Nr. 168: kein Eintrag ohne neuen Stand).
 
 
 # ═══ P2 — Befund am abgehobenen Schritt mit ehrlichem Wortlaut ════════════════════════════════════════════════════════

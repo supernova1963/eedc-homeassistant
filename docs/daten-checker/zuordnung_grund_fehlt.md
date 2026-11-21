@@ -18,8 +18,10 @@ das vorher noch keine Werte hatte.
    Stunden eedc neu liest und Tage neu bildet — auch den Tag des Wechsels. Haben beide Sensoren eine Zeit lang gleichzeitig
    gezählt, erscheint das Feld **„Der neue Sensor zählt ab"**, vorbelegt mit der Stunde des Wechsels; eine frühere Stunde
    nimmst du, wenn der neue Sensor schon ab dann die Werte des Geräts gemessen hat. Bei jeder anderen Quelle (etwa MQTT)
-   bleiben die bisherigen Werte, und der Unterschied zwischen altem und neuem Zählerstand zählt nicht als Menge; wo eedc aus
-   den gespeicherten Zählerständen rechnet, zählt die Stunde des Wechsels keinen Zuwachs. Für den Tag des Wechsels gilt
+   bleiben die bisherigen Werte, und der Unterschied zwischen altem und neuem Zählerstand zählt nicht als Menge. Zwischen zwei
+   MQTT-Quellen zählt die Stunde des Wechsels, was die bisherige Quelle bis zu ihrem letzten und die neue ab ihrem ersten
+   Zählerstand gemeldet hat (aus den gespeicherten Zählerständen der letzten 31 Tage); sonst zählt sie dort keinen Zuwachs, wo
+   eedc aus den gespeicherten Zählerständen rechnet. Für den Tag des Wechsels gilt
    dort: bildet eedc ihn aus seinen gespeicherten Stundenwerten, zählt der Unterschied danach nicht mehr; hat eedc für diesen
    Tag schon einen festen Tageswert gespeichert, bleibt der, wie er ist, und kann den Unterschied weiter enthalten.
 3. Waren die Werte vor dem Wechsel falsch: **„Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet"** wählen, unter

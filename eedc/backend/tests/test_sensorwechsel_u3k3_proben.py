@@ -271,9 +271,12 @@ async def test_a2_tausch_nach_pause_eintragbar_mit_satz(db, monkeypatch, sprengs
 async def test_a2_neues_geraet_erst_null_zweiter_eintrag(db, monkeypatch, sprengsatz):
     """Neues Gerät meldet ab 10:20 drei Stunden 0, ab 13:20 seinen Stand 300: der Anwender trägt zuerst 10:20 ein (Höhenwechsel
     nach Leistung), dann 13:20 (der nächste andere Stand nach drei Stunden 0) — Tag 12,55. Sprengsatz: ohne den nächsten anderen
-    Stand (R2) ⇒ der zweite Eintrag ohne Rand-Stände, 312,55 bleibt nicht 12,55."""
+    Stand (R2) ⇒ kein zweiter Eintrag (Sitzung 5: «noch nicht gemeldet»), der Tag bleibt nicht 12,55."""
     if sprengsatz:
-        monkeypatch.setattr(rr, "naechster_anderer", lambda *_a, **_k: None)
+        async def keiner(*_a, **_k):
+            return None
+        from backend.services.zuordnung_wechsel import rohstand
+        monkeypatch.setattr(rohstand, "naechster_anderer_um", keiner)
     t2 = T + timedelta(hours=3)
 
     def stand(t):
@@ -284,8 +287,8 @@ async def test_a2_neues_geraet_erst_null_zweiter_eintrag(db, monkeypatch, spreng
     await betrieb(db, aid, Saat(stand, start=ST, ende=EN))
     assert (await _dialog(db, aid, T, eintragen=True))["eingetragen"] is True
     p = await _dialog(db, aid, t2)
-    if sprengsatz:
-        assert (await _dialog(db, aid, t2, eintragen=True))["eingetragen"] is True
+    if sprengsatz:                          # Sitzung 5: ohne anderen Stand trägt der Dialog nicht ein
+        assert (await _dialog(db, aid, t2, eintragen=True))["eingetragen"] is False
         assert (await _drei(db, aid, [TAG]))[0] != [12.55]
         return
     assert p["saetze"][0].startswith("Der Zählerstand steht von 08.06.2026 10:20 bis 08.06.2026 13:20 Uhr still und ändert "
@@ -396,7 +399,8 @@ def test_a3_kern_ueber_der_grenze_ohne_bezug(monkeypatch, sprengsatz):
 
 @pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_ohne_schon"])
 async def test_a4_schon_eingetragen_geht_vor(db, monkeypatch, sprengsatz):
-    """Eingetragen um 10:18, bevor ein Stand danach gespeichert war; die Rohstände zeigen danach keinen Sprung. Das zweite
+    """Eingetragen für 10:18 (um 10:23, Sitzung 5: erst wenn ein anderer Stand gespeichert ist); die Rohstände zeigen keinen
+    Sprung. Das zweite
     Öffnen zur selben Zeit sagt «Dieser Tausch ist schon eingetragen.». Sprengsatz: ohne die Sperre ⇒ ein zweiter Eintrag
     angeboten (U3-K4: die Ablehnung «kein Sprung» gibt es nicht mehr)."""
     from backend.services.zuordnung_wechsel import zaehler_getauscht as zg
@@ -408,7 +412,8 @@ async def test_a4_schon_eingetragen_geht_vor(db, monkeypatch, sprengsatz):
     async def eintrag(db, aid):
         assert (await _dialog(db, aid, t, eintragen=True))["eingetragen"] is True
     aid = (await _anlage(db)).id
-    await betrieb(db, aid, Saat(w, start=ST, ende=EN, handlungen=[(t, eintrag)]))
+    # Sitzung 5 (Bauplan Nr. 168): eingetragen wird erst, wenn ein anderer Stand gespeichert ist — hier nach dem Stand 10:20
+    await betrieb(db, aid, Saat(w, start=ST, ende=EN, handlungen=[(T + timedelta(minutes=3), eintrag)]))
     p = await _dialog(db, aid, t)
     if sprengsatz:
         assert p["eintragen"] is True

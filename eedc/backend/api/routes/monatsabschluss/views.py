@@ -250,6 +250,8 @@ class MonatsabschlussKontext:
     # braucht. Sie reist mit, statt ein zweites Mal gerechnet zu werden.
     preis_messung: Optional["StrompreisAggregat"]
     zaehler_ende: dict[int, float]
+    #: Sensorwechsel Sitzung 5 (W7): je Zählerschlüssel die Zeit eines im Monat eingetragenen Wechsels (``lade_wechsel_im_monat``).
+    wechsel_im_monat: dict[str, datetime] = field(default_factory=dict)
     #: N-770/N-771 (F1): Verwendungen mit eigenem Tarif im Monat — das Feld «Netzbezug zum WP-/Wallbox-Tarif» steht
     #: ohne eigenen Tarif nur mit Beleg im Formular (R1).
     eigene_tarife: frozenset[str] = frozenset()
@@ -362,6 +364,29 @@ async def lade_basis_feldliste(
         aktive_inv_typen=aktive_inv_typen,
         hat_variable_einspeisung=hat_variable_einspeisung,
     ), _messung
+
+
+#: Sensorwechsel Sitzung 5 (W7, Lab-Durchlauf 1): am Vorschlag «Zählerstand», wenn im Monat für das Feld ein Wechsel eingetragen
+#: ist — der Vorschlag ist der letzte gespeicherte Stand des Monats (``lade_zaehler_ende``), nach dem Wechsel der des neuen Zählers.
+SATZ_WECHSEL_IM_MONAT = ("In diesem Monat ist für dieses Feld ein Wechsel eingetragen ({datum}). Der Vorschlag ist der letzte "
+                         "gespeicherte Zählerstand des Monats – nach dem Wechsel der Stand des neuen Zählers. Prüfe ihn gegen "
+                         "deine Ablesung.")
+
+
+async def lade_wechsel_im_monat(db: AsyncSession, anlage_id: int, jahr: int, monat: int) -> dict[str, datetime]:
+    """Je Zählerschlüssel die Zeit des letzten gültigen Wechsels (``zuordnung_wechsel``), der im Monat gilt (``ab_ts`` im Monat) —
+    nur gelesen, für den Satz ``SATZ_WECHSEL_IM_MONAT``."""
+    from backend.models.zuordnung_wechsel import ZuordnungWechsel as Z
+
+    start = datetime(jahr, monat, 1)
+    ende = datetime(jahr + (monat == 12), monat % 12 + 1, 1)
+    aus: dict[str, datetime] = {}
+    for key, zeit in (await db.execute(select(Z.sensor_key, Z.erklaert_ts).where(
+            Z.anlage_id == anlage_id, Z.aufgehoben_durch.is_(None), Z.ab_ts > start, Z.ab_ts <= ende)
+            .order_by(Z.ab_ts))).all():
+        if zeit is not None:
+            aus[key] = zeit
+    return aus
 
 
 async def lade_zaehler_ende(
@@ -693,10 +718,19 @@ async def baue_kontext(
         alle_basis_felder=alle_basis_felder,
         preis_messung=preis_messung,
         zaehler_ende=await lade_zaehler_ende(db, anlage_id, jahr, monat),
+        wechsel_im_monat=await lade_wechsel_im_monat(db, anlage_id, jahr, monat),
         eigene_tarife=tarif_verwendungen_der_flaeche(
             await lade_tarife_fuer_anlage(db, anlage_id, target_date=date(jahr, monat, 1))
         ),
     )
+
+
+def _beschreibung_zaehlerstand(ctx, inv_id: int) -> str:
+    """Die Beschreibung des Vorschlags «Zählerstand» (#377) — mit ``SATZ_WECHSEL_IM_MONAT``, wenn im Monat für das Feld ein
+    Wechsel eingetragen ist (Sitzung 5, W7)."""
+    zeit = ctx.wechsel_im_monat.get(f"inv:{inv_id}:{ZAEHLERSTAND_FELD}")
+    basis = "Mitgeschriebener Stand am Monatsende"
+    return basis if zeit is None else f"{basis}. {SATZ_WECHSEL_IM_MONAT.format(datum=zeit.strftime('%d.%m.%Y'))}"
 
 
 # =============================================================================
@@ -958,7 +992,7 @@ async def _ergaenze_investitions_vorschlaege(
             wert=ctx.zaehler_ende[inv.id],
             quelle=VorschlagQuelle.ZAEHLERSTAND,
             konfidenz=95,
-            beschreibung="Mitgeschriebener Stand am Monatsende",
+            beschreibung=_beschreibung_zaehlerstand(ctx, inv.id),
         ))
 
     # Connector-Vorschlag einfügen — bei mehreren Modulen/Speichern ist
