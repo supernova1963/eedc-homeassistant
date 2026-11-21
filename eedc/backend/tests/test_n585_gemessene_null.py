@@ -94,11 +94,12 @@ class _Lauf:
                 stand, zeilen, t = 500.0, [], mx.REIHE_VON
                 while t < mx.REIHE_BIS:
                     stand += fn(t)
-                    zeilen.append({"m": mid, "t": _zeit.mktime(t.timetuple()), "w": round(stand, 4)})
+                    zeilen.append({"m": mid, "t": _zeit.mktime(t.timetuple()), "w": round(stand, 4),
+                                   "s": round(stand - 500.0, 4)})
                     t += timedelta(hours=1)
-                with svc._engine.begin() as conn:
+                with svc._engine.begin() as conn:     # ``sum`` ab dem Nullpunkt wie HA, ``state`` = Zählerstand
                     conn.execute(text("INSERT INTO statistics (metadata_id, start_ts, state, sum) "
-                                      "VALUES (:m, :t, :w, :w)"), zeilen)
+                                      "VALUES (:m, :t, :w, :s)"), zeilen)
             inv_map[str(inv.id)] = {"felder": fm}
         m["investitionen"] = inv_map
         if self.ohne_basis:
@@ -200,14 +201,15 @@ async def test_zugeordnet_ohne_zeilen_im_abgeschlossenen_monat_bleibt_none():
 
 
 async def test_eine_zeile_ohne_anker_ist_keine_messung():
-    """Der Netz-Sensor hat überhaupt nur EINE Statistik-Zeile (03.07. 22:00) — sie misst kein Intervall."""
+    """Der Netz-Sensor hat überhaupt nur EINE Statistik-Zeile (03.07. 22:00). Seit der Regel «Anfangsstand 0 am Beginn einer
+    HA-Statistik» (21.11.2026) misst sie wie in HA ein Intervall ab 0: ihre Stunde (0,4 kWh) — bis dahin (0,0, 0 Intervalle)."""
     async with _Lauf("F06", None, {"sensor.netz": (None, lambda t: t != datetime(2026, 7, 3, 22))},
                      tage=mx.TAGE_JULI) as (db, aid, _ids):
         import backend.services.ha_statistics_service as hss
         w = hss._ha_statistics_service.get_monatswerte(["sensor.netz"], mx.JAHR, mx.JULI).sensoren
-        assert [(x.differenz, x.intervalle) for x in w] == [(0.0, 0)]
+        assert [(x.differenz, x.intervalle) for x in w] == [(0.4, 1)]
         b = _bilanz(await _monat(db, aid, mx.JULI))
-        assert (b["netz"], b["gv"], b["autarkie"]) == (None, None, None), b
+        assert (b["netz"], b["gv"], b["autarkie"]) == (0.4, 45.4, 99.1), b     # bis 21.11.2026: (None, None, None)
 
 
 # ── Cockpit → Jahr ─────────────────────────────────────────────────────────────────────────────────────────────────

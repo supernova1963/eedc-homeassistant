@@ -32,6 +32,7 @@
    8i. [Zählerstände – Zeit verworfen](#48i-zaehlerstaende--zeit-verworfen)
    8j. [Zählerstände – Gespeicherter Monatswert passt nicht mehr](#48j-zaehlerstaende--gespeicherter-monatswert-passt-nicht-mehr)
    8k. [Zählerstände – Zählerstand springt (MQTT)](#48k-zaehlerstaende--zaehlerstand-springt-mqtt)
+   8l. [Zählerstände – Daten vor der Änderung gelöscht](#48l-zaehlerstaende--daten-vor-der-aenderung-geloescht)
    9. [Datenquellen – HA-Statistics](#49-sensor-mapping--ha-statistics)
    9a. [Datenquellen – Status](#49a-datenquellen--status)
    10. [Energieprofil – fehlende Tageswerte](#410-energieprofil--fehlende-tageswerte)
@@ -200,7 +201,7 @@ Einzelne Befunde haben über Releases hinweg ihre Stufe gewechselt. Beispiele:
 ### 3.1 Alle Befunde <a name="alle-befunde"></a>
 
 <!-- erzeugt: scripts/daten-checker-handbuch.py §3 Anfang — nicht von Hand ändern -->
-eedc prüft **44 Kategorien** mit **189 Befunden** (gezählt an `CheckKategorie` und am Katalog der Handgriffe). Jeder Befund trägt genau einen Handgriff: eine **Aktion** mit Vorschau, einen **Sprung** an die Stelle, wo du ihn behebst, oder die **Auskunft** «Was gilt»; bestandene Prüfungen stehen gefaltet im Kopf ihrer Kategorie.
+eedc prüft **45 Kategorien** mit **190 Befunden** (gezählt an `CheckKategorie` und am Katalog der Handgriffe). Jeder Befund trägt genau einen Handgriff: eine **Aktion** mit Vorschau, einen **Sprung** an die Stelle, wo du ihn behebst, oder die **Auskunft** «Was gilt»; bestandene Prüfungen stehen gefaltet im Kopf ihrer Kategorie.
 
 | Befund | Abschnitt | Klasse | Knopf |
 | --- | --- | --- | --- |
@@ -235,6 +236,7 @@ eedc prüft **44 Kategorien** mit **189 Befunden** (gezählt an `CheckKategorie`
 | [Zählerstände einer Zeit verworfen](#zaehler_zeit_verworfen) `zaehler_zeit_verworfen` | §4.8i | Auskunft | Was gilt |
 | [Gespeicherter Monatswert passt nicht mehr zur Quelle](#monatswert_ueberholt) `monatswert_ueberholt` | §4.8j | Sprung | Monat öffnen |
 | [Zählerstand springt in einer MQTT-Reihe](#mqtt_zaehlerstand_springt) `mqtt_zaehlerstand_springt` | §4.8k | Sprung | Zähler getauscht |
+| [Daten vor der Änderung gelöscht](#daten_vor_aenderung_geloescht) `daten_vor_aenderung_geloescht` | §4.8l | Auskunft | Was gilt |
 | [Batterie-Richtung in der Historie stimmt](#batterie_vorzeichen_ok) `batterie_vorzeichen_ok` | §4.21 | bestanden | — |
 | [Tage mit vertauschtem Batterie-Vorzeichen](#batterie_vorzeichen_tage) `batterie_vorzeichen_tage` | §4.21 | Aktion | Tage neu aufbauen |
 | [Ein Tag mit vertauschtem Batterie-Vorzeichen](#batterie_vorzeichen_tag) `batterie_vorzeichen_tag` | §4.21 | Aktion | Tag neu aufbauen |
@@ -3661,8 +3663,8 @@ nicht selbst ab: die Quelle ist die Statistik in Home Assistant.
 
 ### 4.8i Zählerstände – Zeit verworfen <a name="48i-zaehlerstaende--zeit-verworfen"></a>
 
-Hat eine Korrektur («Bisherige Werte verwerfen» im Dialog der Datenquellen, «Grund nachtragen» mit dieser Antwort oder die
-Korrektur über einen versetzten Abschnitt) die Zählerstände einer Zeit verworfen und füllt nichts sie wieder auf — ohne
+Hat eine Korrektur («Grund nachtragen» mit der Antwort «Bisherige Werte verwerfen» oder die Korrektur über einen versetzten
+Abschnitt) die Zählerstände einer Zeit verworfen und füllt nichts sie wieder auf — ohne
 Verbindung zu Home Assistant, bei einer MQTT-Quelle, oder weil Home Assistant für diese Zeit keine Geschichte des richtigen
 Sensors führt —, bleibt diese Zeit endgültig leer. Diese Kategorie nennt je solcher Zeit eine Auskunft: Feld, Beginn und Ende,
 und was dafür gilt — dieselbe Angabe, die die Vorschau beim Eintragen gemacht hat.
@@ -3817,6 +3819,39 @@ Stunde nur, was der alte Zähler bis zu seinem letzten und der neue ab seinem er
 Zählerständen der letzten 31 Tage; ältere sind nicht mehr gespeichert — dann zählt die Stunde des Tauschs keinen Zuwachs). Die
 Live-Anzeige rechnet direkt aus den Zählerständen: sie zeigt den Sprung am Tag des Sprungs unter „heute“ und am Tag danach
 unter „gestern“, auch nach dem Eintrag.
+
+### 4.8l Zählerstände – Daten vor der Änderung gelöscht <a name="48l-zaehlerstaende--daten-vor-der-aenderung-geloescht"></a>
+
+Wechselt die Quelle eines Felds, das schon eigene Werte hat, fragt eedc: «Bisherige Werte bleiben» oder «Daten vor der Änderung
+löschen». Mit «löschen» gehen nur die Daten dieses Felds aus der Zeit vor der Änderung weg; das Feld verhält sich danach, als
+wäre der neue Sensor von Anfang an zugeordnet — was Home Assistant für ihn führt, übernimmt eedc, davor zeigt das Feld «—».
+Diese Kategorie nennt je solchem Feld eine Auskunft: wann gelöscht wurde, seit wann Home Assistant den neuen Sensor führt, ob
+der erste Tag für das Feld nur teilweise zählt (der Sensor beginnt in Home Assistant mitten am Tag — eedc zählt den Tag wie Home
+Assistant ab dieser Stunde), und die Monate mit gespeichertem Monatswert, die bleiben.
+
+---
+
+#### Daten vor der Änderung gelöscht <a name="daten_vor_aenderung_geloescht"></a>
+
+**Was eedc sieht**
+Beim Wechsel der Quelle dieses Felds wurde «Daten vor der Änderung löschen» gewählt. Die Daten dieses Felds aus der Zeit vor
+der Änderung sind gelöscht; seitdem verhält sich das Feld, als wäre der neue Sensor von Anfang an zugeordnet: Was Home
+Assistant für ihn führt, übernimmt eedc, für die Zeit davor zeigt das Feld «—». Die Meldung nennt das Feld und den Zeitpunkt
+der Änderung. Die Details sagen, seit wann Home Assistant den neuen Sensor führt (bei einer MQTT-Quelle: seit wann eedc ihren
+ersten Wert hat) und — beginnt er mitten an einem Tag — dass dieser Tag für das Feld nicht vollständig ist: eedc zählt ihn wie
+Home Assistant erst ab dieser Stunde. Dazu nennen die Details die Monate mit gespeichertem Monatswert; die bleiben, wie sie sind.
+
+**Lösungsweg**
+1. Die Angabe lesen. Stimmt sie, ist nichts zu tun: die Auskunft beschreibt, was beim Wechsel gewählt wurde.
+2. Soll ein gespeicherter Monatswert eines genannten Monats zum neuen Sensor passen: unter
+   [«Monatsdaten»](eedc:/einstellungen/daten?block=monatsdaten) am Monat den Stift wählen und den Wert des Felds überschreiben,
+   oder den Monat mit **«Aus HA laden»** aus Home Assistant holen. Führt Home Assistant den neuen Sensor nur für einen Teil des
+   Monats, schlägt «Aus HA laden» nur diesen Teil vor.
+3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt; sie sagt, was für dieses Feld gilt.
+
+**Was ohne Handlung gilt**
+Die gelöschten Daten kommen nicht zurück. Was Home Assistant für den neuen Sensor führt, zeigt eedc wie Home Assistant; davor
+zeigt das Feld «—». eedc schätzt, verteilt und überbrückt nichts. Gespeicherte Monatswerte bleiben, wie sie sind.
 
 ### 4.9 Datenquellen – HA-Statistics <a name="49-sensor-mapping--ha-statistics"></a>
 
@@ -4549,7 +4584,11 @@ eedc und Home Assistant zeigen für diese Tage dieselben Zahlen.
 **Was eedc sieht**
 Für diesen Tag steht in eedc eine andere PV-Erzeugung als in der Langzeitstatistik von Home Assistant (mindestens 2 kWh und
 5 % Unterschied). Mehrere solche Tage stehen als eine Zeile «n Tage weichen von Home Assistant ab» mit einem Glied je Tag,
-die größten Abweichungen vorn.
+die größten Abweichungen vorn. **Benannte Grenze — der erste Tag einer Statistik:** an dem Tag, an dem die Statistik eines
+Sensors in Home Assistant beginnt, zählt eedc den Kalendertag ab der ersten Stunde wie Home Assistant; der Vergleichswert, den
+die Prüfung aus Home Assistant liest, reicht für diesen Tag aber nur bis 23 Uhr (die Stunde 23–24 Uhr zählt er zum Folgetag).
+Trägt diese letzte Stunde mindestens 2 kWh und 5 %, nennt die Prüfung den Tag, obwohl Tagesansicht und Home Assistant
+dieselbe Zahl zeigen; «Aus Home Assistant neu übernehmen» ändert daran nichts. Am Folgetag tritt das nicht auf.
 
 **Lösungsweg**
 1. In Home Assistant prüfen, welcher Wert stimmt. Ist die Statistik dort falsch (etwa ein Zählersprung), sie unter

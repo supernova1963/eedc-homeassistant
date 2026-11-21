@@ -117,6 +117,10 @@ async def antwort(form_id: str, *, gespeichert=None, connector=None, mqtt=None, 
                         "SELECT id FROM statistics_meta WHERE statistic_id='sensor.pv_gesamt'")).scalar()
                     conn.execute(text("DELETE FROM statistics WHERE metadata_id=:m AND start_ts < :t"),
                                  {"m": mid, "t": _zeit.mktime(statistik_ab.timetuple())})
+                    # Wie HA: die Statistik eines neuen Sensors beginnt beim Nullpunkt — ``sum`` ab 0 (um den Stand der
+                    # ersten Zeile verschoben), ``state`` bleibt der Zählerstand (Bauplan Sensorwechsel Nr. 181/1).
+                    conn.execute(text("UPDATE statistics SET sum = sum - (SELECT MIN(s0.sum) FROM statistics s0 "
+                                      "WHERE s0.metadata_id = :m) WHERE metadata_id = :m"), {"m": mid})
             if connector is not None:
                 a.connector_config = connector
                 flag_modified(a, "connector_config")

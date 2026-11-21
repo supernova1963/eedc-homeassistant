@@ -93,28 +93,11 @@ async def zaehlerstand_ha_jetzt(ha_svc, kanal_id: int, art: str, eid: str) -> Op
     return None if wert is None else float(wert)
 
 
-async def beginn_juengste_quelle(db: AsyncSession, kanal_id: int) -> Optional[datetime]:
-    """Beginn der jüngsten nicht verworfenen Quelle als örtliche Zeit ohne Zone — über die Quellzeilen derselben Kennung
-    zurück, die sie fortsetzen (Naht des Stundenlaufs, Nachtrag eines «Zähler getauscht»): Beginn ist die erste Zeile dieser
-    Folge, nicht die jüngste Fortsetzung (Bauplan §11 Nr. 54)."""
-    quellen = list((await db.execute(select(KanalQuelle).where(KanalQuelle.kanal_id == kanal_id)
-                                     .order_by(KanalQuelle.gueltig_ab.desc()))).scalars().all())
-    folge = [q for q in quellen if q.verworfen_ts is None]
-    if not folge:
-        return None
-    juengste = folge[0]
-    beginn = juengste.gueltig_ab
-    for q in quellen[quellen.index(juengste) + 1:]:
-        if q.verworfen_ts is not None or (q.familie, q.statistic_id) != (juengste.familie, juengste.statistic_id):
-            break
-        beginn = q.gueltig_ab
-    return datetime.fromtimestamp(int(beginn))
-
-
 async def beginn_quelle_vor(db: AsyncSession, kanal_id: int, ts: int) -> Optional[datetime]:
     """Beginn der Quelle, die **vor** ``ts`` galt (größtes nicht verworfenes ``gueltig_ab < ts``), über die Quellzeilen
-    derselben Kennung zurück wie ``beginn_juengste_quelle`` — die Vorgabe «falsch seit» beim Nachtragen eines Grunds
-    (Sitzung 4): die bisherige Quelle ist die vor dem Wechsel, nicht die jüngste. ``None`` = vor ``ts`` keine Quelle."""
+    derselben Kennung zurück (Naht des Stundenlaufs, Nachtrag eines «Zähler getauscht») — die Vorgabe «falsch seit» beim
+    Nachtragen eines Grunds (Sitzung 4): die bisherige Quelle ist die vor dem Wechsel, nicht die jüngste. ``None`` = vor
+    ``ts`` keine Quelle."""
     quellen = list((await db.execute(select(KanalQuelle).where(and_(KanalQuelle.kanal_id == kanal_id,
                                                                     KanalQuelle.gueltig_ab < ts))
                                      .order_by(KanalQuelle.gueltig_ab.desc()))).scalars().all())

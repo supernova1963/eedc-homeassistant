@@ -57,10 +57,10 @@ export function useGrundNachtragen(anlageId: number | null, wechselId: string | 
     if (anlageId == null) return Promise.resolve(null)
     if (id != null) {
       return datenquellenApi.pruefeGrundNachtragen(anlageId, id, { grund: 'korrektur', falsch_seit: falschSeit })
-        .then((p) => p.korrektur)
+        .then((p) => p.korrektur ?? null)
     }
     if (stueck == null) return Promise.resolve(null)
-    return datenquellenApi.pruefeStueck(anlageId, stueck, 'korrektur').then((p) => p.korrektur)
+    return datenquellenApi.pruefeStueck(anlageId, stueck, 'korrektur').then((p) => p.korrektur ?? null)
   }, [anlageId, id, stueck])
 
   const bleibenVorschau = useCallback((_key: string, zaehltAb: string) => {

@@ -190,8 +190,10 @@ def test_5_monatswert_ist_max_minus_min_der_summe():
     assert len(antwort.sensoren) == 1, f"{antwort.sensoren}"
     wert = antwort.sensoren[0]
     stunden = len(zeilen[sid])
-    erwartet = round((stunden - 1) * 0.5, 2)
-    assert wert.start_wert == 1000.0, f"start={wert.start_wert}"
+    # Regel «Anfangsstand 0» (Weg B, 21.11.2026): vor Juni führt HA keine Zeile ⇒ die erste Zeile (1 000) zählt ab 0 wie in
+    # HA — über WS wie über SQL (bis dahin Anker = erste Zeile: start 1 000, (n − 1) × 0,5).
+    erwartet = round(1000.0 + (stunden - 1) * 0.5, 2)
+    assert wert.start_wert == 0.0, f"start={wert.start_wert}"
     assert wert.differenz == erwartet, f"differenz={wert.differenz}, erwartet {erwartet}"
     print(f"  ✓ 5. Monatswert = MAX−MIN über {stunden} Stunden ⇒ {wert.differenz} kWh")
 
@@ -204,8 +206,8 @@ def test_6_monatswert_rechnet_die_einheit_um():
 
     wert = svc.get_monatswerte([sid], 2026, 6).sensoren[0]
     stunden = len(zeilen[sid])
-    assert wert.start_wert == 1000.0, f"start={wert.start_wert} (1.000.000 Wh = 1000 kWh)"
-    assert wert.differenz == round((stunden - 1) * 500.0 / 1000.0, 2), f"{wert.differenz}"
+    assert wert.start_wert == 0.0, f"start={wert.start_wert} (Anfangsstand 0)"
+    assert wert.differenz == round(1000.0 + (stunden - 1) * 500.0 / 1000.0, 2), f"{wert.differenz}"   # 1.000.000 Wh = 1000 kWh
     print(f"  ✓ 6. Wh → kWh umgerechnet ({wert.differenz} kWh)")
 
 

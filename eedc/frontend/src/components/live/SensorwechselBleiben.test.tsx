@@ -11,7 +11,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import SensorwechselDialog, {
-  GRUND_BLEIBEN_HA_FOLGE, GRUND_FORTSETZUNG, GRUND_FORTSETZUNG_FOLGE, GRUND_KORREKTUR, NACHTRAG_FORTSETZUNG_ZUSATZ,
+  GRUND_BLEIBEN_HA_FOLGE, GRUND_FORTSETZUNG, GRUND_FORTSETZUNG_FOLGE, GRUND_LOESCHEN, NACHTRAG_FORTSETZUNG_ZUSATZ,
   ZAEHLT_AB_LABEL,
 } from './SensorwechselDialog'
 import { ANSETZEN_FERTIG_TAGE, ANSETZEN_LAEUFT, WartendeWechsel, fortschrittSatz } from './KorrekturFortschritt'
@@ -37,7 +37,7 @@ const FRAGE: QuellePruefung = {
 beforeEach(() => { vi.useFakeTimers({ now: new Date(2026, 10, 19, 12, 0), shouldAdvanceTime: true }) })
 afterEach(() => { vi.useRealTimers() })
 
-const radio = (wert: 'fortsetzung' | 'korrektur') =>
+const radio = (wert: 'fortsetzung' | 'korrektur' | 'loeschen') =>
   document.querySelector(`input[type="radio"][value="${wert}"]`) as HTMLInputElement
 
 function dialog(f: QuellePruefung, extra: Partial<Parameters<typeof SensorwechselDialog>[0]> = {}) {
@@ -52,7 +52,8 @@ describe('Sensorwechsel U2 Lauf b — eine Frage: bleiben oder verwerfen', () =>
   it('(1) zwei HA-Sensoren ohne Überlappung: Sätze des Backends, kein Feld «zählt ab», sendet ohne zaehlt_ab', async () => {
     const { onBestaetigen } = dialog(FRAGE)
     expect(radio('fortsetzung').closest('label')?.textContent).toContain(GRUND_FORTSETZUNG)
-    expect(radio('korrektur').closest('label')?.textContent).toContain(GRUND_KORREKTUR)
+    expect(radio('loeschen').closest('label')?.textContent).toContain(GRUND_LOESCHEN)
+    expect(radio('korrektur')).toBeNull()                      // Weg B: kein «verwerfen» beim Wechsel
     expect(screen.getByText(GRUND_BLEIBEN_HA_FOLGE)).toBeInTheDocument()
     expect(screen.queryByText(GRUND_FORTSETZUNG_FOLGE)).toBeNull()
     fireEvent.click(radio('fortsetzung'))

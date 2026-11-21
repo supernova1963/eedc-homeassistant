@@ -102,14 +102,43 @@ async def _umstellen(w: Welt, U: datetime, monkeypatch, *, grund: str = "fortset
             return U
     monkeypatch.setattr(ab, "datetime", Uhr)
     try:
-        for fid in (FID, "inv_energy_2_ladung_pv_kwh"):
-            await set_feld_quelle(w.a.id, fid, QuelleSetRequest(quelle="ha_app", entity_id=NEU, grund=grund,
-                                                                falsch_seit=falsch_seit), w.db)
-            await _laeufe()            # die In-Memory-Datenbank hat eine Verbindung: der Lauf nicht neben der nächsten Route
-            _frisch(w)
+        if grund == "korrektur":
+            await _korrektur_wie_bis_b1(w, U, falsch_seit)
+        else:
+            for fid in (FID, "inv_energy_2_ladung_pv_kwh"):
+                await set_feld_quelle(w.a.id, fid, QuelleSetRequest(quelle="ha_app", entity_id=NEU, grund=grund), w.db)
+                await _laeufe()        # die In-Memory-Datenbank hat eine Verbindung: der Lauf nicht neben der nächsten Route
+                _frisch(w)
     finally:
         monkeypatch.setattr(ab, "datetime", datetime)
     await _laeufe()
+
+
+async def _korrektur_wie_bis_b1(w: Welt, U: datetime, falsch_seit: datetime) -> None:
+    """Weg B (Sitzung B1): der Dialog beim Wechsel bietet «verwerfen» nicht mehr an; der Korrektur-Dienst bleibt bis zum Rückbau
+    (Grund nachtragen, Stück, Werkbank). Die Probe ruft ihn mit dem Auftrag, den bis B1 die Abfrage baute: Zuordnung umstellen,
+    je Schlüssel der Lauf (``ab`` = volle Stunde nach der Änderung, Herkunft «wechsel»), Commit, Nachlauf."""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    from backend.models.anlage import Anlage
+    from backend.models.zuordnung_wechsel import HERKUNFT_WECHSEL
+    from backend.services.zuordnung_wechsel import korrektur as kr
+    from backend.services.zuordnung_wechsel.zeitpunkt import ab_ts_aus
+
+    a = (await w.db.execute(select(Anlage).where(Anlage.id == w.a.id))).scalar_one()
+    m = dict(a.sensor_mapping)
+    m["investitionen"] = {"2": {"felder": {f: {"strategie": "sensor", "sensor_id": NEU} for f in ("ladung_kwh", "ladung_pv_kwh")}}}
+    a.sensor_mapping = m
+    flag_modified(a, "sensor_mapping")
+    for key in (KEY, "inv:2:ladung_pv_kwh"):
+        au = kr.Auftrag(anlage_id=w.a.id, sensor_key=key, falsch_seit=falsch_seit.replace(minute=0, second=0),
+                        ab=ab_ts_aus(U), vorher={"art": "ha", "entity_id": ALT}, nachher={"art": "ha", "entity_id": NEU},
+                        herkunft=HERKUNFT_WECHSEL, erklaert=U)
+        erg = await kr.fuehre_aus(w.db, au, ha_svc=kr.ha_dienst(None), jetzt=U)
+        await w.db.commit()
+        await kr.nach_dem_commit(erg, ha_svc=kr.ha_dienst(None))
+        await _laeufe()
+        _frisch(w)
     _frisch(w)
 
 

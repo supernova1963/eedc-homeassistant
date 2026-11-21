@@ -167,14 +167,20 @@ def _gedeckt(z: Optional[Zeitraum], lueckentag: bool) -> tuple[bool, Optional[fl
     return False, None
 
 
+#: Weg B (F2): alle Felder der Gruppe sind im Zeitraum bewusst leer — die Wahl bleibt beim Bestand (keine Aussage), der
+#: Tag zählt aber nicht als «ohne Kanal-Deckung».
+GRUND_BEWUSST_LEER = "bewusst_leer"
+
+
 def waehle_und_komponiere(
     eintraege: Sequence, ergebnisse: dict[str, Zeitraum], traeger: Sequence[PvTraeger], *, lueckentag: bool,
-    dc_grund: Optional[str] = None,
+    dc_grund: Optional[str] = None, alle_bewusst_leer: bool = False,
 ) -> KanalZeitraum:
     """Die Quellenwahl der Gruppe (B-4) und — bei ``kanal`` — W2 auf den Δ. Reine Funktion. ``dc_grund``: siehe
     ``_dc_grund`` (Messpunkt-Vertrag (iii), N-588)."""
     if not eintraege:
-        return KanalZeitraum(Quellenwahl(QUELLE_BESTAND, {"": "keine_eingaenge"}, {}), None)
+        return KanalZeitraum(Quellenwahl(QUELLE_BESTAND, {"": GRUND_BEWUSST_LEER if alle_bewusst_leer else "keine_eingaenge"},
+                                         {}), None)
     deltas: dict[str, Optional[float]] = {}
     for e in eintraege:
         ok, d = _gedeckt(ergebnisse.get(e.schluessel), lueckentag)
@@ -246,8 +252,8 @@ async def tage_bilanz(
         return {}
     stamm = await _stamm(db, anlage_id)
     leer = await bewusst_leer(db, anlage_id)       # S4-R-V4: ein vor dem Tag verworfenes Feld ist nicht benötigt
-    je_tag = {t: leer.ohne(await stamm.eintraege(db, lambda i, t=t: i.ist_aktiv_an(t), t), *tagesfenster(t))
-              for t in tage}
+    roh = {t: await stamm.eintraege(db, lambda i, t=t: i.ist_aktiv_an(t), t) for t in tage}
+    je_tag = {t: leer.ohne(roh[t], *tagesfenster(t)) for t in tage}
     keys = {e.schluessel for lst in je_tag.values() for e in lst}
     grenzen = [tagesfenster(t)[0] for t in tage] + [tagesfenster(tage[-1])[1]]
     # Tage sind aufeinanderfolgend — die Grenzen stoßen lückenlos aneinander; an einem Umstellungstag bleibt das so.
@@ -257,8 +263,35 @@ async def tage_bilanz(
         ergebnisse = {k: liste[i] for k, liste in je.items()}
         aktiv_an = (lambda inv, t=t: inv.ist_aktiv_an(t))
         out[t] = waehle_und_komponiere(je_tag[t], ergebnisse, _traeger(stamm.invs, aktiv_an),
-                                       lueckentag=True, dc_grund=_dc_grund(stamm.invs, aktiv_an))
+                                       lueckentag=True, dc_grund=_dc_grund(stamm.invs, aktiv_an),
+                                       alle_bewusst_leer=bool(roh[t]) and not je_tag[t])
     return out
+
+
+async def bewusst_leere_tage(db: AsyncSession, anlage_id: int, tage: Iterable[date], *,
+                             jetzt: Optional[int] = None) -> set[date]:
+    """Die Tage aus ``tage``, an denen JEDES Feld der Bilanz-Gruppe bewusst leer ist (``BewusstLeer``: vor der ersten
+    Zeile gelöscht bzw. verworfen) — dort gibt es nichts zu decken; kein Tag «ohne Kanal-Deckung» (Weg B, F2)."""
+    tage = sorted(set(tage))
+    if not tage:
+        return set()
+    erg = await tage_bilanz(db, anlage_id, tage[0], tage[-1], jetzt=jetzt)
+    return {t for t in tage if t in erg and erg[t].wahl.gruende.get("") == GRUND_BEWUSST_LEER}
+
+
+async def ha_statistik_beginn(db: AsyncSession, anlage_id: int) -> dict[str, int]:
+    """Je Mengen-Kanal der Anlage, dessen erste Zeile die erste der HA-Statistik ist (``lesen._ha_beginn_sql`` — dieselbe
+    Bedingung wie die Regel «Anfangsstand 0»), ihr ``start_ts``. EINE Anweisung. Leser: die Auskunft «Daten vor der Änderung
+    gelöscht» (``daten_checker/datenquelle/geloescht.py``)."""
+    from backend.services.kanal.lesen import _ha_beginn_sql
+
+    return {key: int(erste) for key, erste in (await db.execute(text(f"""
+        SELECT x.key, x.erste FROM (
+            SELECT k.id AS kid, k.key AS key,
+                (SELECT MIN(s.start_ts) FROM kanal_statistik s WHERE s.kanal_id = k.id AND s.sum IS NOT NULL) AS erste
+            FROM kanal k WHERE k.anlage_id = :a AND k.art = 'sum') x
+        WHERE x.erste IS NOT NULL AND {_ha_beginn_sql('x.kid', 'x.erste')} = 1
+    """), {"a": anlage_id})).all()}
 
 
 def _letzter_tag(jahr: int, monat: int) -> date:

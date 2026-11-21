@@ -144,8 +144,9 @@ async def _investition_ohne_feld(db: AsyncSession, investition_id: int, feld: st
     basis = basis_feld_key(feld)
     if groesse_gibt_es_am_geraet(inv.typ, basis, inv.parameter or {}):
         raise PflegeKonflikt(
-            f"Das Feld „{feld}“ ist an diesem Gerät vorgesehen und im "
-            "Monatsabschluss erreichbar — bitte dort leeren."
+            f"Das Feld „{feld}“ ist an diesem Gerät vorgesehen — „Wert entfernen“ gilt nur für Felder, die das Gerät "
+            "nicht führt. Einen gespeicherten Wert dieses Felds änderst du unter Einstellungen → „Daten“ → "
+            "„Monatsdaten“: am Monat den Stift wählen und den Wert in „Monatsdaten bearbeiten“ überschreiben."
         )
     return inv
 

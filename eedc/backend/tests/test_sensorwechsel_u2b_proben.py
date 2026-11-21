@@ -190,7 +190,7 @@ async def test_f9_zaehlt_ab_abgelehnt(db, monkeypatch):
         await db.rollback()
         assert (e.status_code, e.detail) == (422, bereich)
     assert (await db.execute(select(ZuordnungWechsel))).first() is None
-    e = await _abgelehnt(_pruefen(w, monkeypatch, U1030, grund="korrektur", falsch_seit=T1, zaehlt_ab=T1))
+    e = await _abgelehnt(_pruefen(w, monkeypatch, U1030, grund="loeschen", zaehlt_ab=T1))      # Weg B: «löschen» statt «verwerfen»
     assert (e.status_code, e.detail) in ((422, bl.SATZ_NUR_BLEIBEN),)
     keine = QuelleSetRequest(quelle="keine", zaehlt_ab=T1)
     e = await _abgelehnt(pruefe_feld_quelle(w.a.id, FID, keine, w.db))

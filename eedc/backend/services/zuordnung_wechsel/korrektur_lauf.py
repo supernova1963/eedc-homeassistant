@@ -58,6 +58,9 @@ FUELLEN_PRAEFIX = "Füllen: "
 #: Wer den Lauf angelegt hat (Zustand ``art``; Sensorwechsel U2 Lauf b, a2 E-2): fehlt das Feld, ist es eine Korrektur; das
 #: Ansetzen eines Wechsels «bleiben» (``ansatz.py``) trägt ``ansetzen`` — die Fläche nennt seinen Nachlauf nicht «Korrektur».
 ART_KORREKTUR, ART_ANSETZEN = "korrektur", "ansetzen"
+#: Weg B (Bauplan Sensorwechsel Nr. 180): der Lauf von «Daten vor der Änderung löschen» (``feld_loeschen``) — Nachfüllen aus
+#: Home Assistant, abgeleitete Kanäle, Tage neu bilden.
+ART_LOESCHEN = "loeschen"
 
 
 async def anlegen(db: AsyncSession, lauf: str, anlage_id: int, sensor_key: str, tage: list[date],
@@ -126,10 +129,15 @@ def fuellen_offen(z: dict) -> bool:
     """Steht das Füllen aus, weil es **gescheitert** ist (die Fläche sagt «eedc versucht es jede Stunde …»)? Ein Nachlauf, dessen
     Kanal-Teil nach dem Commit gelaufen ist und der nur noch die Stände speichert (Bauplan «Zu §14» Nr. 111), ist ohne
     Fehler-Eintrag kein ausstehendes Füllen — er läuft («Korrektur läuft …»)."""
+    from backend.services.feld_loeschen import ist_nachlauf
+
     f = z.get("fuellen") if isinstance(z.get("fuellen"), dict) else None
     if f is None or f.get("erledigt"):
         return False
-    return not f.get("kanal_erledigt") or any(_ist_fuellen_fehler(x) for x in z.get("fehler") or [])
+    gescheitert = any(_ist_fuellen_fehler(x) for x in z.get("fehler") or [])
+    if ist_nachlauf(f):                  # «löschen» füllt im Hintergrund: offen erst, wenn ein Versuch scheiterte
+        return gescheitert
+    return not f.get("kanal_erledigt") or gescheitert
 
 
 async def stand(db: AsyncSession, lauf: str) -> Optional[dict[str, Any]]:
@@ -237,11 +245,16 @@ async def _nachlauf(sitzungen, lauf: str, z: dict) -> tuple[dict, bool]:
     scheitert er, steht der Grund unter ``fehler`` und der Lauf bleibt ``laeuft`` (nächster Start, Werkbank)."""
     from backend.services.zuordnung_wechsel.korrektur import nachlauf_aus_auftrag
 
+    from backend.services import feld_loeschen
+
     f = z.get("fuellen")
     if not isinstance(f, dict) or f.get("erledigt"):
         return z, True
     try:
-        n = await nachlauf_aus_auftrag(sitzungen, int(z["anlage_id"]), f)
+        if feld_loeschen.ist_nachlauf(f):          # «Daten vor der Änderung löschen»: nachfüllen, abgeleitete Kanäle
+            n = await feld_loeschen.nachlauf(sitzungen, int(z["anlage_id"]), f)
+        else:
+            n = await nachlauf_aus_auftrag(sitzungen, int(z["anlage_id"]), f)
     except Exception as e:  # noqa: BLE001 — der Grund steht im Zustand, der Lauf bleibt offen
         logger.warning("Korrektur %s: Füllen nicht möglich: %s: %s", lauf, type(e).__name__, e)
         # Je Lauf ein Eintrag «Füllen: …» — der letzte Versuch ersetzt den vorigen (stündlicher Anstoß, §11 Nr. 46).

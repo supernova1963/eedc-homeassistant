@@ -126,8 +126,9 @@ class SensorSlotReihe(NamedTuple):
     seine Energie steht im nächsten belegten Slot, notfalls im Folgetag.
     ``anker_start_ts``: ``start_ts`` der Zeile, auf die sich der erste
     belegte Slot stützt (Index −1 im Fenster oder die Anker-Zeile davor);
-    ``None``, wenn die Reihe im Fenster beginnt (kein Anker — R1, benannte
-    Abweichung zu HA).
+    beginnt die HA-Statistik im Fenster, die gedachte Zeile des Anfangsstands 0
+    eine Stunde vor der ersten (Regel «Anfangsstand 0», 21.11.2026); ``None``
+    nur, wenn HA davor eine Zeile führt, die kein Anker ist (Polster-Zeile).
     """
     slots: dict[int, StundenSlot]
     anker_start_ts: Optional[float]
@@ -205,6 +206,9 @@ class _SlotLesen:
     meta_by_id: dict[str, SensorMeta]
     per_sensor: dict[str, dict[int, tuple[float, float]]]
     anker: dict[str, tuple[float, float]] = field(default_factory=dict)
+    #: Zähler mit einer Zeile im Polster vor Index −1 (``start_ts`` ≥ ``ts_von``, kein Stand des Tages): HA führt vor dem
+    #: Fenster eine Zeile — ihre Statistik beginnt nicht im Fenster (Regel «Anfangsstand 0» gilt dort nicht).
+    vor_fenster: set[str] = field(default_factory=set)
 
 
 def _slot_kwh_faktor(meta_by_id: dict[str, SensorMeta], sid: str) -> float:
@@ -222,7 +226,8 @@ def _slot_werte(
 
     Anker für Slot h = höchster belegter Index < h (W1), sonst Index −1 bzw. die Anker-Zeile vor dem Fenster;
     ``delta = round(Stand(h) − Stand(Anker), 3)``, ``n = 1`` bei Delta 0 (R2), sonst reale Stunden aus ``start_ts``;
-    ohne Anker bleibt der erste belegte Slot leer (benannte Abweichung zu HA). Reine Rechnung, liest nichts.
+    ohne Anker bleibt der erste belegte Slot leer — seit der Regel «Anfangsstand 0» (21.11.2026) nur noch, wenn HA vor dem
+    Fenster eine Zeile führt, die kein Anker ist (Polster-Zeile vor Index −1). Reine Rechnung, liest nichts.
     ``anker_null`` (Sensorwechsel U2 a1, F6): Zähler, deren erste Zeile ab 0 zählt, wenn HA vor ihr keine führt — nur die neue
     Entität eines Wechsels «bleiben» ohne Überlappung (HAs Regel an der Wechselstelle, ``lts_aggregator``); der erste Slot
     ist dann ``Stand − 0`` über eine Stunde.
@@ -831,8 +836,9 @@ class HAStatisticsService:
         ``start_wert``/``end_wert`` sind Anker und neuester Stand; ``differenz``
         ist die Summe und weicht von ihrer Differenz genau um
         ``verworfen_kwh`` ab. Werte werden nach kWh konvertiert (Wh, MWh, …). ``intervalle`` (N-585) sagt, über wie
-        viele Stützstellen-Paare ``differenz`` gebildet ist — 0 bei einer einzigen Zeile ohne Anker: dann ist
-        ``differenz`` 0,0 keine Messung.
+        viele Stützstellen-Paare ``differenz`` gebildet ist. Führt HA vor dem Fenster keine Zeile, beginnt die Statistik
+        im Fenster: ihre erste Zeile zählt ab dem Anfangsstand 0 wie in HA (Entscheid Gernot 21.11.2026) — auch eine
+        einzelne Zeile ist dann ein Intervall (bis dahin 0 Intervalle, ``differenz`` 0,0 ohne Messung).
         """
         return self.get_sensor_fensterwert(conn, meta, sensor_id, *_monatsgrenzen_ts(jahr, monat),
                                            kennung=f"{jahr}-{monat:02d}")
@@ -867,7 +873,11 @@ class HAStatisticsService:
 
         verworfen = 0.0
         anker = (ts_start - 3600, 0.0) if anker_null else self._letzter_sum_vor(conn, meta, sensor_id, ts_start)
-        reihe = ([anker] if anker is not None else []) + sum_zeilen
+        if anker is None:
+            # Regel «Anfangsstand 0 am Beginn einer HA-Statistik» (Entscheid Gernot 21.11.2026; dieselbe Bedingung wie
+            # ``kanal/lesen._ha_beginn_sql``): HA führt keine Zeile davor ⇒ die erste Zeile zählt ab 0 wie in HA.
+            anker = (sum_zeilen[0][0] - 3600, 0.0)
+        reihe = [anker] + sum_zeilen
         start_wert = reihe[0][1] * faktor
         end_wert = reihe[-1][1] * faktor
         differenz = 0.0
@@ -1814,10 +1824,12 @@ class HAStatisticsService:
         * ``n`` = round((start_ts(h) − start_ts(Anker)) / 3600) in **realen**
           Stunden: Herbst-Doppelslot n = 2, Frühjahr leerer Index ohne Spanne
           und Folgeslot n = 1. Ein Delta von 0 hat n = 1 (R2).
-        * **Kein Anker** (die Reihe beginnt im Fenster): der erste Slot bleibt
-          leer. Benannte Abweichung — HA nimmt dort 0 und zeigt die erste Stunde.
-          Ausnahme ``anker_null`` (U2 a1, F6): die neue Entität eines Wechsels
-          «bleiben» ohne Überlappung zählt ihre erste Zeile ab 0 wie HA.
+        * **Kein Anker** (die Reihe beginnt im Fenster — HA führt keine Zeile
+          davor): die erste Zeile zählt ab dem Anfangsstand 0 wie in HA, der erste
+          Slot zeigt die erste Stunde (Entscheid Gernot 21.11.2026, Regel
+          «Anfangsstand 0 am Beginn einer HA-Statistik»; bis dahin blieb er leer).
+          Ebenso ``anker_null`` (U2 a1, F6): die neue Entität eines Wechsels
+          «bleiben» ohne Überlappung.
 
         Transport: SQL (Recorder-Datei/-URL) liest den Anker mit
         ``start_ts < ts_von AND sum IS NOT NULL ORDER BY start_ts DESC LIMIT 1``
@@ -1835,8 +1847,8 @@ class HAStatisticsService:
         `_slot_fenster` (Zeilen des Fensters → Index −1…24, Einheit → kWh beim
         Lesen), `_anker_vor_fenster` (Anker-Zeile vor dem Fenster, SQL bzw.
         WebSocket rückwärts wachsend) lesen über denselben Kontext `_SlotLesen`;
-        die reine Rechnung `_slot_werte` (Anker-Regel über den Index, kein Anker
-        ⇒ erster Slot leer, Delta, ``n``) läuft nach dem Lesen.
+        die reine Rechnung `_slot_werte` (Anker-Regel über den Index, Anfangsstand 0
+        am Beginn der Statistik, Delta, ``n``) läuft nach dem Lesen.
 
         Returns:
             ``{entity_id: SensorSlotReihe}`` — ``entity_id`` fehlt, wenn der
@@ -1874,7 +1886,10 @@ class HAStatisticsService:
             logger.warning(f"get_hourly_slots_for_day Fehler: {type(e).__name__}: {e}")
             return {}
 
-        return _slot_werte(per_sensor, anker, anker_null)
+        # Beginnt die Statistik eines Zählers im Fenster (keine Zeile davor), gilt vor ihrer ersten Zeile der
+        # Anfangsstand 0 wie in HA — die erste Stunde zählt mit ihrem ``sum`` (Entscheid Gernot 21.11.2026).
+        beginnt = frozenset(s for s, z in per_sensor.items() if z and -1 not in z) - set(anker) - lesen.vor_fenster
+        return _slot_werte(per_sensor, anker, anker_null | beginnt)
 
     def _slot_fenster(self, conn, lesen: "_SlotLesen") -> None:
         """Phase 1 von `get_hourly_slots_for_day` (RF-55): die Zeilen des Fensters ``[ts_von, ts_bis]`` je Zähler auf den
@@ -1916,7 +1931,8 @@ class HAStatisticsService:
             if not sid or sum_val is None:
                 continue  # NULL → keine Zeile; die Energie trägt die nächste
             b_idx = lts_boundary_index(datetime.fromtimestamp(start_ts), datum)
-            if b_idx < -1 or b_idx > 24:
+            if b_idx < -1 or b_idx > 24:   # eine Zeile vor dem Tag (Polster): die Statistik beginnt nicht im Fenster
+                lesen.vor_fenster.update([sid] if b_idx < -1 else [])
                 continue
             # Aufsteigend gelesen ⇒ bei zwei Zeilen auf einem Index
             # (Herbst-Umstellung) gewinnt die spätere.

@@ -78,6 +78,10 @@ class CheckKategorie(str, Enum):
     # Sensorwechsel U3 b (Rechenweg G4): der Zählerstand einer MQTT-Reihe springt (Sprung, Neubeginn nicht bei 0, Rückgang) —
     # eedc zählt den Unterschied als Menge der Stunde. Erzeuger `datenquelle/mqtt_standsprung.py`; Sprung «Zähler getauscht».
     MQTT_ZAEHLERSTAND_SPRINGT = "mqtt_zaehlerstand_springt"
+    # Sensorwechsel Weg B (Bauplan Nr. 179/180): beim Wechsel der Quelle hat der Anwender «Daten vor der Änderung löschen»
+    # gewählt — Auskunft je Feld: gelöscht vor …, Home Assistant führt den neuen Sensor seit …, ein Tag, der für das Feld nicht
+    # vollständig ist. Erzeuger `datenquelle/geloescht.py`.
+    DATEN_VOR_AENDERUNG_GELOESCHT = "daten_vor_aenderung_geloescht"
     # v3.24.1: Sensoren im Mapping, die nicht in HA-Long-Term-Statistics landen
     # (kein state_class) — Korrektur-Werkzeuge in der Datenverwaltung wirken
     # auf solche Sensoren nicht (Vollbackfill, Verlauf nachrechnen,

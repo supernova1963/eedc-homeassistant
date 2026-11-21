@@ -617,7 +617,9 @@ async def test_b1_regel2_monat_aus_ha_mit_anker_null(db, ha, monkeypatch, spreng
     zw.vergiss(db)
     (aus,) = await monat.monatswerte_je_abschnitt(db, a.id, [antwort], [(2026, 6)])
     wert = next(w for w in aus.sensoren if w.sensor_id == "sensor.c")
-    assert round(wert.differenz, 3) == (12.0 if sprengsatz else 12.4)
+    # Weg B (B1): seit der Regel «Anfangsstand 0 am Beginn einer HA-Statistik» zählt der HA-Leser die erste Zeile selbst ab 0 —
+    # auch ohne die Hülle 12,4 (bis B1 zeigte der Sprengsatz 12,0); die Hülle entfällt mit dem Abbau (B2/B3).
+    assert round(wert.differenz, 3) == 12.4
 
 
 def test_b1_nullpunkt_teile_nur_im_monat_der_ersten_zeile():

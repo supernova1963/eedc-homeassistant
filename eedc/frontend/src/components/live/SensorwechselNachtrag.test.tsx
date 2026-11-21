@@ -15,7 +15,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import DatenquellenZuordnung from './DatenquellenZuordnung'
 import SensorwechselDialog, {
-  GRUND_FORTSETZUNG_FOLGE, GRUND_KORREKTUR, GRUND_KORREKTUR_FOLGE, NACHTRAG_FORTSETZUNG_ZUSATZ, NACHTRAG_GRUND_KORREKTUR_FOLGE,
+  GRUND_FORTSETZUNG_FOLGE, GRUND_KORREKTUR, GRUND_LOESCHEN_FOLGE, NACHTRAG_FORTSETZUNG_ZUSATZ, NACHTRAG_GRUND_KORREKTUR_FOLGE,
   NACHTRAG_NICHTS, NACHTRAG_TITEL,
 } from './SensorwechselDialog'
 import { NACHTRAG_LADEFEHLER } from './useGrundNachtragen'
@@ -120,18 +120,19 @@ describe('Sensorwechsel S4 — Grund nachtragen', () => {
 describe('Sensorwechsel S4-K — Texte und Fehler im Nachtrag (§13 Nr. 69/70)', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('im Nachtrag sagt «Korrektur» «bis zum Wechsel» und «Fortsetzung» den Zusatz, beim Wechsel die bisherigen Sätze', () => {
+  it('im Nachtrag sagt «Korrektur» «bis zum Wechsel» und «Fortsetzung» den Zusatz, beim Wechsel «bleiben» und «löschen»', () => {
     const fragen = [NACHTRAG]
     const { unmount } = render(<SensorwechselDialog isOpen fragen={fragen} onVorschau={vi.fn()} onBestaetigen={vi.fn()}
       onAbbrechen={vi.fn()} nachtrag={{ wechselSatz: NACHTRAG.wechsel_satz, gruende: ['fortsetzung', 'korrektur'] }} />)
     expect(screen.getByText(NACHTRAG_GRUND_KORREKTUR_FOLGE)).toBeInTheDocument()
-    expect(screen.queryByText(GRUND_KORREKTUR_FOLGE)).toBeNull()
+    expect(screen.queryByText(GRUND_LOESCHEN_FOLGE)).toBeNull()
     // «Zu §13» Nr. 87: im Nachtrag steht neben dem freigegebenen Fortsetzungs-Satz der Zusatz zum fest gespeicherten Tageswert
     expect(screen.getByText(`${GRUND_FORTSETZUNG_FOLGE} ${NACHTRAG_FORTSETZUNG_ZUSATZ}`)).toBeInTheDocument()
     unmount()
     render(<SensorwechselDialog isOpen fragen={fragen} onVorschau={vi.fn()} onBestaetigen={vi.fn()} onAbbrechen={vi.fn()} />)
-    expect(screen.getByText(GRUND_KORREKTUR_FOLGE)).toBeInTheDocument()
+    expect(screen.getByText(GRUND_LOESCHEN_FOLGE)).toBeInTheDocument()            // Weg B: beim Wechsel «löschen» statt «verwerfen»
     expect(screen.queryByText(NACHTRAG_GRUND_KORREKTUR_FOLGE)).toBeNull()
+    expect(document.body.textContent).not.toContain(GRUND_KORREKTUR)
     expect(screen.getByText(GRUND_FORTSETZUNG_FOLGE)).toBeInTheDocument()
     expect(document.body.textContent).not.toContain(NACHTRAG_FORTSETZUNG_ZUSATZ)
   })

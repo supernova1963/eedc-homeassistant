@@ -9,7 +9,8 @@
  * höchstens `FORTSCHRITT_VERSUCHE` Mal hintereinander; ein unbekannter Lauf (404) beendet es sofort.
  *
  * U2 Lauf b (a2 E-2): der Lauf eines Wechsels «bleiben» (`art: 'ansetzen'`) ist keine Korrektur — er liest die Werte nach dem
- * Sensorwechsel neu und bildet die Tage neu; seine Sätze sagen das. `WartendeWechsel` zeigt die Wechsel «bleiben», die eedc
+ * Sensorwechsel neu und bildet die Tage neu; seine Sätze sagen das. Weg B: der Lauf von «Daten vor der Änderung löschen»
+ * (`art: 'loeschen'`) ebenso. `WartendeWechsel` zeigt die Wechsel «bleiben», die eedc
  * noch nicht wie Home Assistant rechnet, mit dem Satz des Backends.
  */
 import { useEffect, useState } from 'react'
@@ -31,12 +32,21 @@ export const ANSETZEN_FERTIG = 'Werte nach dem Sensorwechsel neu gelesen.'
 /** Lab-K W1: «1 Tag» / «2 Tage» — die Anzahl mit Ein- oder Mehrzahl (`lib/plural.ts`). */
 export const tageText = (n: number) => `${fmtZahl(n)} ${plural(n, 'Tag', 'Tage')}`
 export const ANSETZEN_FERTIG_TAGE = (tage: string) => `Werte nach dem Sensorwechsel neu gelesen, ${tage} neu gebildet.`
+/** Weg B: der Lauf von «Daten vor der Änderung löschen» (Nachfüllen, Tage neu bilden). */
+export const LOESCHEN_LAEUFT = 'Daten vor der Änderung gelöscht — eedc liest, was die neue Quelle führt, und bildet die Tage neu …'
+export const LOESCHEN_FERTIG = 'Daten vor der Änderung gelöscht.'
+export const LOESCHEN_FERTIG_TAGE = (tage: string) => `Daten vor der Änderung gelöscht, ${tage} neu gebildet.`
 
 /** Der Satz zum Stand — nur Anzeige der Backend-Zahlen. */
 export function fortschrittSatz(z: KorrekturLaufStand): string {
   const fehler = z.fehler.filter((f) => f.tag != null).length
   const mitFehler = fehler > 0
     ? ` ${tageText(fehler)} ${plural(fehler, 'konnte', 'konnten')} nicht neu gebildet werden.` : ''
+  if (z.art === 'loeschen') {
+    if (z.status === 'fertig') return (z.tage > 0 ? LOESCHEN_FERTIG_TAGE(tageText(z.tage)) : LOESCHEN_FERTIG) + mitFehler
+    if (z.erledigt === 0) return LOESCHEN_LAEUFT
+    return `Tage werden im Hintergrund neu gebildet: ${fmtZahl(z.erledigt)} von ${fmtZahl(z.tage)}.${mitFehler}`
+  }
   if (z.art === 'ansetzen') {
     if (z.status === 'fertig') return (z.tage > 0 ? ANSETZEN_FERTIG_TAGE(tageText(z.tage)) : ANSETZEN_FERTIG) + mitFehler
     if (z.tage === 0) return ANSETZEN_LAEUFT

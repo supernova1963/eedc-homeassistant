@@ -216,6 +216,35 @@ async def test_luecke_ueber_den_rand_menge_im_naechsten_zeitraum_wie_ha(db):
     assert r[0].gedeckt_bis == h(22) and r[1].gedeckt_von == h(22)
 
 
+async def test_anfangsstand_null_nur_am_beginn_der_statistik_luecke_mitten_drin_bleibt_zaehlerluecke(db):
+    """Regel «Anfangsstand 0 am Beginn einer HA-Statistik» (Entscheid Gernot 21.11.2026, Bauplan Sensorwechsel Nr. 179–181):
+    die erste Zeile des Kanals ist die erste der HA-Statistik (Nachfüll-Marke ohne Grund) ⇒ sie zählt ab 0 wie in HA. Eine
+    Lücke MITTEN in der Statistik (h(10)…h(29) ohne Zeile) bleibt eine Zählerlücke wie HA: die erste Zeile danach zählt
+    gegen die letzte Zeile davor, nicht ab 0 (Nr. 181/2: entschieden, nicht neu aufrollen)."""
+    from backend.models.kanal import KanalNachfuellung
+
+    aid = await _anlage(db)
+    zeilen = [(h(i), 50.0 + i) for i in range(0, 48) if not 10 <= i < 30]
+    k = await _kanal(db, aid, "basis:einspeisung", ART_SUM, zeilen)
+    db.add(KanalNachfuellung(kanal_id=k.id, statistic_id="sensor.q0", abgeschlossen_ts=h(48), ergebnis={"zeilen": 28}))
+    await db.flush()
+    # Beginn: der Zeitraum ist gedeckt, die erste Stunde zählt mit ihrem sum (50,0) — wie HA.
+    z0 = await zeitraum(db, k, h(-5), h(10), jetzt=JETZT)
+    assert (z0.voll, z0.delta) == (True, pytest.approx(59.0))
+    st0 = await stunden(db, k, h(-5), h(10), jetzt=JETZT)
+    assert st0.werte[0].start_ts == h(0) and st0.werte[0].change == pytest.approx(50.0)
+    # Lücke mitten drin: Δ gegen die Zeile h(9) (59,0), nicht ab 0; die Folgestunde trägt die Menge der Lücke.
+    z1 = await zeitraum(db, k, h(24), h(48), jetzt=JETZT)
+    assert (z1.voll, z1.delta) == (True, pytest.approx(97.0 - 59.0))
+    st1 = await stunden(db, k, h(24), h(48), jetzt=JETZT)
+    erste = next(w for w in st1.werte if w.change is not None)
+    assert (erste.start_ts, erste.change, erste.spanne) == (h(30), pytest.approx(80.0 - 59.0), 21 * H)
+    # Ohne Marke (HA nicht gefragt — die Vorgeschichte ist offen) gilt die Regel nicht: Beginn nach ``von`` wie bisher.
+    await db.execute(KanalNachfuellung.__table__.delete().where(KanalNachfuellung.kanal_id == k.id))
+    await db.flush()
+    assert (await zeitraum(db, k, h(-5), h(10), jetzt=JETZT)).grund == GRUND_BEGINNT_NACH_VON
+
+
 # ── dünne Punkte: Monat richtig, Tag kein Wert ──────────────────────────────
 
 

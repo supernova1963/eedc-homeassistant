@@ -3,7 +3,11 @@
 ## Was eedc sieht
 Für diesen Tag steht in eedc eine andere PV-Erzeugung als in der Langzeitstatistik von Home Assistant (mindestens 2 kWh und
 5 % Unterschied). Mehrere solche Tage stehen als eine Zeile «n Tage weichen von Home Assistant ab» mit einem Glied je Tag,
-die größten Abweichungen vorn.
+die größten Abweichungen vorn. **Benannte Grenze — der erste Tag einer Statistik:** an dem Tag, an dem die Statistik eines
+Sensors in Home Assistant beginnt, zählt eedc den Kalendertag ab der ersten Stunde wie Home Assistant; der Vergleichswert, den
+die Prüfung aus Home Assistant liest, reicht für diesen Tag aber nur bis 23 Uhr (die Stunde 23–24 Uhr zählt er zum Folgetag).
+Trägt diese letzte Stunde mindestens 2 kWh und 5 %, nennt die Prüfung den Tag, obwohl Tagesansicht und Home Assistant
+dieselbe Zahl zeigen; «Aus Home Assistant neu übernehmen» ändert daran nichts. Am Folgetag tritt das nicht auf.
 
 ## Lösungsweg
 1. In Home Assistant prüfen, welcher Wert stimmt. Ist die Statistik dort falsch (etwa ein Zählersprung), sie unter

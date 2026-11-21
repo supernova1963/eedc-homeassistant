@@ -110,10 +110,12 @@ async def test_feldwert_am_geraet_vorgesehen_ist_nichts_zu_tun(db):
                                monate={5: {"warmwasser_kwh": 40.0}})
     p = await _plan_ohne_schreiben(db, _req(a.id, RepairOperationType.FELDWERT_ENTFERNEN,
                                             investition_id=inv.id, feld="warmwasser_kwh"))
-    assert p.estimated_changes == {} and "im Monatsabschluss erreichbar" in p.operation_preview["nichts_zu_tun"]
+    # Weg B (Bauplan Nr. 178): der Satz nennt den wahren Weg (bis dahin «im Monatsabschluss erreichbar — bitte dort leeren»)
+    assert p.estimated_changes == {} and "„Monatsdaten“: am Monat den Stift wählen" in p.operation_preview["nichts_zu_tun"]
+    assert "bitte dort leeren" not in p.operation_preview["nichts_zu_tun"]
     vorher = await _dump(db)
     # E5: ein Plan «nichts zu tun» wird nicht ausgeführt (`NichtsZuTun` ⇒ Route 409), keine Protokollzeile.
-    with pytest.raises(NichtsZuTun, match="im Monatsabschluss erreichbar"):
+    with pytest.raises(NichtsZuTun, match="gilt nur für Felder, die das Gerät nicht führt"):
         await execute(p.plan_id, db)
     await db.rollback()
     assert {t: v for t, v in (await _dump(db)).items() if t != "activity_log"} == \

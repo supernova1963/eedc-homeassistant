@@ -13,6 +13,10 @@ mit dem falschen Gerätewert blieb genau deshalb stehen, weil er einen Gerätewe
 die Werkbank die zählerbasierten Größen neu und lässt den gespeicherten Leistungsverlauf stehen (``komponenten`` je Stunde,
 Tages-Peaks). Liefert auch die Zählertabelle nichts (oder nur eedcs eigene Stände), bleibt der Tag wie bisher stehen.
 
+**Seit 21.11.2026** (Regel «Anfangsstand 0 am Beginn einer HA-Statistik») ist der 2.11. ein Kanal-Tag: die WP-Menge liest
+der Tag aus dem HA-Spiegel; behoben wird die Drift mit dem Knopf des Befunds («Aus Home Assistant neu übernehmen»), nicht
+mit «Tag reparieren» (``SICHTBAR_SPRUNG``/``SICHTBAR_BERICHTIGT`` unten).
+
 Aufbau nach ``refactoring-werkzeug/n791/nachstellung.py``, eigenständig: eine Anlage mit PV und einer Wärmepumpe, Home
 Assistant als Attrappe im echten Recorder-Schema (``ha_lts_helfer``), HA-Spiegel aus derselben Statistik; Wetter, Preise,
 Ladestand und Betriebsart ohne Netz. Geprüft: (a) Lk · (a2) Lk mit Leistungszuordnung · (b) N-596 bleibt · (c) der
@@ -302,30 +306,55 @@ async def _drift_wp(lage: _Lage) -> list[str]:
     return [e.meldung for e in erg if "weichen von HA-Statistics ab" in e.meldung]
 
 
+#: Seit der Regel «Anfangsstand 0 am Beginn einer HA-Statistik» (Entscheid Gernot 21.11.2026, Bauplan Sensorwechsel
+#: Nr. 179–181) ist der 2.11. — der erste Tag der WP-Statistik — ein Kanal-Tag wie jeder andere: die Tageszeile trägt die
+#: WP-Gruppe nicht mehr (``_tag(...)["wp"]`` None), die Sichten lesen den HA-Spiegel. Gemessen (B1-Abschluss, Aufgabe 4,
+#: ``golden-master/sensorwechsel-saat/wegb/b1/abschluss/``): sichtbar 123.923,3 (Spiegel mit Erstwert-Sprung) in
+#: Tagesansicht, Tageswerten und Wärme-Sicht; nach «Summe anpassen» in HA unverändert; «Tag reparieren», «Tage neu
+#: aufbauen» und der Nachtlauf lesen denselben Spiegel und ändern nichts; der Knopf des Befunds («Aus Home Assistant neu
+#: übernehmen», ``spiegel_abgleich_tag``) gleicht den Spiegel ab ⇒ 13,7 (Kalendertag wie HA), Drift still.
+SICHTBAR_SPRUNG = 123923.3
+SICHTBAR_BERICHTIGT = 13.7
+
+
+async def _sichtbar_wp(lage: _Lage):
+    """Die WP-Menge des 2.11., wie die Tageswerte-Route (``/energie-profil/{id}/tage``) sie zeigt."""
+    from backend.api.routes.energie_profil.tage import get_tages_zusammenfassungen
+    from backend.services.kanal import merken
+
+    merken.invalidiere(lage.aid)
+    async with lage.sitzungen() as db:
+        (tz,) = await get_tages_zusammenfassungen(lage.aid, D2, D2, db)
+    wert = (tz.komponenten_kwh or {}).get(lage.wp_key)
+    return None if wert is None else round(wert, 1)
+
+
 # ── (a) Lk: Gerätewert aus der Statistik, Leistungsverlauf bleibt ───────────
 
 
 async def test_a_lk_reparatur_schreibt_zaehlerwerte_und_laesst_den_leistungsverlauf(tmp_path):
+    """Seit 21.11.2026 Kanal-Tag (``SICHTBAR_*``): «Tag reparieren» nimmt weiter den Weg ``zaehler_erhalt`` und lässt den
+    Leistungsverlauf stehen; die WP-Menge liest der Tag aus dem Spiegel — sie und die Drift bleiben, bis der Knopf des
+    Befunds den Spiegel abgleicht (bis 21.11.: Tageszeile 123.922,2 → 12,6, Drift 1 → 0 durch «Tag reparieren»)."""
     async with _lk(tmp_path) as lage:
         vorher = await _tag(lage)
-        assert round(vorher["wp"], 1) == 123922.2, vorher
+        assert vorher["wp"] is None, vorher                    # Kanal-Tag: die Tageszeile trägt die WP-Gruppe nicht
+        assert await _sichtbar_wp(lage) == SICHTBAR_SPRUNG
         assert vorher["leistung"], "der Tageslauf hat einen Leistungsverlauf gespeichert"
-        assert len(await _drift_wp(lage)) == 1, "Drift «123.922,2 → 12,6» vor der Reparatur"
+        assert len(await _drift_wp(lage)) == 1, "Drift «123.923,3 → 12,6» vor der Reparatur"
 
         erg = await _werkbank(lage)
         nachher = await _tag(lage)
 
         assert erg["quelle"] == "zaehler_erhalt"
         assert erg["quelle_text"] == SATZ
-        assert round(nachher["wp"], 1) == 12.6
-        assert nachher["wp_stunden"] == 12.6, "Σ Stunden = Tag (G1) für den neu geschriebenen Zähler"
         assert nachher["leistung"] == vorher["leistung"], "Leistungsverlauf je Stunde unverändert"
         assert nachher["leistung_herkunft"] == vorher["leistung_herkunft"], "der Verlauf behält seine alte Herkunft"
         assert nachher["peak_pv"] == vorher["peak_pv"] and vorher["peak_pv"], "Peak aus dem gespeicherten Verlauf"
         assert nachher["datenquelle"] == "manuell"
-        (wp,) = [k for k in erg["komponenten"] if k["key"] == lage.wp_key]
-        assert wp["geschrieben"] and wp["kwh"] == 12.6
-        assert await _drift_wp(lage) == [], "Drift-Check ohne Zeile"
+        assert nachher["wp"] is None and not [k for k in erg["komponenten"] if k["key"] == lage.wp_key]
+        assert await _sichtbar_wp(lage) == SICHTBAR_SPRUNG, "«Tag reparieren» liest am Kanal-Tag denselben Spiegel"
+        assert len(await _drift_wp(lage)) == 1, "die Drift behebt der Knopf des Befunds (test_w11_aus_home_assistant…)"
 
 
 async def _plan_ausfuehren(lage: _Lage, operation: str, params: dict) -> dict:
@@ -341,11 +370,14 @@ async def _plan_ausfuehren(lage: _Lage, operation: str, params: dict) -> dict:
 
 
 async def test_w11_bereich_ueber_plan_und_ausfuehren_behebt_die_drift(tmp_path):
-    """W-11 (E3), «Tage neu aufbauen» (``REAGGREGATE_RANGE``) an einem Bestandstag: nach dem Lauf ist die Drift still."""
+    """W-11 (E3), «Tage neu aufbauen» (``REAGGREGATE_RANGE``) über Plan und Ausführen. Seit 21.11.2026 ist der 2.11. ein
+    Kanal-Tag (``SICHTBAR_*``): der Lauf liest den Spiegel, die Drift bleibt (bis 21.11.: Bestandstag, Drift 1 → 0) — der
+    Befund bietet dort «Aus Home Assistant neu übernehmen» an (nächste Probe)."""
     async with _lk(tmp_path) as lage:
         assert len(await _drift_wp(lage)) == 1
         await _plan_ausfuehren(lage, "reaggregate_range", {"von": D2.isoformat(), "bis": D2.isoformat()})
-        assert await _drift_wp(lage) == [], "Drift-Check ohne Zeile"
+        assert len(await _drift_wp(lage)) == 1
+        assert await _sichtbar_wp(lage) == SICHTBAR_SPRUNG
 
 
 async def test_w11_aus_home_assistant_neu_uebernehmen_ueber_plan_und_ausfuehren(tmp_path):
@@ -362,8 +394,11 @@ async def test_w11_aus_home_assistant_neu_uebernehmen_ueber_plan_und_ausfuehren(
                     erg = await DatenChecker(db)._check_datenquelle_drift(await lage.anlage(db))
             (e,) = [e for e in erg if "weichen von HA-Statistics ab" in e.meldung]
             assert befund_op(e) == "spiegel_abgleich_tag"
+            assert e.knopf == "Aus Home Assistant neu übernehmen"
+            assert await _sichtbar_wp(lage) == SICHTBAR_SPRUNG
             await _plan_ausfuehren(lage, befund_op(e), befund_params(e))
             assert await _drift_wp(lage) == [], "Drift-Check ohne Zeile"
+            assert await _sichtbar_wp(lage) == SICHTBAR_BERICHTIGT
         async with lage.sitzungen() as db:
             zeilen = (await db.execute(select(ActivityLog).where(ActivityLog.kategorie.in_(
                 ["repair", "ha_statistics"])))).scalars().all()
@@ -372,13 +407,15 @@ async def test_w11_aus_home_assistant_neu_uebernehmen_ueber_plan_und_ausfuehren(
 
 async def test_a2_lk_mit_leistungszuordnung(tmp_path):
     """Dieselbe Lage an einer Anlage mit Leistungszuordnung (der Weg ohne nachgestellte Aggregationsquelle):
-    Leistungssensor ohne Verlauf und ohne Statistik."""
+    Leistungssensor ohne Verlauf und ohne Statistik. Seit 21.11.2026 Kanal-Tag (``SICHTBAR_*``; bis dahin Tageszeile
+    nachher 12,6)."""
     async with _lk(tmp_path, live=True) as lage:
         vorher = await _tag(lage)
         erg = await _werkbank(lage)
         nachher = await _tag(lage)
+        sichtbar = await _sichtbar_wp(lage)
     assert erg["quelle"] == "zaehler_erhalt"
-    assert round(nachher["wp"], 1) == 12.6
+    assert nachher["wp"] is None and sichtbar == SICHTBAR_SPRUNG
     assert nachher["leistung"] == vorher["leistung"]
 
 
@@ -414,13 +451,16 @@ async def test_c_nachtlauf_ohne_leistungskurve_laesst_den_tag_stehen(tmp_path):
 
 
 async def test_c_nachtlauf_mit_leistungskurve_wie_bisher(tmp_path):
+    """Seit 21.11.2026 Kanal-Tag (``SICHTBAR_*``): der Nachtlauf schreibt den Tag, die WP-Menge liest der Tag aus dem
+    Spiegel (bis dahin Tageszeile und Σ Stunden nachher 12,6)."""
     async with _lk(tmp_path) as lage:
         vorher = await _tag(lage)
         lage.kurve_leer = False
         z = await _tageslauf(lage)
         nachher = await _tag(lage)
+        sichtbar = await _sichtbar_wp(lage)
     assert z is not None
-    assert round(nachher["wp"], 1) == 12.6 and nachher["wp_stunden"] == 12.6
+    assert nachher["wp"] is None and sichtbar == SICHTBAR_SPRUNG
     assert nachher["leistung"] == vorher["leistung"]
     assert nachher["datenquelle"] == "scheduler"
 
@@ -429,15 +469,18 @@ async def test_c_nachtlauf_mit_leistungskurve_wie_bisher(tmp_path):
 
 
 async def test_d_lauf_l_mit_leistungskurve_bleibt_historie(tmp_path):
+    """Seit 21.11.2026 Kanal-Tag (``SICHTBAR_*``): Weg ``historie`` wie bisher; Menge und Drift bleiben am Spiegel (bis
+    dahin Tageszeile nachher 12,6, Drift 0)."""
     async with _lk(tmp_path) as lage:
         lage.kurve_leer = False
         erg = await _werkbank(lage)
         nachher = await _tag(lage)
         drift = await _drift_wp(lage)
+        sichtbar = await _sichtbar_wp(lage)
     assert erg["quelle"] == "historie"
     assert erg.get("quelle_text") is None
-    assert round(nachher["wp"], 1) == 12.6
-    assert drift == []
+    assert nachher["wp"] is None and sichtbar == SICHTBAR_SPRUNG
+    assert len(drift) == 1
 
 
 # ── (e) Drift-Zeilen: Bestand-Tag und Kanal-Tag tragen den Handgriff ────────

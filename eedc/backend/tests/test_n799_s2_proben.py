@@ -104,7 +104,7 @@ async def test_offset_der_quelle_in_deltas_stapel():
         voll = await lesen.stunden_stapel(ds.db, kanaele, von, bis)
         orig = lesen._deltas
         with pytest.MonkeyPatch.context() as mp:              # Sprengsatz: Offset nicht gelesen
-            mp.setattr(lesen, "_deltas", lambda z, _o, v: orig(z, None, v))
+            mp.setattr(lesen, "_deltas", lambda z, _o, v, *b: orig(z, None, v, *b))
             ohne = await lesen.deltas_stapel(ds.db, kanaele, von, bis)
     assert schlank["basis:netzbezug"] == [(w.start_ts, w.change, w.spanne) for w in voll["basis:netzbezug"].werte]
     assert {ts: d for ts, d, _s in schlank["basis:netzbezug"]}[grenze] > 99.0

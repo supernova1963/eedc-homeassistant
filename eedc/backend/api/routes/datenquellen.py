@@ -850,10 +850,9 @@ class QuelleSetRequest(BaseModel):
     offset: float = 0.0
     # Invert ist NICHT mehr Teil der Quellen-Wahl (Datenquellen-V4): eigener
     # /invert-Endpoint + Store `sensor_mapping.invertieren`. Feld hier entfernt.
-    # Sensorwechsel mit Grund (Bauplan B-2, Sitzung 3b): der Grund einer fragepflichtigen Änderung — `fortsetzung` oder
-    # `korrektur` (dann mit `falsch_seit`, örtliche Zeit; volle Stunde). Ohne Grund lehnt die Route sie mit 422 ab.
+    # Sensorwechsel (Weg B, Bauplan Nr. 174–180): die Antwort auf eine fragepflichtige Änderung — `fortsetzung` («Bisherige
+    # Werte bleiben») oder `loeschen` («Daten vor der Änderung löschen»). Ohne sie lehnt die Route die Änderung mit 422 ab.
     grund: str | None = None
-    falsch_seit: datetime | None = None
     # U2 Lauf b (F9): «Der neue Sensor zählt ab» bei «bleiben» zwischen zwei HA-Sensoren mit Überlappung (örtliche Zeit; volle
     # Stunde). Außerhalb des zulässigen Bereichs oder ohne Überlappung lehnt die Route mit 422 ab.
     zaehlt_ab: datetime | None = None
@@ -942,7 +941,7 @@ async def _quelle_zulaessig(db: AsyncSession, anlage: Anlage, field_id: str, bod
         )
     if body.grund is not None and body.grund not in abfrage.GRUENDE:
         raise HTTPException(status_code=400, detail=f"Unbekannter Grund: {body.grund}")
-    if body.zaehlt_ab is not None and body.grund == abfrage.GRUND_KORREKTUR:
+    if body.zaehlt_ab is not None and body.grund == abfrage.GRUND_LOESCHEN:
         from backend.services.zuordnung_wechsel.bleiben import SATZ_NUR_BLEIBEN
 
         raise HTTPException(status_code=422, detail=SATZ_NUR_BLEIBEN)
@@ -1034,8 +1033,8 @@ async def _wende_quelle_an(
 
 
 def _grund_des_felds(body: QuelleSetRequest) -> dict:
-    """Der Grund der Feld-Route gilt für die (einzige) fragepflichtige Änderung dieses Felds."""
-    return {abfrage.ALLE: (body.grund, body.falsch_seit)} if body.grund else {}
+    """Die Antwort der Feld-Route gilt für die (einzige) fragepflichtige Änderung dieses Felds."""
+    return {abfrage.ALLE: body.grund} if body.grund else {}
 
 
 def _zaehlt_ab_des_felds(body: QuelleSetRequest) -> dict | None:
@@ -1051,8 +1050,8 @@ async def pruefe_feld_quelle(
 
     Derselbe Body wie `…/quelle`. Die Route macht dieselbe Änderung in der Sitzung, fragt die eine Prüf-Funktion
     (`zuordnung_wechsel/abfrage.pruefe`) und rollt zurück. Antwort: `grund_erforderlich`, `erster_wert`, `tage`,
-    `stand_alt`, `stand_neu` (dazu `sensor_key`, `label`, `verzeichnet`, `vorgabe_falsch_seit`); mit `grund = korrektur`
-    und `falsch_seit` zusätzlich `korrektur` = die Vorschau des Dienstes (Vorschau = Lauf). Zwischen zwei HA-Sensoren
+    `stand_alt`, `stand_neu` (dazu `sensor_key`, `label`, `verzeichnet`), `loeschen` = was «Daten vor der Änderung löschen»
+    tut (Sätze, gespeicherte Monate; Weg B). Zwischen zwei HA-Sensoren
     `bleiben` = was «Bisherige Werte bleiben» tut (`zuordnung_wechsel/bleiben.angaben`; mit `zaehlt_ab` an dieser Stunde,
     außerhalb des zulässigen Bereichs **422**).
     """
@@ -1067,14 +1066,7 @@ async def pruefe_feld_quelle(
                                           zaehlt_ab=_zaehlt_ab_des_felds(body))
         except abfrage.GrundFehlt as e:
             raise HTTPException(status_code=422, detail=str(e))
-        f = fragen[0] if fragen else None
-        out = abfrage.antwort(f, label)
-        out["korrektur"] = None
-        if f is not None and f.grund_erforderlich and body.grund == abfrage.GRUND_KORREKTUR and body.falsch_seit:
-            try:
-                out["korrektur"] = await abfrage.korrektur_vorschau(db, anlage_id, f, body.falsch_seit, datetime.now())
-            except abfrage.GrundFehlt as e:
-                out["korrektur"] = {"saetze": [str(e)], "startbar": False}
+        out = abfrage.antwort(fragen[0] if fragen else None, label)
     finally:
         await db.rollback()
     return out
@@ -1088,9 +1080,9 @@ async def set_feld_quelle(
 
     Sensorwechsel mit Grund (Bauplan B-2, Sitzung 3b): eine fragepflichtige Änderung (eigene Werte, die wirksame Quelle
     wechselt auf eine mit Werten) braucht `grund` — ohne ihn **422** (der Client fragt vorher über `…/quelle/pruefen`).
-    `fortsetzung`: Wechsel-Zeile mit Grund; `korrektur` (mit `falsch_seit`): der Dienst der Korrektur, danach Füllen und
-    Hintergrund-Lauf (`korrektur` der Antwort nennt den Lauf). Jede wirksame Änderung eines Schlüssels mit eigenen Werten
-    wird verzeichnet.
+    `fortsetzung`: Wechsel-Zeile mit Grund; `loeschen` (Weg B): die Daten des Felds vor der Änderung werden gelöscht
+    (`services/feld_loeschen.py`), danach ein Hintergrund-Lauf (`korrektur` der Antwort nennt ihn, `art = loeschen`). Jede
+    andere wirksame Änderung eines Schlüssels mit eigenen Werten wird verzeichnet.
     """
     from backend.services.zuordnung_wechsel.korrektur import KorrekturNichtStartbar
 

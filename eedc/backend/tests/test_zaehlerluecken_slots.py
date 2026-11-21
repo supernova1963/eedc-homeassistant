@@ -4,7 +4,7 @@ Vorlage `plans/vorlage-zaehlerluecken-ha-weg.md` Fassung 7. Die Slot-Tabelle
 legt je Stunde ab, was HA für diese Stunde zeigt: Stand(h) minus den letzten
 **vorhandenen** Stand davor, Anker über den **Boundary-Index**, Spanne n in
 **realen** Stunden. Proben P2 (Rohpfad), P5 (SQL == WS inkl. Anker-start_ts
-und n), P8 (kein Anker), P9 (DST), dazu die Projektion
+und n), P8 (kein Anker ⇒ Anfangsstand 0), P9 (DST), dazu die Projektion
 `get_hourly_kwh_deltas_for_day` (n == 1 ⇒ Wert, sonst None).
 
 Schwesterdateien: test_ha_lts_hourly_reader.py (Rohpfad, bleibt unverändert),
@@ -132,8 +132,10 @@ def test_p5_sql_gleich_ws(berlin, fall):
     if fall == "wh":
         assert reihe.slots[4] == StundenSlot(23.0, 10)   # Wh → kWh, auch am Anker
     if fall == "kein_anker":
-        assert reihe.anker_start_ts is None
-        assert 6 not in reihe.slots                      # erste Zeile der Reihe: kein Anker
+        # Die Statistik beginnt im Fenster (HA führt keine Zeile davor): ihre erste Zeile (05:00, sum 0,0) zählt ab dem
+        # Anfangsstand 0 wie in HA (Regel 21.11.2026; bis dahin blieb Slot 6 leer, anker_start_ts None).
+        assert reihe.anker_start_ts == datetime(2026, 5, 15, 4).timestamp()
+        assert reihe.slots[6] == StundenSlot(0.0, 1)
         assert reihe.slots[7] == StundenSlot(1.5, 1)
     if fall == "anker_null":
         assert reihe.anker_start_ts == datetime(2026, 5, 14, 16).timestamp()
@@ -144,7 +146,7 @@ def test_p5_sql_gleich_ws(berlin, fall):
         assert reihe.slots[4].delta == 200.0
 
 
-# ── P8: kein Anker ⇒ Slot leer, keine Spanne (benannte HA-Abweichung) ────────
+# ── P8: kein Anker ⇒ Anfangsstand 0 wie HA (bis 21.11.2026: Slot leer, benannte HA-Abweichung) ────────
 
 
 def test_p8_kein_anker_slot_leer_ohne_spanne(berlin):
@@ -152,11 +154,11 @@ def test_p8_kein_anker_slot_leer_ohne_spanne(berlin):
     zeilen = _stunden(datetime(2026, 5, 15, 9), datetime(2026, 5, 15, 12), 50.0, 2.0)
     sql, _ = _beide(zeilen)
     reihe = sql.get_hourly_slots_for_day([SID], datum)[SID]
-    # Zähler(10) ist die erste Zeile überhaupt: HA nähme 0 als Anker und zeigte
-    # 50 kWh in dieser Stunde — eedc lässt sie einmal je neuer Reihe aus.
+    # Zähler(10) ist die erste Zeile überhaupt: HA nimmt 0 als Anker und zeigt 50 kWh in dieser Stunde — eedc
+    # seit der Regel «Anfangsstand 0 am Beginn einer HA-Statistik» (21.11.2026) ebenso (bis dahin: Slot 10 leer).
     assert reihe == SensorSlotReihe(
-        slots={11: StundenSlot(2.0, 1), 12: StundenSlot(2.0, 1), 13: StundenSlot(2.0, 1)},
-        anker_start_ts=None,
+        slots={10: StundenSlot(50.0, 1), 11: StundenSlot(2.0, 1), 12: StundenSlot(2.0, 1), 13: StundenSlot(2.0, 1)},
+        anker_start_ts=datetime(2026, 5, 15, 8).timestamp(),
     )
 
 

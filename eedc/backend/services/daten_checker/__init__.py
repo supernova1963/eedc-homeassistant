@@ -168,6 +168,8 @@ class DatenChecker(
         # Sensorwechsel U3 a (G1/G2): verworfene, nicht wieder gefüllte Zeit je Lücke — Auskunft; gespeicherter Monatswert eines
         # vom Wechsel berührten Monats, der nicht mehr zur Quelle passt — «Monat öffnen».
         ergebnisse.extend(await self._check_zaehler_zeit_verworfen(anlage))
+        # Sensorwechsel Weg B: «Daten vor der Änderung löschen» — Auskunft je Feld (gelöscht vor …, HA führt den Sensor seit …).
+        ergebnisse.extend(await self._check_daten_vor_aenderung_geloescht(anlage))
         ergebnisse.extend(await self._check_monatswert_ueberholt(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_lts(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_einheit(anlage))

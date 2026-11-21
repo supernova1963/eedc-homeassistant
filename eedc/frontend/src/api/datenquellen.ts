@@ -280,12 +280,13 @@ export interface QuelleSaveResult {
   wartet?: WartenderWechsel[]
 }
 
-/** Grund einer fragepflichtigen Quellen-Änderung (Sensorwechsel mit Grund, Bauplan B-2). */
-export type WechselGrund = 'fortsetzung' | 'korrektur'
+/** Antwort auf eine fragepflichtige Quellen-Änderung: beim Wechsel `fortsetzung` («Bisherige Werte bleiben») oder `loeschen`
+ *  («Daten vor der Änderung löschen», Weg B); `korrektur` nur noch an «Grund nachtragen» und am versetzten Abschnitt. */
+export type WechselGrund = 'fortsetzung' | 'loeschen' | 'korrektur'
 
 export interface GrundAngabe {
   grund: WechselGrund
-  /** Nur bei Korrektur: erste falsche Stunde (örtlich, ISO ohne Zone). */
+  /** Nur bei Korrektur («Grund nachtragen», Stück): erste falsche Stunde (örtlich, ISO ohne Zone). */
   falsch_seit?: string
   /** Nur bei «bleiben» zwischen zwei HA-Sensoren mit Überlappung: «Der neue Sensor zählt ab» (örtlich, ISO ohne Zone). */
   zaehlt_ab?: string
@@ -327,6 +328,13 @@ export interface KorrekturVorschau {
   tage_neu?: string[]
 }
 
+/** Weg B: was «Daten vor der Änderung löschen» tut (Backend `feld_loeschen.angaben`) — Sätze und die Monate mit gespeichertem
+ *  Monatswert (`YYYY-MM`); der Client zeigt nur. */
+export interface LoeschenAngaben {
+  saetze: string[]
+  monate: string[]
+}
+
 /** Antwort der Prüf-Route je Zählerschlüssel (`…/quelle/pruefen`, `…/presets/apply/pruefen`). */
 export interface QuellePruefung {
   grund_erforderlich: boolean
@@ -338,8 +346,11 @@ export interface QuellePruefung {
   label: string | null
   /** Die Änderung wird verzeichnet (eigene Werte, die wirksame Quelle wechselt). */
   verzeichnet: boolean
-  vorgabe_falsch_seit: string | null
-  korrektur: KorrekturVorschau | null
+  /** Nur «Grund nachtragen» (Vorgabe «Falsch seit», Vorschau der Korrektur). */
+  vorgabe_falsch_seit?: string | null
+  korrektur?: KorrekturVorschau | null
+  /** Weg B: was «Daten vor der Änderung löschen» tut (nur an der Prüfung beim Wechsel). */
+  loeschen?: LoeschenAngaben | null
   /** U2 Lauf b: nur zwischen zwei HA-Sensoren — was «Bisherige Werte bleiben» tut. */
   bleiben?: BleibenAngaben | null
   /** U3 b: bei MQTT bzw. zwischen Home Assistant und MQTT der Satz zu «Bisherige Werte bleiben» (sonst der allgemeine). */
@@ -352,12 +363,13 @@ export interface KorrekturLaufStart {
   label: string
   tage_neu: number
   zaehlerstaende_geloescht: number
-  /** `ansetzen` = der Lauf eines Wechsels «bleiben» (U2 Lauf b); fehlt bei einer Korrektur. */
+  /** `ansetzen` = der Lauf eines Wechsels «bleiben» (U2 Lauf b); `loeschen` = «Daten vor der Änderung löschen» (Weg B);
+   *  fehlt bei einer Korrektur. */
   art?: LaufArt
 }
 
-/** Wer einen Lauf angelegt hat: eine Korrektur oder das Ansetzen eines Wechsels «bleiben» (U2 Lauf b). */
-export type LaufArt = 'korrektur' | 'ansetzen'
+/** Wer einen Lauf angelegt hat: eine Korrektur, das Ansetzen eines Wechsels «bleiben» (U2 Lauf b) oder «löschen» (Weg B). */
+export type LaufArt = 'korrektur' | 'ansetzen' | 'loeschen'
 
 /** Fortschritt eines Korrektur-Laufs (`GET …/korrektur-lauf/{lauf}`). */
 export interface KorrekturLaufStand {
@@ -510,8 +522,8 @@ export const datenquellenApi = {
       quelleBody(quelle, gateway, entityId, grund),
     ),
 
-  /** Sensorwechsel mit Grund: dieselbe Änderung prüfen, BEVOR sie gesendet wird (schreibt nichts). Mit `grund`
-   *  `korrektur` und `falsch_seit` liefert das Backend die Vorschau des Korrektur-Laufs. */
+  /** Sensorwechsel: dieselbe Änderung prüfen, BEVOR sie gesendet wird (schreibt nichts). Die Antwort sagt, was «bleiben»
+   *  (`bleiben`, `bleiben_satz`) und «löschen» (`loeschen`) tun. */
   pruefeQuelle: (
     anlageId: number, fieldId: string, quelle: string,
     gateway?: GatewayQuelleConfig, entityId?: string, grund?: GrundAngabe,

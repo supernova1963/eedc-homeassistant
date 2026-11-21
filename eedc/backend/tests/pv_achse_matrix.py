@@ -584,7 +584,10 @@ async def seed_anlage(db: AsyncSession, form: Form) -> tuple[int, dict[str, int]
 def seed_ha(form: Form, *, abweichung: Optional[dict] = None):
     """Die HA-Langzeitstatistik der Form: eine Zeile je Stunde und Zähler.
 
-    Recorder-Konvention: ``start_ts = t`` trägt den Stand am Ende der Stunde ``t``.
+    Recorder-Konvention: ``start_ts = t`` trägt den Stand am Ende der Stunde ``t``. Wie HA beginnt die ``sum``-Reihe beim
+    Nullpunkt der Statistik (``sum`` = Stand − Stand zu Beginn der ersten geführten Stunde, ``recorder/statistics``:
+    «zero point»), ``state`` trägt den Zählerstand (Bauplan Sensorwechsel Nr. 181/1: die Saat bleibt neutral zur Regel
+    «Anfangsstand 0»).
     ``abweichung``: ``{sensor_id: (rate_fn | None, ohne_fn | None)}`` ersetzt Rate bzw.
     fehlende Zeilen einzelner Zähler (Bündel, Abriss, Sprung, Zähler ohne Nachtzeilen) —
     für Einzelproben, die Matrix selbst ruft ohne.
@@ -594,17 +597,20 @@ def seed_ha(form: Form, *, abweichung: Optional[dict] = None):
         rate_neu, ohne_neu = (abweichung or {}).get(sid, (None, None))
         rate_fn, ohne_fn = rate_neu or rate_fn, ohne_neu or ohne_fn
         mid = ha_lts_helfer.sensor(svc, sid, "kWh", has_sum=True)
-        stand = 1000.0
+        stand, start = 1000.0, None
         zeilen = []
         t = REIHE_VON
         while t < REIHE_BIS:
             stand += rate_fn(t)
             if not ohne_fn(t):
-                zeilen.append({"m": mid, "t": _zeit.mktime(t.timetuple()), "w": round(stand, 4)})
+                if start is None:          # HAs Nullpunkt: der Stand zu Beginn der ersten Stunde, die HA führt
+                    start = stand - rate_fn(t)
+                zeilen.append({"m": mid, "t": _zeit.mktime(t.timetuple()), "w": round(stand, 4),
+                               "s": round(stand - start, 4)})
             t += timedelta(hours=1)
         with svc._engine.begin() as conn:
             conn.execute(text("INSERT INTO statistics (metadata_id, start_ts, state, sum) "
-                              "VALUES (:m, :t, :w, :w)"), zeilen)
+                              "VALUES (:m, :t, :w, :s)"), zeilen)
     return svc
 
 

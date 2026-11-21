@@ -247,7 +247,9 @@ async def test_werkbank_vorschau_nennt_die_kanal_gruppen(uhr):
                           "Tages ohne Mengen")
     assert "der Tag liest sie aus dem HA-Spiegel bzw. den eigenen Zählerständen" in tag
     assert tag.endswith("an Cockpit → Tag/Monat/Jahr ändert er nichts.")
-    assert bereich.startswith("Für PV, Netz und Speicher und die Wärmepumpe schreibt der Lauf die Stundenzeile an 3 von "
+    # 30.05.–03.06.: Kanal-Tage 31.05. (die Statistik beginnt um 18:00 — seit der Regel «Anfangsstand 0», 21.11.2026; bis
+    # dahin «3 von 5») und 01.–03.06.
+    assert bereich.startswith("Für PV, Netz und Speicher und die Wärmepumpe schreibt der Lauf die Stundenzeile an 4 von "
                               "5 Tagen des Bereichs ohne Mengen")
 
 

@@ -907,23 +907,11 @@ def _rest_der_luecke(von: datetime, bis: datetime, f: datetime, ab: datetime) ->
 
 
 async def _verwerfe_staende(db: AsyncSession, a: Auftrag, ab: datetime) -> tuple[int, int]:
-    from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
-    from backend.models.sensor_snapshot import SensorSnapshot
-    from backend.services.snapshot.keys import _sensor_key_to_mqtt_key
+    """Zählerstände und MQTT-Rohstände im Intervall — derselbe Baustein wie «Daten vor der Änderung löschen»
+    (``feld_loeschen.verwerfe_staende``)."""
+    from backend.services.feld_loeschen import verwerfe_staende
 
-    bed = [SensorSnapshot.anlage_id == a.anlage_id, SensorSnapshot.sensor_key == a.sensor_key, SensorSnapshot.zeitpunkt < ab]
-    if a.falsch_seit is not None:
-        bed.append(SensorSnapshot.zeitpunkt >= a.falsch_seit)
-    zs = int((await db.execute(delete(SensorSnapshot).where(and_(*bed)))).rowcount or 0)
-    mk = _sensor_key_to_mqtt_key(a.sensor_key)
-    rs = 0
-    if mk:
-        bed = [MqttEnergySnapshot.anlage_id == a.anlage_id, MqttEnergySnapshot.energy_key == mk,
-               MqttEnergySnapshot.timestamp < ab]
-        if a.falsch_seit is not None:
-            bed.append(MqttEnergySnapshot.timestamp >= a.falsch_seit)
-        rs = int((await db.execute(delete(MqttEnergySnapshot).where(and_(*bed)))).rowcount or 0)
-    return zs, rs
+    return await verwerfe_staende(db, a.anlage_id, a.sensor_key, ab, a.falsch_seit)
 
 
 async def fuehre_aus(db: AsyncSession, a: Auftrag, *, ha_svc=None, jetzt: Optional[datetime] = None,

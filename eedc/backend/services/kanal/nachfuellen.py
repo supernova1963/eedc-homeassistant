@@ -160,10 +160,22 @@ async def _erste(db: AsyncSession, anlage_id: int, key: str) -> tuple[Optional[K
     erste_ts = (await db.execute(
         select(func.min(KanalStatistik.start_ts)).where(KanalStatistik.kanal_id == kanal.id)
     )).scalar_one_or_none()
-    erste_q = (await db.execute(
-        select(KanalQuelle).where(KanalQuelle.kanal_id == kanal.id).order_by(KanalQuelle.gueltig_ab).limit(1)
-    )).scalar_one_or_none()
+    erste_q = await _erste_ohne_platzhalter(db, kanal.id)
     return kanal, erste_ts, erste_q
+
+
+async def _erste_ohne_platzhalter(db: AsyncSession, kanal_id: int) -> Optional[KanalQuelle]:
+    """Die erste Quelle, die kein **Platzhalter** ist (``kanal/verwerfen.platzhalter_bedingung``: «Daten vor der Änderung
+    löschen» fasst die bisherigen Quellen zu einer verworfenen Quelle ohne Entity zusammen) — der Platzhalter hält das
+    Nachfüllen der heutigen Entity nicht auf: ihre Geschichte kommt, soweit Home Assistant sie führt, wie bei einer neuen
+    Zuordnung (Bauplan Sensorwechsel Nr. 176 (c), Nr. 180 Option A). Eine von der Werkbank «Werte vor dem Sensorbeginn
+    verwerfen» markierte reale Quelle bleibt ein Halt (ihr Vertrag H-2: nichts kommt vor ``t`` zurück)."""
+    from backend.services.kanal.verwerfen import platzhalter_bedingung
+
+    return (await db.execute(
+        select(KanalQuelle).where(KanalQuelle.kanal_id == kanal_id, ~platzhalter_bedingung())
+        .order_by(KanalQuelle.gueltig_ab).limit(1)
+    )).scalar_one_or_none()
 
 
 # ── Zeilen aus HA ───────────────────────────────────────────────────────────
@@ -245,20 +257,31 @@ async def _fuelle_kanal(sitzungen: Sitzungen, anlage_id: int, ziel: _Ziel, ha_sv
                 continue
             neu += await _einfuegen(db, zeilen)
             erste_neu = min(z["start_ts"] for z in zeilen)
-            q = (await db.execute(
-                select(KanalQuelle).where(KanalQuelle.kanal_id == kanal.id)
-                .order_by(KanalQuelle.gueltig_ab).limit(1)
-            )).scalar_one_or_none()
+            q = await _erste_ohne_platzhalter(db, kanal.id)
             if q is None:
+                await _platzhalter_davor(db, kanal.id, erste_neu)
                 db.add(KanalQuelle(kanal_id=kanal.id, gueltig_ab=erste_neu, familie=FAMILIE_SPIEGEL,
                                    statistic_id=ziel.eid, offset=0.0))
             elif q.gueltig_ab > erste_neu and q.familie == FAMILIE_SPIEGEL and q.statistic_id == ziel.eid:
+                await _platzhalter_davor(db, kanal.id, erste_neu)
                 await db.execute(update(KanalQuelle).where(and_(
                     KanalQuelle.kanal_id == kanal.id, KanalQuelle.gueltig_ab == q.gueltig_ab,
                 )).values(gueltig_ab=erste_neu))
         erg.bloecke += 1
         obergrenze = erste_neu - 1
     return kanal_id, None, neu
+
+
+async def _platzhalter_davor(db: AsyncSession, kanal_id: int, erste_neu: int) -> None:
+    """Ein Platzhalter, der bei oder nach der neuen ersten Zeile beginnt, rückt auf die Stunde vor ihr — die Geschichte des
+    Sensors reicht weiter zurück als die gelöschten Daten. Er bleibt als Herkunft («gelöscht am», Auskunft
+    ``daten_vor_aenderung_geloescht``) ohne Zeilen und ohne Wirkung auf die Leser (``lesen._beruehrt_verworfen``: vor der
+    ersten Zeile einer HA-Statistik zählt er nicht)."""
+    from backend.services.kanal.verwerfen import platzhalter_bedingung
+
+    await db.execute(update(KanalQuelle).where(and_(
+        KanalQuelle.kanal_id == kanal_id, platzhalter_bedingung(), KanalQuelle.gueltig_ab >= erste_neu,
+    )).values(gueltig_ab=erste_neu - _STUNDE))
 
 
 def _ha_erreichbar(ha_svc) -> None:

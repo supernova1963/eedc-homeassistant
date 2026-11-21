@@ -150,8 +150,8 @@ async def _collect_ha_statistics_data(anlage: Anlage, jahr: int, monat: int) -> 
 
     ⭐ **N-585: eine gemessene 0 bleibt eine 0** — für die Felder aus ``_NULL_IST_MESSWERT_BASIS`` und die
     Gerätefelder der Typen in ``_NULL_IST_MESSWERT_TYPEN``. Gemessen heißt: mindestens ein Intervall
-    (``SensorMonatswert.intervalle ≥ 1`` — Anker + eine Zeile oder zwei Zeilen); eine einzelne Zeile misst
-    nichts, ihre 0 wäre erfunden (Netzbezug 0,0 und Autarkie 100 % aus einer Zeile). Alle anderen Felder kommen
+    (``SensorMonatswert.intervalle ≥ 1`` — Anker + eine Zeile oder zwei Zeilen; beginnt die HA-Statistik im Monat, ist
+    der Anfangsstand 0 der Anker, wie in HA). Alle anderen Felder kommen
     weiter nur mit Werten über 0 — eine 0 dort verdrängte fremde Felder bzw. bräuchte erst eine Darstellungsregel.
     Ein Feld ohne Zeilen im Monat fehlt im Ergebnis (``None`` in der Antwort, mit Grund).
     """

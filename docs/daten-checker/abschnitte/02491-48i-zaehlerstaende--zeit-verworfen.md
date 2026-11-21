@@ -1,8 +1,8 @@
 <!-- anker: 48i-zaehlerstaende--zeit-verworfen -->
 ### 4.8i Zählerstände – Zeit verworfen <a name="48i-zaehlerstaende--zeit-verworfen"></a>
 
-Hat eine Korrektur («Bisherige Werte verwerfen» im Dialog der Datenquellen, «Grund nachtragen» mit dieser Antwort oder die
-Korrektur über einen versetzten Abschnitt) die Zählerstände einer Zeit verworfen und füllt nichts sie wieder auf — ohne
+Hat eine Korrektur («Grund nachtragen» mit der Antwort «Bisherige Werte verwerfen» oder die Korrektur über einen versetzten
+Abschnitt) die Zählerstände einer Zeit verworfen und füllt nichts sie wieder auf — ohne
 Verbindung zu Home Assistant, bei einer MQTT-Quelle, oder weil Home Assistant für diese Zeit keine Geschichte des richtigen
 Sensors führt —, bleibt diese Zeit endgültig leer. Diese Kategorie nennt je solcher Zeit eine Auskunft: Feld, Beginn und Ende,
 und was dafür gilt — dieselbe Angabe, die die Vorschau beim Eintragen gemacht hat.

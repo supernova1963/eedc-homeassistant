@@ -105,11 +105,7 @@ export default function DatenquellenPresetDialog({
       .catch((e) => { setLaeuft(false); setFehler(e instanceof Error ? e.message : 'Prüfen fehlgeschlagen') })
   }
 
-  const vorschau = (key: string, falschSeit: string) => {
-    const req = anfrage({ [key]: { grund: 'korrektur', falsch_seit: falschSeit } })
-    if (!req) return Promise.resolve(null)
-    return liveDashboardApi.pruefeGatewayPreset(req).then((p) => p.felder.find((f) => f.sensor_key === key)?.korrektur ?? null)
-  }
+
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Preset anwenden — ${titel}`} size="lg">
@@ -170,7 +166,7 @@ export default function DatenquellenPresetDialog({
         )}
       </div>
       {fragen && (
-        <SensorwechselDialog isOpen fragen={fragen} onVorschau={vorschau} onBestaetigen={(g) => senden(g)}
+        <SensorwechselDialog isOpen fragen={fragen} onBestaetigen={(g) => senden(g)}
           onAbbrechen={() => setFragen(null)} laeuft={laeuft} fehler={fehler} />
       )}
     </Modal>

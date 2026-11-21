@@ -223,6 +223,42 @@ async def _pruefen(w: Welt, monkeypatch, U: datetime, feld: str, neu: str, **k) 
     return out
 
 
+async def _korrektur(w: Welt, monkeypatch, U: datetime, feld: str, vorher: str, neu: str, falsch_seit: datetime, *,
+                     vorschau: bool) -> dict:
+    """Weg B (Sitzung B1): der Dialog beim Wechsel bietet «verwerfen» nicht mehr an — die Proben des Korrektur-Dienstes (er
+    bleibt bis zum Rückbau für «Grund nachtragen», das Stück und die Werkbank) rufen ihn mit dem Auftrag, den bis B1 die
+    Abfrage baute (``ab`` = volle Stunde nach der Änderung, Herkunft «wechsel»). ``vorschau``: nur die Vorschau
+    (``abfrage.vorschau_des_auftrags``), sonst Umstellung der Zuordnung + Lauf + Nachlauf wie bis B1 ``abfrage.vollziehe``."""
+    from backend.models.zuordnung_wechsel import HERKUNFT_WECHSEL
+    from backend.services.zuordnung_wechsel import korrektur as kr
+    from backend.services.zuordnung_wechsel.abfrage import vorschau_des_auftrags
+    from backend.services.zuordnung_wechsel.zeitpunkt import ab_ts_aus
+
+    inv, f, key = FELDER[feld]
+    au = kr.Auftrag(anlage_id=w.a.id, sensor_key=key, falsch_seit=falsch_seit.replace(minute=0, second=0),
+                    ab=ab_ts_aus(U), vorher={"art": "ha", "entity_id": vorher}, nachher={"art": "ha", "entity_id": neu},
+                    herkunft=HERKUNFT_WECHSEL, erklaert=U)
+    if not vorschau:
+        w.ha_bis(_ep(U.replace(minute=0, second=0)) - STUNDE)
+    _uhr(monkeypatch, U)
+    try:
+        if vorschau:
+            out = await vorschau_des_auftrags(w.db, au)
+        else:
+            a = await _anlage(w)
+            m = {**a.sensor_mapping, "investitionen": {**a.sensor_mapping["investitionen"],
+                                                       inv: {"felder": {f: {"strategie": "sensor", "sensor_id": neu}}}}}
+            a.sensor_mapping = m
+            erg = await kr.fuehre_aus(w.db, au, ha_svc=w.svc, jetzt=U)
+            await w.db.commit()
+            out = await kr.nach_dem_commit(erg, ha_svc=w.svc)
+    finally:
+        _uhr_aus(monkeypatch)
+    await _laeufe()
+    _frisch(w)
+    return out
+
+
 async def _kanal(w: Welt, key: str) -> dict[int, float]:
     """``{start_ts: sum + Versatz der Quelle}`` des Schlüssels."""
     k = (await w.db.execute(select(Kanal).where(Kanal.anlage_id == w.a.id, Kanal.key == key))).scalar_one_or_none()
@@ -339,8 +375,8 @@ async def test_verwerfen_zwischen_h05_und_h10_fuellt_die_letzte_stunde(db, monke
     w = await _welt(db, monkeypatch, {ALT: (ab0, lambda e: 0.6), NEU: (ab0, lambda e: 1.0), PVC: (ab0, lambda e: 2.0)},
                     {"pv": ALT, "pvk": PVC})
     await _betrieb(w, START, T1 + timedelta(hours=1))
-    await _umstellen(w, monkeypatch, T1 + timedelta(hours=1, minutes=7), "pv", NEU, grund="korrektur",
-                     falsch_seit=datetime(2026, 11, 3, 0))
+    await _korrektur(w, monkeypatch, T1 + timedelta(hours=1, minutes=7), "pv", ALT, NEU, datetime(2026, 11, 3, 0),
+                     vorschau=False)
     stunde = _stunde(await _kanal(w, FELDER["pv"][2]), E1)
     assert stunde is None if variante == "soll_ende" else stunde == pytest.approx(1.0)
 
@@ -375,7 +411,7 @@ async def test_w9_fuenf_minuten_stand_vor_falsch_seit_fuellt_aus_ha(db, monkeypa
     await w.db.commit()
     await _umstellen(w, monkeypatch, _at(1, 27), "pv", "sensor.fremd", grund="fortsetzung")
     await _lauf(w, _at(2, 0))
-    k = (await _pruefen(w, monkeypatch, _at(2, 14), "pv", NEU, grund="korrektur", falsch_seit=_at(1, 0)))["korrektur"]
+    k = await _korrektur(w, monkeypatch, _at(2, 14), "pv", "sensor.fremd", NEU, _at(1, 0), vorschau=True)
     luecke = any("füllt nichts" in s for s in k["saetze"])
     if variante == "stundenzeile":
         assert k["luecke"] is not None and luecke
@@ -396,8 +432,7 @@ async def test_w5_vorschau_in_der_tauschstunde_nennt_keine_zukunft(db, monkeypat
     w = await _welt(db, monkeypatch, {ALT: (ab0, lambda e: 0.6 if e <= E1 else None), NEU: (E1, lambda e: 0.4 if e == E1 else 0.6),
                                       PVC: (ab0, lambda e: 2.0)}, {"pv": ALT, "pvk": PVC})
     await _betrieb(w, START, T1)
-    s = (await _pruefen(w, monkeypatch, T1 + timedelta(minutes=44), "pv", NEU, grund="korrektur",
-                        falsch_seit=START))["korrektur"]["saetze"]
+    s = (await _korrektur(w, monkeypatch, T1 + timedelta(minutes=44), "pv", ALT, NEU, START, vorschau=True))["saetze"]
     zukunft = any("04.11.2026 00:00" in x for x in s)
     assert zukunft is (variante == "ende_in_der_zukunft"), s
     if variante == "gebaut":

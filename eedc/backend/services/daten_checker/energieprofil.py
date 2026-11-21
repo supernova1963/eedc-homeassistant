@@ -931,6 +931,11 @@ class EnergieprofilChecks:
         )).all()]
         kanal = await self._bilanz_kanal_tage(anlage, tage)
         ohne = [d for d in tage if d not in kanal]
+        if ohne:
+            from backend.services.kanal.bilanz_leser import bewusst_leere_tage
+
+            leer = await bewusst_leere_tage(self.db, anlage.id, ohne)
+            ohne = [d for d in ohne if d not in leer]
         if not ohne:
             return []
         return [CheckErgebnis(

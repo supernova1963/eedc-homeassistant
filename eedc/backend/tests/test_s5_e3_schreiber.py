@@ -402,9 +402,16 @@ async def _rand_monat(ds) -> None:
     Kanal-Tage; dann alle Tage neu schreiben wie im Produkt (Kanal-Tage ohne Mengen)."""
     from backend.services.kanal import merken
 
+    from sqlalchemy import text as _text
+
     ab = int(datetime(2026, 6, 10).timestamp())
     ids = select(Kanal.id).where(Kanal.anlage_id == ds.aid)
     await ds.db.execute(delete(KanalStatistik).where(KanalStatistik.kanal_id.in_(ids), KanalStatistik.start_ts < ab))
+    # Weg B (B1): Home Assistant führt die Statistik vor dem 10.06. weiter — die Kanäle beginnen hier, weil ihre Vorgeschichte
+    # nicht gespiegelt ist (Nachfüll-Marke mit Grund), nicht weil die Statistik beginnt (sonst gälte die Regel «Anfangsstand 0»).
+    await ds.db.execute(_text("UPDATE kanal_nachfuellung SET ergebnis = :e WHERE kanal_id IN "
+                              "(SELECT id FROM kanal WHERE anlage_id = :a)"),
+                        {"e": '{"grund": "vorgeschichte_andere_quelle"}', "a": ds.aid})
     await ds.db.commit()
     merken.leeren()
     await _aggregieren(ds, kg.TAGE)

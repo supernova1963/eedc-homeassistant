@@ -56,9 +56,9 @@ class PresetResponse(BaseModel):
 
 
 class GrundRequest(BaseModel):
-    """Sensorwechsel mit Grund (Bauplan B-2, Sitzung 3b): der Grund einer fragepflichtigen Änderung je Zählerschlüssel."""
+    """Sensorwechsel (Weg B): die Antwort auf eine fragepflichtige Änderung je Zählerschlüssel — ``fortsetzung`` oder
+    ``loeschen``."""
     grund: str
-    falsch_seit: Optional[datetime] = None
     #: U2 Lauf b (F9): «Der neue Sensor zählt ab» je Schlüssel — gilt nur bei «bleiben» zwischen zwei HA-Sensoren mit
     #: Überlappung; ein Preset setzt MQTT-Quellen, eine Angabe hier lehnt die Route deshalb mit 422 ab.
     zaehlt_ab: Optional[datetime] = None
@@ -197,7 +197,7 @@ async def pruefe_preset(req: ApplyPresetRequest, db: AsyncSession = Depends(get_
 
     Derselbe Body wie ``…/apply``; die Route macht dieselbe Änderung, fragt ``zuordnung_wechsel/abfrage.pruefe`` und rollt
     zurück. Antwort: ``grund_erforderlich`` und je Schlüssel mit eigenen Werten, dessen wirksame Quelle wechselt, eine Zeile
-    wie bei ``…/felder/{feld}/quelle/pruefen`` (mit ``gruende[schlüssel]`` = Korrektur samt «falsch seit»: ``korrektur``).
+    wie bei ``…/felder/{feld}/quelle/pruefen``.
     """
     from backend.services.zuordnung_wechsel import abfrage
 
@@ -210,16 +210,7 @@ async def pruefe_preset(req: ApplyPresetRequest, db: AsyncSession = Depends(get_
         except abfrage.GrundFehlt as e:
             raise HTTPException(status_code=422, detail=str(e))
         labels = await _labels_der_schluessel(db, anlage)
-        felder = []
-        for f in fragen:
-            zeile = {**abfrage.antwort(f, labels.get(f.sensor_key, f.sensor_key)), "korrektur": None}
-            g = req.gruende.get(f.sensor_key)
-            if f.grund_erforderlich and g is not None and g.grund == abfrage.GRUND_KORREKTUR and g.falsch_seit:
-                try:
-                    zeile["korrektur"] = await abfrage.korrektur_vorschau(db, req.anlage_id, f, g.falsch_seit, datetime.now())
-                except abfrage.GrundFehlt as e:
-                    zeile["korrektur"] = {"saetze": [str(e)], "startbar": False}
-            felder.append(zeile)
+        felder = [abfrage.antwort(f, labels.get(f.sensor_key, f.sensor_key)) for f in fragen]
     finally:
         await db.rollback()
     return {"grund_erforderlich": any(z["grund_erforderlich"] for z in felder), "felder": felder}
@@ -230,7 +221,7 @@ async def apply_preset(req: ApplyPresetRequest, db: AsyncSession = Depends(get_d
     """Preset anwenden: Generiert Mappings und speichert sie in der DB (``_wende_preset_an``).
 
     Sensorwechsel mit Grund (Bauplan B-2, Sitzung 3b): eine fragepflichtige Änderung braucht ``gruende[schlüssel]`` —
-    ohne ihn **422**; Fortsetzung bzw. Korrektur wie an der Feld-Route (``zuordnung_wechsel/abfrage.vollziehe``).
+    ohne ihn **422**; «bleiben» bzw. «löschen» wie an der Feld-Route (``zuordnung_wechsel/abfrage.vollziehe``).
     """
     from backend.api.routes.mqtt_gateway import _reload_gateway
     from backend.services.activity_service import log_activity
@@ -240,7 +231,7 @@ async def apply_preset(req: ApplyPresetRequest, db: AsyncSession = Depends(get_d
     _gruende_zulaessig(req)
     anlage, wirksam_vorher, mapping_dicts, neue, alte, gesetzt, ohne_feld = await _wende_preset_an(db, req)
     labels = await _labels_der_schluessel(db, anlage)
-    gruende = {k: (g.grund, g.falsch_seit) for k, g in req.gruende.items()}
+    gruende = {k: g.grund for k, g in req.gruende.items()}
     try:
         vollzug = await abfrage.vollziehe(db, anlage, wirksam_vorher, gruende, labels=labels, zaehlt_ab=_zaehlt_ab(req))
     except (abfrage.GrundFehlt, KorrekturNichtStartbar) as e:

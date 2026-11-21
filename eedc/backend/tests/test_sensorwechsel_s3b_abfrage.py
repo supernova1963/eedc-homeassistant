@@ -135,9 +135,8 @@ async def test_pruef_route_schreibt_nichts(db):
     vorher = await _zaehlung(db)
     await _pruefe(db, aid, quelle="ha_app", entity_id="sensor.b")
     await _pruefe(db, aid, quelle="mqtt_gateway", quell_topic="x/1")
-    p = await _pruefe(db, aid, quelle="ha_app", entity_id="sensor.b", grund="korrektur",
-                      falsch_seit=datetime(2026, 8, 1))
-    assert p["korrektur"]["zaehlerstaende"] == 1 and p["korrektur"]["saetze"]
+    p = await _pruefe(db, aid, quelle="ha_app", entity_id="sensor.b", grund="loeschen")      # Weg B: «löschen» statt Korrektur
+    assert p["loeschen"]["saetze"] and "korrektur" not in p
     assert await _zaehlung(db) == vorher
 
 
@@ -152,41 +151,41 @@ async def test_fortsetzung_traegt_den_grund(db):
         ("fortsetzung", {"art": "ha", "entity_id": "sensor.a"}, {"art": "ha", "entity_id": "sensor.b"})]
 
 
-async def test_korrektur_vorschau_gleich_lauf_ohne_home_assistant(db):
-    """Standalone: die Vorschau der Prüf-Route zählt dieselben Zählerstände, die der Lauf verwirft; die Zeile trägt den
-    Grund «korrektur» und «falsch seit»; Zählerstände davor bleiben. Ohne «falsch seit» ⇒ 422."""
+async def test_loeschen_ohne_home_assistant_nur_dieses_feld(db):
+    """Weg B (Bauplan Nr. 176–180; bis Sitzung B1 an dieser Stelle die Korrektur mit «falsch seit»): «Daten vor der Änderung
+    löschen» löscht die Zählerstände dieses Felds vor der Änderung, verzeichnet nichts und startet den Lauf (Art «loeschen»);
+    «korrektur» ist an der Feld-Route kein Grund mehr (400); ohne Antwort 422."""
     a = await _anlage(db, {"basis": {"netzbezug": {"strategie": "sensor", "sensor_id": "sensor.a"}}})
     aid = a.id
     for tag in (1, 5, 20):
         db.add(SensorSnapshot(anlage_id=aid, sensor_key=NETZ_KEY, zeitpunkt=datetime(2026, 10, tag, 3), wert_kwh=tag,
                               quelle="ha_statistics"))
+    db.add(SensorSnapshot(anlage_id=aid, sensor_key="basis:einspeisung", zeitpunkt=datetime(2026, 10, 1, 3), wert_kwh=1.0,
+                          quelle="ha_statistics"))
     await db.commit()
-    f = datetime(2026, 10, 2, 7, 30)
     e = await _ablehnung(_setze(db, aid, quelle="ha_app", entity_id="sensor.b", grund="korrektur"))
-    assert e.status_code == 422 and "falsch seit" in e.detail
+    assert e.status_code == 400
+    await db.rollback()
+    e = await _ablehnung(_setze(db, aid, quelle="ha_app", entity_id="sensor.b"))
+    assert e.status_code == 422 and "gelöscht" in e.detail
     await db.rollback()                                  # wie ``deps.get_db`` nach einer Ausnahme
-    p = await _pruefe(db, aid, quelle="ha_app", entity_id="sensor.b", grund="korrektur", falsch_seit=f)
-    r = await _setze(db, aid, quelle="ha_app", entity_id="sensor.b", grund="korrektur", falsch_seit=f)
-    assert p["korrektur"]["zaehlerstaende"] == r["korrektur"][0]["zaehlerstaende_geloescht"] == 2
-    staende = (await db.execute(select(SensorSnapshot.zeitpunkt).where(SensorSnapshot.anlage_id == aid))).scalars().all()
-    assert sorted(staende) == [datetime(2026, 9, 1, 12), datetime(2026, 10, 1, 3)]
-    w, luecke = await _zeilen(db, aid)
-    assert (w.grund, w.falsch_seit_ts, w.nachher) == ("korrektur", datetime(2026, 10, 2, 7), {"art": "ha", "entity_id": "sensor.b"})
-    assert (luecke.grund, luecke.falsch_seit_ts, luecke.ab_ts, luecke.nachher) == ("korrektur", w.falsch_seit_ts, w.ab_ts, None)
+    r = await _setze(db, aid, quelle="ha_app", entity_id="sensor.b", grund="loeschen")
+    assert [(x["art"], x["zaehlerstaende_geloescht"]) for x in r["korrektur"]] == [("loeschen", 4)]
+    staende = (await db.execute(select(SensorSnapshot.sensor_key).where(SensorSnapshot.anlage_id == aid))).scalars().all()
+    assert staende == ["basis:einspeisung"]                      # nur dieses Feld
+    assert await _zeilen(db, aid) == []
 
 
-async def test_korrektur_ha_nicht_erreichbar_lehnt_ab(db, monkeypatch):
+async def test_loeschen_ohne_erreichbares_home_assistant(db, monkeypatch):
+    """«löschen» braucht Home Assistant nicht (bis B1: die Korrektur lehnte dann ab) — der Lauf holt die Geschichte später."""
     def nicht(_svc=None):
         raise kr.KorrekturNichtStartbar("Home Assistant ist nicht erreichbar — …")
     monkeypatch.setattr(kr, "ha_dienst", nicht)
     a = await _anlage(db, {"basis": {"netzbezug": {"strategie": "sensor", "sensor_id": "sensor.a"}}})
     aid = a.id
     await db.commit()
-    p = await _pruefe(db, aid, quelle="ha_app", entity_id="sensor.b", grund="korrektur", falsch_seit=datetime(2026, 8, 1))
-    assert p["korrektur"]["startbar"] is False and p["korrektur"]["saetze"] == ["Home Assistant ist nicht erreichbar — …"]
-    e = await _ablehnung(_setze(db, aid, quelle="ha_app", entity_id="sensor.b", grund="korrektur",
-                                falsch_seit=datetime(2026, 8, 1)))
-    assert e.status_code == 422 and await _zeilen(db, aid) == []
+    r = await _setze(db, aid, quelle="ha_app", entity_id="sensor.b", grund="loeschen")
+    assert r["gespeichert"] and r["korrektur"][0]["art"] == "loeschen" and await _zeilen(db, aid) == []
 
 
 # ═══ Wege: Preset, Energie-Vorschläge, Gateway-Zeile ════════════════════════════════════════════════════════════════════

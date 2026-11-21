@@ -9,15 +9,16 @@ der ``quellen``-Eintrag). Gefragt wird, wenn
 * die neue Quelle **Werte liefern kann** (alles außer «Keine» — der Wechsel nach «Keine» wird ohne Frage verzeichnet) und
 * sie sich von der **letzten Quelle mit Werten** unterscheidet: A → «Keine» → B fragt bei B, A → «Keine» → A nicht.
 
-**Die zwei Gründe** (Konzept §2): ``fortsetzung`` — der neue Sensor misst dasselbe weiter, die Wechsel-Zeile trägt den Grund,
-die Leser überbrücken die Naht (Sitzung 2); ``korrektur`` — bisher war der falsche Sensor zugeordnet, seit «falsch seit»; der
-Dienst ``korrektur.py`` (Sitzung 3a) verwirft und füllt neu. Vorschau = Lauf: die Prüf-Routen bauen den Auftrag mit
-``korrektur_auftrag`` und zählen mit ``korrektur.lage`` wie der Lauf.
+**Die zwei Antworten** (Weg B, Entscheid Gernot 21.11.2026, Bauplan Nr. 174–180): ``fortsetzung`` — «Bisherige Werte
+bleiben»: die Wechsel-Zeile trägt den Grund, die Leser überbrücken die Naht (Sitzung 2); ``loeschen`` — «Daten vor der Änderung
+löschen»: die Daten dieses Felds vor der Änderung gehen weg (``services/feld_loeschen.py``), das Feld verhält sich danach, als
+wäre der neue Sensor von Anfang an zugeordnet; gespeicherte Monatswerte bleiben, die Prüf-Antwort nennt sie (``loeschen``).
+Die frühere Wahl «verwerfen» mit «Falsch seit» bietet der Dialog nicht mehr an (der Korrektur-Dienst dahinter bleibt bis zum
+Rückbau für «Grund nachtragen» und die Werkbank).
 
 **Ablauf in einer Schreib-Route** (Feld-Route, Preset): vor der Änderung ``verzeichnen.momentaufnahme``, danach die Änderung,
 dann ``vollziehe`` — fehlt für eine fragepflichtige Änderung der Grund, wirft sie ``GrundFehlt`` (die Route antwortet 422, der
-Aufrufer rollt zurück); sonst verzeichnet sie und führt die Korrektur aus (ein Commit des Aufrufers, danach
-``nach_dem_commit``). Die Prüf-Routen machen dieselbe Änderung, fragen ``pruefe`` und rollen zurück — sie schreiben nichts.
+Aufrufer rollt zurück); sonst verzeichnet sie bzw. löscht (ein Commit des Aufrufers, danach ``nach_dem_commit``). Die Prüf-Routen machen dieselbe Änderung, fragen ``pruefe`` und rollen zurück — sie schreiben nichts.
 Energie-Vorschläge und die Gateway-Route ``PUT`` überspringen eine fragepflichtige Änderung und nennen sie.
 """
 
@@ -30,21 +31,21 @@ from typing import Any, Optional
 
 from sqlalchemy import and_, distinct, func, select
 
-from backend.models.zuordnung_wechsel import GRUND_FORTSETZUNG, GRUND_KORREKTUR, HERKUNFT_WECHSEL
+from backend.models.zuordnung_wechsel import GRUND_FORTSETZUNG
 from backend.services.zuordnung_wechsel.quelle import ART_HA, ART_KEINE, aenderungen, lade_wirksame_quellen
 from backend.services.zuordnung_wechsel.zeitpunkt import ab_ts_aus, ist_luecken_zeile, lade_wechsel
 
 logger = logging.getLogger(__name__)
 
-GRUENDE = (GRUND_FORTSETZUNG, GRUND_KORREKTUR)
+#: «Daten vor der Änderung löschen» (Weg B) — kein Grund einer Wechsel-Zeile: gelöscht wird, verzeichnet nichts.
+GRUND_LOESCHEN = "loeschen"
+GRUENDE = (GRUND_FORTSETZUNG, GRUND_LOESCHEN)
 #: Schlüssel in ``gruende``/``labels`` für «jede fragepflichtige Änderung dieses Aufrufs» (die Feld-Route ändert ein Feld).
 ALLE = "*"
 
 #: Wortlaute der Ablehnung (422) — die Oberfläche fragt vorher, diese Sätze sieht nur ein Aufruf an ihr vorbei.
-SATZ_GRUND_FEHLT = ("Die Zuordnung von {felder} hat eigene Werte. Sag eedc, ob die bisherigen Werte bleiben (der neue Sensor "
-                    "setzt fort) oder verworfen werden (bisher war der falsche Sensor zugeordnet).")
-SATZ_FALSCH_SEIT_FEHLT = "Für eine Korrektur fehlt «falsch seit» ({feld})."
-SATZ_FALSCH_SEIT_ZUKUNFT = "«Falsch seit» muss vor der nächsten vollen Stunde liegen ({feld})."
+SATZ_GRUND_FEHLT = ("Die Zuordnung von {felder} hat eigene Werte. Sag eedc, ob die bisherigen Werte bleiben oder die Daten "
+                    "vor der Änderung gelöscht werden.")
 
 
 class GrundFehlt(ValueError):
@@ -63,7 +64,8 @@ class Frage:
     tage: int = 0
     stand_alt: Optional[float] = None
     stand_neu: Optional[float] = None
-    vorgabe_falsch_seit: Optional[datetime] = None
+    #: Weg B: was «Daten vor der Änderung löschen» tut (``loeschen_angaben``: Sätze, gespeicherte Monate).
+    loeschen: Optional[dict] = None
     #: U2 Lauf b (F9): was «bleiben» zwischen zwei HA-Sensoren tut (``bleiben.angaben``; ``None`` bei jeder anderen Quelle).
     bleiben: Optional[dict] = None
 
@@ -148,12 +150,12 @@ async def pruefe(db, anlage, vorher: dict[str, dict], nachher: dict[str, dict], 
 
 
 def _zaehlt_ab_nur_bleiben(fragen: list[Frage], grund: dict, zaehlt_ab: Optional[dict[str, datetime]]) -> None:
-    """«Der neue Sensor zählt ab» gehört zu «bleiben» — mit «verwerfen» ⇒ 422."""
+    """«Der neue Sensor zählt ab» gehört zu «bleiben» — mit «löschen» ⇒ 422."""
     from backend.services.zuordnung_wechsel.bleiben import SATZ_NUR_BLEIBEN, ZaehltAbAbgelehnt
 
     for f in fragen:
         if (f.grund_erforderlich and _je_key(zaehlt_ab or {}, f.sensor_key) is not None
-                and grund[f.sensor_key][0] != GRUND_FORTSETZUNG):
+                and grund[f.sensor_key] != GRUND_FORTSETZUNG):
             raise ZaehltAbAbgelehnt(SATZ_NUR_BLEIBEN)
 
 
@@ -201,24 +203,6 @@ async def _stand_neu(ha_svc, kanal, key: str, nachher: Optional[dict]) -> Option
         return None
 
 
-async def _beginn_bisherige_quelle(db, anlage_id: int, f: Frage, kanal, erster: Optional[datetime]) -> Optional[datetime]:
-    """Vorgabe für «falsch seit» (Konzept S-4, Bauplan §11 Nr. 54): Beginn der bisherigen Quelle — der jüngste verzeichnete
-    Wechsel, **der sie brachte** (``nachher`` = die letzte Quelle mit Werten; kein Wechsel nach «Keine», kein «Zähler
-    getauscht» mit ``vorher = nachher``), sonst der Beginn ihres Abschnitts im Kanal, sonst der erste eigene Wert."""
-    from backend.services.kanal.angaben import beginn_juengste_quelle
-
-    bisherige = await letzte_quelle_mit_werten(db, anlage_id, f.sensor_key, f.vorher)
-    zeilen = [w for w in (await lade_wechsel(db, anlage_id)).get(f.sensor_key, ())
-              if w.aufgehoben_durch is None and bisherige is not None and _gleich(w.nachher, bisherige)
-              and not _gleich(w.vorher, w.nachher)]
-    if zeilen:
-        return max(w.ab_ts for w in zeilen)
-    beginn = await beginn_juengste_quelle(db, kanal.id) if kanal is not None else None
-    if beginn is not None:
-        return beginn
-    return None if erster is None else erster.replace(minute=0, second=0, microsecond=0)
-
-
 def _dienst(ha_svc):
     if ha_svc is not None:
         return ha_svc
@@ -233,8 +217,9 @@ def _dienst(ha_svc):
 
 async def _details(db, anlage_id: int, f: Frage, ha_svc, jetzt: datetime, zaehlt_ab: Optional[datetime] = None) -> None:
     """Die Angaben des Dialogs: erster eigener Wert und Tage (Reihe, sonst Kanal), der letzte Zählerstand (``state``) des
-    bisherigen Sensors aus dem Kanal (ein Schlüssel ohne Kanal hat hier keinen), der Zählerstand der neuen HA-Entität jetzt,
-    die Vorgabe für «falsch seit»; zwischen zwei HA-Sensoren die Angaben zu «bleiben» (``bleiben.angaben``, U2 Lauf b)."""
+    bisherigen Sensors aus dem Kanal (ein Schlüssel ohne Kanal hat hier keinen), der Zählerstand der neuen HA-Entität jetzt;
+    zwischen zwei HA-Sensoren die Angaben zu «bleiben» (``bleiben.angaben``, U2 Lauf b); was «löschen» tut
+    (``loeschen_angaben``, Weg B)."""
     from backend.services.kanal.angaben import angaben, kanal_des_schluessels
     from backend.services.zuordnung_wechsel import bleiben
 
@@ -251,9 +236,16 @@ async def _details(db, anlage_id: int, f: Frage, ha_svc, jetzt: datetime, zaehlt
     alt_jetzt = await _stand_neu(svc, kanal, f.sensor_key, f.vorher)
     if alt_jetzt is not None:
         f.stand_alt = alt_jetzt
-    f.vorgabe_falsch_seit = await _beginn_bisherige_quelle(db, anlage_id, f, kanal, erster)
+    f.loeschen = await loeschen_angaben(db, anlage_id, f, jetzt)
     f.bleiben = await bleiben.angaben(db, anlage_id, f.sensor_key, f.vorher, f.nachher, ab_ts=ab_ts_aus(jetzt),
                                       erklaert_ts=jetzt, jetzt=jetzt, zaehlt_ab=zaehlt_ab, ha_svc=ha_svc)
+
+
+async def loeschen_angaben(db, anlage_id: int, f: Frage, jetzt: datetime) -> dict[str, Any]:
+    """Weg B: was «Daten vor der Änderung löschen» für diesen Schlüssel tut (``feld_loeschen.angaben``)."""
+    from backend.services.feld_loeschen import angaben
+
+    return await angaben(db, anlage_id, f.nachher, f.erster_wert, jetzt)
 
 
 def _iso(dt: Optional[datetime]) -> Optional[str]:
@@ -264,18 +256,18 @@ def antwort(f: Optional[Frage], label: Optional[str] = None) -> dict[str, Any]:
     """Die Antwort der Prüf-Route je Schlüssel (Bauplan B-2: ``grund_erforderlich, erster_wert, tage, stand_alt, stand_neu``)."""
     if f is None:
         return {"grund_erforderlich": False, "erster_wert": None, "tage": 0, "stand_alt": None, "stand_neu": None,
-                "sensor_key": None, "label": label, "verzeichnet": False, "vorgabe_falsch_seit": None, "bleiben": None,
-                "bleiben_satz": None}
+                "sensor_key": None, "label": label, "verzeichnet": False, "bleiben": None, "bleiben_satz": None,
+                "loeschen": None}
     from backend.services.zuordnung_wechsel.rohstand import bleiben_satz
 
     return {"grund_erforderlich": f.grund_erforderlich, "erster_wert": _iso(f.erster_wert), "tage": f.tage,
             "stand_alt": f.stand_alt, "stand_neu": f.stand_neu, "sensor_key": f.sensor_key, "label": label,
-            "verzeichnet": True, "vorgabe_falsch_seit": _iso(f.vorgabe_falsch_seit), "bleiben": f.bleiben,
+            "verzeichnet": True, "bleiben": f.bleiben, "loeschen": f.loeschen,
             # U3 b (G5, E5): was «bleiben» bei MQTT bzw. zwischen Home Assistant und MQTT tut.
             "bleiben_satz": None if f.bleiben else bleiben_satz(f.vorher, f.nachher, f.sensor_key)}
 
 
-# ── Korrektur über den Dienst aus Sitzung 3a ─────────────────────────────────────────────────────────────────
+# ── Vorschau des Korrektur-Dienstes («Grund nachtragen») ─────────────────────────────────────────────────────────────────
 
 
 def volle_stunde(dt: datetime) -> datetime:
@@ -285,30 +277,9 @@ def volle_stunde(dt: datetime) -> datetime:
     return dt.replace(minute=0, second=0, microsecond=0)
 
 
-def korrektur_auftrag(anlage_id: int, f: Frage, falsch_seit: datetime, jetzt: datetime):
-    """Der Auftrag des Dienstes für eine Korrektur beim Wechsel: falsch in ``[falsch_seit, ab)``, richtig ist die neue Quelle."""
-    from backend.services.zuordnung_wechsel.korrektur import Auftrag
-
-    return Auftrag(anlage_id=anlage_id, sensor_key=f.sensor_key, falsch_seit=volle_stunde(falsch_seit),
-                   ab=ab_ts_aus(jetzt), vorher=f.vorher, nachher=f.nachher, herkunft=HERKUNFT_WECHSEL, erklaert=jetzt)
-
-
-def _pruefe_falsch_seit(f: Frage, falsch_seit: Optional[datetime], jetzt: datetime, label: str) -> None:
-    if falsch_seit is None:
-        raise GrundFehlt(SATZ_FALSCH_SEIT_FEHLT.format(feld=label))
-    if volle_stunde(falsch_seit) >= ab_ts_aus(jetzt):
-        raise GrundFehlt(SATZ_FALSCH_SEIT_ZUKUNFT.format(feld=label))
-
-
-async def korrektur_vorschau(db, anlage_id: int, f: Frage, falsch_seit: datetime, jetzt: datetime) -> dict[str, Any]:
-    """Die Vorschau des Dienstes für den Dialog (lesend; derselbe Auftrag wie der Lauf, ``korrektur.lage``)."""
-    _pruefe_falsch_seit(f, falsch_seit, jetzt, f.sensor_key)
-    return await vorschau_des_auftrags(db, korrektur_auftrag(anlage_id, f, falsch_seit, jetzt))
-
-
 async def vorschau_des_auftrags(db, auftrag, *, nachtrag: bool = False) -> dict[str, Any]:
-    """Vorschau = Lauf für einen Auftrag des Korrektur-Dienstes (Dialog beim Wechsel und «Grund nachtragen», Sitzung 4;
-    ``nachtrag``: das Intervall endet am Wechsel, Bauplan §13 Nr. 69)."""
+    """Vorschau = Lauf für einen Auftrag des Korrektur-Dienstes («Grund nachtragen», Sitzung 4; seit Weg B nicht mehr im
+    Dialog beim Wechsel; ``nachtrag``: das Intervall endet am Wechsel, Bauplan §13 Nr. 69)."""
     from backend.services.zuordnung_wechsel import korrektur as kr
 
     nicht = None
@@ -331,8 +302,8 @@ async def vorschau_des_auftrags(db, auftrag, *, nachtrag: bool = False) -> dict[
 @dataclass
 class Vollzug:
     fragen: list[Frage]
-    korrekturen: list[dict] = field(default_factory=list)
-    ha_svc: Any = None
+    #: Weg B: je Schlüssel mit «Daten vor der Änderung löschen» ``(feld_loeschen.Geloescht, Lauf)``.
+    geloescht: list[tuple[Any, str]] = field(default_factory=list)
     #: Sensorwechsel U2 a2: die Wechsel-Zeilen «bleiben» zwischen zwei HA-Sensoren (``ansatz = offen``), die nach dem Commit
     #: angesetzt werden (``ansatz.setze_an``), mit der Uhr der Erklärung und Sitzungen an derselben Datenbank.
     ansaetze: list[int] = field(default_factory=list)
@@ -342,12 +313,11 @@ class Vollzug:
     angesetzt: list[dict] = field(default_factory=list)
 
     def zusammenfassung(self, labels: Optional[dict[str, str]] = None) -> list[dict]:
-        """Je Korrektur der Lauf für die Antwort der Route (Fortschritt an der Fläche); dazu je angesetztem Wechsel «bleiben»
-        sein Lauf mit ``art = ansetzen`` (U2 Lauf b)."""
-        laeufe = [{"lauf": e["summary"]["lauf"], "sensor_key": e["lage"].auftrag.sensor_key,
-                   "label": _je_key(labels or {}, e["lage"].auftrag.sensor_key, e["lage"].auftrag.sensor_key),
-                   "tage_neu": e["summary"]["tage_neu"], "zaehlerstaende_geloescht": e["summary"]["zaehlerstaende_geloescht"]}
-                  for e in self.korrekturen]
+        """Je «löschen» der Lauf für die Antwort der Route (Fortschritt an der Fläche, ``art = loeschen``); dazu je angesetztem
+        Wechsel «bleiben» sein Lauf mit ``art = ansetzen`` (U2 Lauf b)."""
+        laeufe = [{"lauf": lauf, "sensor_key": g.key, "label": _je_key(labels or {}, g.key, g.key), "art": "loeschen",
+                   "tage_neu": len(g.tage), "zaehlerstaende_geloescht": g.staende + g.rohstaende}
+                  for g, lauf in self.geloescht]
         return laeufe + [z for e in self.angesetzt for z in self._ergebnis(e, labels)[0]]
 
     def wartet(self, labels: Optional[dict[str, str]] = None) -> list[dict]:
@@ -366,20 +336,23 @@ def _je_key(d: dict, key: str, sonst=None):
     return d.get(key) or d.get(ALLE) or sonst
 
 
-def offene_fragen(fragen: list[Frage], gruende: dict[str, tuple[str, Optional[datetime]]]) -> list[Frage]:
-    return [f for f in fragen if f.grund_erforderlich and _je_key(gruende, f.sensor_key, (None,))[0] not in GRUENDE]
+def offene_fragen(fragen: list[Frage], gruende: dict[str, str]) -> list[Frage]:
+    return [f for f in fragen if f.grund_erforderlich and _je_key(gruende, f.sensor_key) not in GRUENDE]
 
 
-async def vollziehe(db, anlage, vorher: dict[str, dict], gruende: dict[str, tuple[str, Optional[datetime]]], *,
+async def vollziehe(db, anlage, vorher: dict[str, dict], gruende: dict[str, str], *,
                     labels: Optional[dict[str, str]] = None, jetzt: Optional[datetime] = None,
                     zaehlt_ab: Optional[dict[str, datetime]] = None) -> Vollzug:
-    """Nach der Änderung (in der Sitzung des Aufrufers, vor seinem Commit): prüfen, verzeichnen, Korrektur ausführen.
+    """Nach der Änderung (in der Sitzung des Aufrufers, vor seinem Commit): prüfen, verzeichnen bzw. löschen.
 
-    ``gruende``: je Schlüssel ``(grund, falsch_seit)``. Fehlt für eine fragepflichtige Änderung der Grund ⇒ ``GrundFehlt``;
-    HA eingerichtet und nicht erreichbar bei einer Korrektur ⇒ ``korrektur.KorrekturNichtStartbar``. ``zaehlt_ab`` (je
-    Schlüssel oder ``ALLE``): «Der neue Sensor zählt ab» an einem Wechsel «bleiben» zwischen zwei HA-Sensoren mit Überlappung
-    (``bleiben.setze_zaehlt_ab``); sonst ``bleiben.ZaehltAbAbgelehnt`` (ein ``GrundFehlt`` — die Route antwortet 422)."""
-    from backend.services.zuordnung_wechsel import korrektur as kr
+    ``gruende``: je Schlüssel (oder ``ALLE``) ``fortsetzung`` oder ``loeschen``. Fehlt für eine fragepflichtige Änderung der
+    Grund ⇒ ``GrundFehlt``. «löschen» (Weg B): die Daten des Felds vor ``jetzt`` gehen weg (``feld_loeschen.loesche_vor`` mit
+    Platzhalter, alle Monate), es wird nichts verzeichnet, und ein Lauf (Nachfüllen, abgeleitete Kanäle, Tage) startet nach dem
+    Commit. ``zaehlt_ab`` (je Schlüssel oder ``ALLE``): «Der neue Sensor zählt ab» an einem Wechsel «bleiben» zwischen zwei
+    HA-Sensoren mit Überlappung (``bleiben.setze_zaehlt_ab``); sonst ``bleiben.ZaehltAbAbgelehnt`` (ein ``GrundFehlt`` — die
+    Route antwortet 422)."""
+    from backend.services import feld_loeschen
+    from backend.services.zuordnung_wechsel.korrektur import ha_eingerichtet
     from backend.services.zuordnung_wechsel.verzeichnen import verzeichne
 
     labels = labels or {}
@@ -389,17 +362,22 @@ async def vollziehe(db, anlage, vorher: dict[str, dict], gruende: dict[str, tupl
     if offen:
         raise GrundFehlt(SATZ_GRUND_FEHLT.format(felder=" · ".join(_je_key(labels, f.sensor_key, f.sensor_key) for f in offen)))
     grund = {f.sensor_key: _je_key(gruende, f.sensor_key) for f in fragen if f.grund_erforderlich}
-    korr = [f for f in fragen if f.grund_erforderlich and grund[f.sensor_key][0] == GRUND_KORREKTUR]
     _zaehlt_ab_nur_bleiben(fragen, grund, zaehlt_ab)
-    for f in korr:
-        _pruefe_falsch_seit(f, grund[f.sensor_key][1], jetzt, _je_key(labels, f.sensor_key, f.sensor_key))
-    v = Vollzug(fragen, ha_svc=kr.ha_dienst(None) if korr else None)
-    fort = {k: GRUND_FORTSETZUNG for k, (g, _f) in grund.items() if g == GRUND_FORTSETZUNG}
-    zeilen = await verzeichne(db, anlage, vorher, jetzt=jetzt, gruende=fort, auslassen={f.sensor_key for f in korr})
+    v = Vollzug(fragen)
+    loeschen = [f for f in fragen if f.grund_erforderlich and grund[f.sensor_key] == GRUND_LOESCHEN]
+    for f in loeschen:
+        g = await feld_loeschen.loesche_vor(db, anlage, f.sensor_key, jetzt, auch_abschluss=True, zum_platzhalter=True,
+                                           jetzt=jetzt)
+        mit_ha = isinstance(f.nachher, dict) and f.nachher.get("art") == ART_HA and ha_eingerichtet()
+        v.geloescht.append((g, await feld_loeschen.lauf_anlegen(db, anlage.id, g, mit_ha=mit_ha, jetzt=jetzt)))
+    if v.geloescht:
+        from backend.core.database import get_session
+        from backend.services.zuordnung_wechsel.korrektur import sitzungen_wie
+
+        v.sitzungen = sitzungen_wie(db, get_session)
+    fort = {k: GRUND_FORTSETZUNG for k, g in grund.items() if g == GRUND_FORTSETZUNG}
+    zeilen = await verzeichne(db, anlage, vorher, jetzt=jetzt, gruende=fort, auslassen={f.sensor_key for f in loeschen})
     await _ansatz_offen(db, v, zeilen, jetzt, zaehlt_ab or {})
-    for f in korr:
-        v.korrekturen.append(await kr.fuehre_aus(db, korrektur_auftrag(anlage.id, f, grund[f.sensor_key][1], jetzt),
-                                                  ha_svc=v.ha_svc, jetzt=jetzt))
     return v
 
 
@@ -429,13 +407,14 @@ async def _ansatz_offen(db, v: Vollzug, zeilen, jetzt: datetime, zaehlt_ab: dict
 
 
 async def nach_dem_commit(v: Vollzug) -> None:
-    """Nach dem Commit des Aufrufers: je Korrektur Kanal füllen und den Hintergrund-Lauf der Tage starten; je Wechsel
-    «bleiben» ansetzen (U2 a2)."""
-    from backend.services.zuordnung_wechsel import korrektur as kr
+    """Nach dem Commit des Aufrufers: je «löschen» den Hintergrund-Lauf starten (Nachfüllen, abgeleitete Kanäle, Tage); je
+    Wechsel «bleiben» ansetzen (U2 a2)."""
+    from backend.core.database import get_session
+    from backend.services.zuordnung_wechsel import korrektur_lauf
     from backend.services.zuordnung_wechsel.ansatz import setze_an
 
-    for erg in v.korrekturen:
-        await kr.nach_dem_commit(erg, ha_svc=v.ha_svc)
+    for _g, lauf in v.geloescht:
+        korrektur_lauf.starten(lauf, sitzungen=v.sitzungen or get_session)
     quellen = {f.sensor_key: (f.vorher, f.nachher) for f in v.fragen}
     for wechsel_id in v.ansaetze:
         e = await setze_an(v.sitzungen, wechsel_id, jetzt=v.jetzt)
@@ -447,20 +426,19 @@ async def nach_dem_commit(v: Vollzug) -> None:
 
 
 def aktivitaet_text(v: Vollzug, labels: dict[str, str]) -> str:
-    """Der Zusatz der Protokoll-Zeile: Grund je Schlüssel."""
+    """Der Zusatz der Protokoll-Zeile: Antwort je Schlüssel."""
     from backend.core.zahlenformat import fmt_zahl
 
     teile = []
-    korr = {e["lage"].auftrag.sensor_key: e["summary"] for e in v.korrekturen}
+    geloescht = {g.key: g for g, _lauf in v.geloescht}
     for f in v.fragen:
         if not f.grund_erforderlich:
             continue
         name = _je_key(labels, f.sensor_key, f.sensor_key)
-        if f.sensor_key in korr:
-            s = korr[f.sensor_key]
-            teile.append(f"{name}: Korrektur ({fmt_zahl(s['zaehlerstaende_geloescht'])} Zählerstände verworfen, "
-                         f"{fmt_zahl(s['tage_neu'])} Tage werden neu gebildet)")
+        if f.sensor_key in geloescht:
+            g = geloescht[f.sensor_key]
+            teile.append(f"{name}: Daten vor der Änderung gelöscht ({fmt_zahl(g.kanalzeilen)} Stundenwerte, "
+                         f"{fmt_zahl(g.staende + g.rohstaende)} Zählerstände; {fmt_zahl(len(g.tage))} Tage werden neu gebildet)")
         else:
             teile.append(f"{name}: bisherige Werte bleiben")
     return " · ".join(teile)
-

@@ -12,7 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
-from pydantic import BaseModel, Field, computed_field, model_validator
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
 from backend.core.exceptions import not_found
 from backend.api.deps import get_db
@@ -153,6 +153,15 @@ class MonatsdatenUpdate(BaseModel):
     sonstige_positionen: Optional[list[dict]] = None
     # PN 90128: siehe MonatsdatenCreate. `{}` = alle Bestätigungen zurückgenommen.
     geprueft_gegen: Optional[dict[str, dict[str, float]]] = None
+
+    @field_validator("einspeisung_kwh", "netzbezug_kwh")
+    @classmethod
+    def _zaehlerfeld_nicht_leer(cls, v: Optional[float], info) -> Optional[float]:
+        """Einspeisung und Netzbezug stehen in Pflichtspalten — ein ausdrückliches ``null`` ist 422 statt eines Absturzes
+        beim Ableiten (``gesamtverbrauch_kwh``, Bauplan Sensorwechsel Nr. 178); nicht gesendet bleibt erlaubt."""
+        if v is None:
+            raise ValueError(f"«{info.field_name}» kann nicht leer sein — ein Monat trägt hier immer einen Wert.")
+        return v
 
 
 class KennzahlenResponse(BaseModel):

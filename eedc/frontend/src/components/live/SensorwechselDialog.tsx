@@ -4,12 +4,14 @@
  * Inbound, Keine) und «Preset anwenden» (eine Zeile je Feld).
  *
  * Ablauf: der Aufrufer hat die Änderung schon geprüft (`…/quelle/pruefen` bzw. `…/presets/apply/pruefen`) und öffnet den
- * Dialog nur, wenn eine Zeile `grund_erforderlich` trägt. Je Feld zwei Gründe mit je einem Satz, was danach geschieht; bei
- * «Korrektur» das Feld «falsch seit» (vorbelegt: Beginn der bisherigen Quelle) und die Vorschau des Korrektur-Dienstes
- * (`onVorschau` — dieselbe Prüf-Route mit Grund, Vorschau = Lauf), **bevor** etwas geändert wird. «Abbrechen» lässt die
- * bisherige Zuordnung stehen. Der Client rechnet nichts: Zahlen und Sätze kommen aus dem Backend.
+ * Dialog nur, wenn eine Zeile `grund_erforderlich` trägt. **Beim Wechsel genau zwei Antworten** (Weg B, Entscheid Gernot
+ * 21.11.2026): «Bisherige Werte bleiben» und «Daten vor der Änderung löschen» — was «löschen» tut, sagen die Sätze der
+ * Prüf-Antwort (`loeschen`: nur dieses Feld, danach wie von Anfang an zugeordnet, gespeicherte Monate und der Weg zur
+ * Handkorrektur, nicht rücknehmbar). «Abbrechen» lässt die bisherige Zuordnung stehen. Der Client rechnet nichts: Zahlen und
+ * Sätze kommen aus dem Backend.
  *
- * **Grund nachtragen** (Sitzung 4, Bauplan B-7): derselbe Dialog für einen schon verzeichneten Wechsel ohne Grund (`nachtrag`):
+ * **Grund nachtragen** (Sitzung 4, Bauplan B-7; Rückbau in Weg B, Sitzung B2): derselbe Dialog für einen schon verzeichneten
+ * Wechsel ohne Grund (`nachtrag`) — nur dort noch «verwerfen» mit «Falsch seit» und der Vorschau (`onVorschau`):
  * Titel in der Vergangenheit, der Wechsel als Satz oben, nur die zulässigen Gründe (`…/grund/pruefen`: Fortsetzung → Korrektur
  * ja, Korrektur nie mehr; Korrektur nur am jüngsten Wechsel, sonst ein Satz warum), «Falsch seit» vorbelegt mit dem Beginn der
  * Quelle vor dem Wechsel.
@@ -18,8 +20,7 @@
  * «Korrektur» über ein festes Stück, am Rückkehr-Wechsel X → A eines Stücks A → X → A «Korrektur» über die Zeit davor — statt
  * des Felds «Falsch seit» steht die Zeit des Stücks.
  *
- * **Eine Frage: bleiben oder verwerfen** (Sensorwechsel U2 Lauf b, Bauplan Nr. 132/138): die zwei Gründe heißen «Bisherige
- * Werte bleiben» (intern `fortsetzung`) und «Bisherige Werte verwerfen» (`korrektur`). Zwischen zwei HA-Sensoren trägt die
+ * **«bleiben»** (Sensorwechsel U2 Lauf b, Bauplan Nr. 132/138; intern `fortsetzung`). Zwischen zwei HA-Sensoren trägt die
  * Prüf-Antwort `bleiben` (`BleibenAngaben`): bei «bleiben» zeigt der Dialog unter «Was danach geschieht» ihre Sätze; nur bei
  * Überlappung erscheint das Feld «Der neue Sensor zählt ab» (vorbelegt und begrenzt mit den Stunden aus der Antwort) — eine
  * andere Stunde holt die Vorschau neu (`onBleibenVorschau`, dieselbe Prüf-Route, Vorschau = Lauf). Ohne `bleiben` (jede andere
@@ -43,10 +44,12 @@ export const GRUND_BLEIBEN_HA_FOLGE =
 export const GRUND_FORTSETZUNG_FOLGE =
   'Die bisherigen Werte bleiben, und der Unterschied zwischen altem und neuem Zählerstand zählt nicht als Menge. Wo eedc ' +
   'aus den gespeicherten Zählerständen rechnet, zählt die Stunde des Wechsels keinen Zuwachs.'
+/** Weg B: die zweite Antwort beim Wechsel. Was sie tut, sagen die Sätze der Prüf-Antwort (`loeschen.saetze`). */
+export const GRUND_LOESCHEN = 'Daten vor der Änderung löschen — das Feld beginnt mit dem neuen Sensor neu'
+export const GRUND_LOESCHEN_FOLGE =
+  'Nur die Daten dieses Felds vor der Änderung werden gelöscht. Was das heißt, steht unten.'
+/** Nur noch «Grund nachtragen» (Rückbau in Sitzung B2). */
 export const GRUND_KORREKTUR = 'Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet'
-export const GRUND_KORREKTUR_FOLGE =
-  'Die Werte dieses Felds seit «falsch seit» werden verworfen und — soweit Home Assistant die Geschichte des richtigen ' +
-  'Sensors führt — aus ihm neu aufgebaut. Die Vorschau unten sagt, was genau geschieht.'
 /** Im Nachtrag liegt der Wechsel in der Vergangenheit: ein fest gespeicherter Tageswert vom Tag des Wechsels bleibt (benannte
  * Grenze, Bauplan «Zu §13» Nr. 87) — neben dem freigegebenen Satz `GRUND_FORTSETZUNG_FOLGE`, der wörtlich bleibt. */
 export const NACHTRAG_FORTSETZUNG_ZUSATZ =
@@ -123,8 +126,8 @@ interface Props {
   isOpen: boolean
   /** Die Zeilen der Prüf-Route mit `grund_erforderlich` (Feld: eine, Preset: je Feld eine). */
   fragen: QuellePruefung[]
-  /** Vorschau der Korrektur für einen Schlüssel (Prüf-Route mit Grund «korrektur» und «falsch seit»). */
-  onVorschau: (sensorKey: string, falschSeit: string) => Promise<KorrekturVorschau | null>
+  /** Nur «Grund nachtragen»: Vorschau der Korrektur für einen Schlüssel (Prüf-Route mit Grund «korrektur» und «falsch seit»). */
+  onVorschau?: (sensorKey: string, falschSeit: string) => Promise<KorrekturVorschau | null>
   /** U2 Lauf b: die Angaben zu «bleiben» an einer anderen Stunde «Der neue Sensor zählt ab» (Prüf-Route mit `zaehlt_ab`). */
   onBleibenVorschau?: (sensorKey: string, zaehltAb: string) => Promise<BleibenAngaben | null>
   onBestaetigen: (gruende: Record<string, GrundAngabe>) => void
@@ -142,7 +145,7 @@ export default function SensorwechselDialog({
 
   useEffect(() => {
     setWahl(Object.fromEntries(fragen.map((f) => [f.sensor_key ?? '', {
-      grund: '' as const, falschSeit: lokal(f.vorgabe_falsch_seit), vorschau: null, laedt: false, fehler: null,
+      grund: '' as const, falschSeit: lokal(f.vorgabe_falsch_seit ?? null), vorschau: null, laedt: false, fehler: null,
       zaehltAb: lokal(f.bleiben?.zaehlt_ab_vorgabe ?? null), bleiben: f.bleiben ?? null,
     }])))
   }, [fragen])
@@ -157,7 +160,7 @@ export default function SensorwechselDialog({
   const ladeVorschau = (key: string, falschSeit: string) => {
     const nr = (anfrage.current[key] ?? 0) + 1
     anfrage.current[key] = nr
-    if (!falschSeit) { setze(key, { vorschau: null, laedt: false }); return }
+    if (!falschSeit || !onVorschau) { setze(key, { vorschau: null, laedt: false }); return }
     setze(key, { laedt: true, fehler: null })
     const aktuell = () => anfrage.current[key] === nr
     onVorschau(key, falschSeit)
@@ -185,6 +188,7 @@ export default function SensorwechselDialog({
     const w = wahl[f.sensor_key ?? '']
     if (!w || !w.grund) return false
     if (w.grund === 'fortsetzung') return !w.laedt && !w.fehler
+    if (w.grund === 'loeschen') return true
     return !!w.falschSeit && !w.laedt && !!w.vorschau?.startbar
   }), [fragen, wahl])
 
@@ -195,7 +199,8 @@ export default function SensorwechselDialog({
       const w = wahl[key]
       const anders = !!w.zaehltAb && w.zaehltAb !== lokal(f.bleiben?.zaehlt_ab_vorgabe ?? null)
       gruende[key] = w.grund === 'korrektur' ? { grund: 'korrektur', falsch_seit: w.falschSeit }
-        : { grund: 'fortsetzung', ...(anders ? { zaehlt_ab: w.zaehltAb } : {}) }
+        : w.grund === 'loeschen' ? { grund: 'loeschen' }
+          : { grund: 'fortsetzung', ...(anders ? { zaehlt_ab: w.zaehltAb } : {}) }
     }
     onBestaetigen(gruende)
   }
@@ -205,11 +210,14 @@ export default function SensorwechselDialog({
   const bleibenFolge = (f: QuellePruefung) =>
     f.bleiben ? GRUND_BLEIBEN_HA_FOLGE
       : nachtrag && !nachtrag.stueck ? `${allgemein(f)} ${NACHTRAG_FORTSETZUNG_ZUSATZ}` : allgemein(f)
-  const optionen = (f: QuellePruefung) => [
+  const optionen = (f: QuellePruefung) => nachtrag ? [
     { value: 'fortsetzung' as const, label: GRUND_FORTSETZUNG, description: bleibenFolge(f) },
     { value: 'korrektur' as const, label: GRUND_KORREKTUR,
-      description: nachtrag?.stueck ? STUECK_GRUND_KORREKTUR_FOLGE : nachtrag ? NACHTRAG_GRUND_KORREKTUR_FOLGE : GRUND_KORREKTUR_FOLGE },
-  ].filter((o) => !nachtrag || nachtrag.gruende.includes(o.value))
+      description: nachtrag.stueck ? STUECK_GRUND_KORREKTUR_FOLGE : NACHTRAG_GRUND_KORREKTUR_FOLGE },
+  ].filter((o) => nachtrag.gruende.includes(o.value)) : [
+    { value: 'fortsetzung' as const, label: GRUND_FORTSETZUNG, description: bleibenFolge(f) },
+    { value: 'loeschen' as const, label: GRUND_LOESCHEN, description: GRUND_LOESCHEN_FOLGE },
+  ]
   const nichts = !!nachtrag && nachtrag.gruende.length === 0
 
   return (
@@ -243,6 +251,14 @@ export default function SensorwechselDialog({
               )}
               {w.grund === 'fortsetzung' && w.bleiben && (
                 <BleibenTeil sensorKey={key} w={w} onZaehltAb={(v) => { setze(key, { zaehltAb: v }); ladeBleiben(key, v) }} />
+              )}
+              {w.grund === 'loeschen' && f.loeschen && (
+                <div className="space-y-2 pl-6 text-xs" data-loeschen-vorschau={key}>
+                  <p className="font-medium text-gray-700 dark:text-gray-200">{VORSCHAU_TITEL}</p>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4 text-gray-600 dark:text-gray-300">
+                    {f.loeschen.saetze.map((s, i) => <li key={i}>{s}</li>)}
+                  </ul>
+                </div>
               )}
               {w.grund === 'korrektur' && (
                 <div className="space-y-2 pl-6">

@@ -214,7 +214,7 @@ async def test_zeitraum_ueber_den_verworfenen_abschnitt_ist_nicht_voll(ha, datei
     async with sitzungen() as s:
         a = (await s.execute(select(Anlage).where(Anlage.id == aid))).scalar_one()
         assert EINSP not in await kanal_feldwerte(s, a.id, [EINSP], von, bis)
-    monkeypatch.setattr(lesen, "_beruehrt_verworfen", lambda f, von, bis: False)
+    monkeypatch.setattr(lesen, "_beruehrt_verworfen", lambda f, von, bis, *_: False)
     z2 = await _zr(sitzungen, k, von, bis)
     assert z2.voll and z2.delta is not None
 

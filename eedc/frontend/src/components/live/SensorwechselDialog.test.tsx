@@ -2,18 +2,20 @@
  * Sensorwechsel mit Grund (Sitzung 3b) — die Abfrage an der Datenquellen-Fläche.
  *
  * (1) Ohne Frage sendet die Fläche nach der Prüfung ohne Grund (kein Dialog). (2) Mit Frage öffnet der Dialog, und **nichts**
- * wird gesendet, bevor «Übernehmen» geklickt ist; «Abbrechen» sendet nie. (3) «Fortsetzung» sendet den Grund. (4) «Korrektur»
- * lädt die Vorschau über die Prüf-Route mit Grund und «falsch seit» (Vorschau = Lauf) und sendet erst danach; ohne startbare
- * Vorschau bleibt «Übernehmen» gesperrt. (5) Der Fortschritt eines Laufs zeigt die Backend-Zahlen. (6) Der Einstieg «Zähler
- * getauscht» zeigt den Weg aus dem Backend und trägt nur beim Weg «fortsetzung» ein.
+ * wird gesendet, bevor «Übernehmen» geklickt ist; «Abbrechen» sendet nie. (3) «Fortsetzung» sendet den Grund. (4) Weg B: genau
+ * zwei Antworten; «Daten vor der Änderung löschen» zeigt die Sätze der Prüf-Antwort (`loeschen`) ohne weitere Anfrage und sendet
+ * `loeschen`; kein «verwerfen», kein «Falsch seit». (5) Der Fortschritt eines Laufs zeigt die Backend-Zahlen (auch
+ * `art: 'loeschen'`). (6) Der Einstieg «Zähler getauscht» zeigt den Weg aus dem Backend und trägt nur beim Weg «fortsetzung» ein.
  *
  * Schwesterdateien: DatenquellenZuordnung.test.tsx (Quellen-Knöpfe), DatenquellenZuordnung.k4.test.tsx (Preset).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import DatenquellenZuordnung from './DatenquellenZuordnung'
-import SensorwechselDialog, { GRUND_FORTSETZUNG, GRUND_KORREKTUR, werteSatz } from './SensorwechselDialog'
-import KorrekturFortschritt, { FORTSCHRITT_INTERVALL_MS, SATZ_FUELLEN_OFFEN, fortschrittSatz } from './KorrekturFortschritt'
+import SensorwechselDialog, { FALSCH_SEIT_LABEL, GRUND_FORTSETZUNG, GRUND_LOESCHEN, werteSatz } from './SensorwechselDialog'
+import KorrekturFortschritt, {
+  FORTSCHRITT_INTERVALL_MS, LOESCHEN_FERTIG_TAGE, LOESCHEN_LAEUFT, SATZ_FUELLEN_OFFEN, fortschrittSatz, tageText,
+} from './KorrekturFortschritt'
 import ZaehlerGetauschtDialog, { ZG_TITEL } from './ZaehlerGetauschtDialog'
 import { datenquellenApi, type KorrekturLaufStand, type KorrekturVorschau, type QuellePruefung } from '../../api/datenquellen'
 import { ApiError } from '../../api/client'
@@ -21,9 +23,9 @@ import { ApiError } from '../../api/client'
 const FRAGE: QuellePruefung = {
   grund_erforderlich: true, erster_wert: '2025-11-01T02:00:00', tage: 649, stand_alt: 3615.0, stand_neu: 1500.25,
   sensor_key: 'basis:pv_gesamt', label: 'PV-Erzeugung Zählerstand', verzeichnet: true,
-  vorgabe_falsch_seit: '2026-10-18T11:00:00', korrektur: null,
+  loeschen: { saetze: ['Gelöscht werden nur die Daten dieses Felds vor der Änderung.', 'Für 10/2026 ist ein Monatswert gespeichert.'],
+    monate: ['2026-10'] },
 }
-const VORSCHAU = { saetze: ['Zählerstände dieses Felds im Zeitraum werden verworfen (17.699).', 'Rückweg-Satz.'], startbar: true }
 
 vi.mock('../../api/datenquellen', () => {
   const f = {
@@ -67,7 +69,7 @@ afterEach(() => { vi.useRealTimers() })
 /** Die Wahl eines Grunds — der Wortlaut steht im Etikett (mit dem Folge-Satz). */
 const radio = (wert: string) => {
   const r = document.querySelector(`input[type="radio"][value="${wert}"]`) as HTMLInputElement
-  expect(r.closest('label')?.textContent).toContain(wert === 'korrektur' ? GRUND_KORREKTUR : GRUND_FORTSETZUNG)
+  expect(r.closest('label')?.textContent).toContain(wert === 'loeschen' ? GRUND_LOESCHEN : GRUND_FORTSETZUNG)
   return r
 }
 
@@ -102,32 +104,44 @@ describe('Sensorwechsel S3b — Abfrage an der Fläche', () => {
       1, FID, 'mqtt_inbound_standard', undefined, undefined, { grund: 'fortsetzung' }))
   })
 
-  it('Korrektur: Vorschau über die Prüf-Route mit Grund und «falsch seit», erst dann senden', async () => {
-    vi.mocked(datenquellenApi.pruefeQuelle).mockImplementation((_a, _f, _q, _g, _e, grund) => Promise.resolve(
-      grund ? { ...FRAGE, korrektur: VORSCHAU } : FRAGE))
+  it('Weg B: genau zwei Antworten; «löschen» zeigt die Sätze der Prüf-Antwort und sendet `loeschen`', async () => {
+    vi.mocked(datenquellenApi.pruefeQuelle).mockResolvedValue(FRAGE)
     render(<DatenquellenZuordnung />)
     fireEvent.click(await screen.findByRole('button', { name: /Inbound/i }))
     await waitFor(() => expect(document.querySelector('[data-sensorwechsel-dialog]')).not.toBeNull())
-    fireEvent.click(radio('korrektur'))
-    await waitFor(() => expect(datenquellenApi.pruefeQuelle).toHaveBeenLastCalledWith(
-      1, FID, 'mqtt_inbound_standard', undefined, undefined, { grund: 'korrektur', falsch_seit: '2026-10-18T11:00' }))
-    expect(await screen.findByText(VORSCHAU.saetze[0])).toBeInTheDocument()
+    expect([...document.querySelectorAll('input[type="radio"]')].map((r) => (r as HTMLInputElement).value))
+      .toEqual(['fortsetzung', 'loeschen'])
+    fireEvent.click(radio('loeschen'))
+    expect(screen.getByText(FRAGE.loeschen!.saetze[0])).toBeInTheDocument()
+    expect(screen.getByText(FRAGE.loeschen!.saetze[1])).toBeInTheDocument()
+    expect(screen.queryByLabelText(FALSCH_SEIT_LABEL)).toBeNull()
+    expect(datenquellenApi.pruefeQuelle).toHaveBeenCalledTimes(1)          // keine Vorschau-Anfrage: die Sätze kamen mit der Prüfung
     expect(datenquellenApi.setQuelle).not.toHaveBeenCalled()
     fireEvent.click(document.querySelector('[data-sensorwechsel-ok]') as HTMLElement)
     await waitFor(() => expect(datenquellenApi.setQuelle).toHaveBeenCalledWith(
-      1, FID, 'mqtt_inbound_standard', undefined, undefined, { grund: 'korrektur', falsch_seit: '2026-10-18T11:00' }))
+      1, FID, 'mqtt_inbound_standard', undefined, undefined, { grund: 'loeschen' }))
   })
 })
 
 describe('SensorwechselDialog — Sperre und Anzeige', () => {
-  it('Korrektur ohne startbare Vorschau bleibt gesperrt; Zahlen nur angezeigt', async () => {
+  it('ohne Wahl gesperrt; mit «löschen» frei; Zahlen nur angezeigt', () => {
     const bestaetigen = vi.fn()
-    render(<SensorwechselDialog isOpen fragen={[FRAGE]} onBestaetigen={bestaetigen} onAbbrechen={() => {}}
-      onVorschau={() => Promise.resolve({ saetze: ['Home Assistant ist nicht erreichbar …'], startbar: false })} />)
-    fireEvent.click(radio('korrektur'))
-    expect(await screen.findByText('Home Assistant ist nicht erreichbar …')).toBeInTheDocument()
+    render(<SensorwechselDialog isOpen fragen={[FRAGE]} onBestaetigen={bestaetigen} onAbbrechen={() => {}} />)
     expect((document.querySelector('[data-sensorwechsel-ok]') as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(radio('loeschen'))
+    expect((document.querySelector('[data-sensorwechsel-ok]') as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(document.querySelector('[data-sensorwechsel-ok]') as HTMLElement)
+    expect(bestaetigen).toHaveBeenCalledWith({ 'basis:pv_gesamt': { grund: 'loeschen' } })
     expect(werteSatz(FRAGE)).toContain('649 Tage')
+  })
+
+  it('Fortschritt eines Laufs «löschen»: die Sätze nennen das Löschen, keine Korrektur', () => {
+    const z = (p: Partial<KorrekturLaufStand>): KorrekturLaufStand => ({
+      lauf: 'l', sensor_key: 'inv:1:pv_erzeugung_kwh', status: 'laeuft', tage: 2, erledigt: 0, fehler: [], beginn: null,
+      ende: null, fuellen_offen: false, art: 'loeschen', ...p })
+    expect(fortschrittSatz(z({}))).toBe(LOESCHEN_LAEUFT)
+    expect(fortschrittSatz(z({ status: 'fertig', erledigt: 2 }))).toBe(LOESCHEN_FERTIG_TAGE(tageText(2)))
+    expect(fortschrittSatz(z({ status: 'fertig', erledigt: 2 }))).not.toContain('Korrektur')
   })
 })
 
@@ -246,9 +260,11 @@ describe('Korrekturrunde 3b-K — Fortschritt übersteht das Neuladen, Proben de
     const onVorschau = vi.fn((_k: string, f: string) => (f === '2026-10-18T11:00'
       ? new Promise<KorrekturVorschau>((r) => { erste = r })
       : Promise.resolve({ saetze: [`Vorschau ab ${f}`], startbar: true })))
-    render(<SensorwechselDialog isOpen fragen={[FRAGE]} onVorschau={onVorschau} onBestaetigen={() => {}}
-      onAbbrechen={() => {}} />)
-    fireEvent.click(radio('korrektur'))
+    // Weg B (B1): «Falsch seit» gibt es nur noch beim Nachtrag eines Grunds (Rückbau B2) — die Probe läuft dort.
+    render(<SensorwechselDialog isOpen fragen={[{ ...FRAGE, vorgabe_falsch_seit: '2026-10-18T11:00:00' }]} onVorschau={onVorschau}
+      onBestaetigen={() => {}} onAbbrechen={() => {}}
+      nachtrag={{ wechselSatz: 'Am …', gruende: ['fortsetzung', 'korrektur'] }} />)
+    fireEvent.click(document.querySelector('input[type="radio"][value="korrektur"]') as HTMLElement)
     fireEvent.change(document.querySelector('[data-falsch-seit]') as HTMLElement, { target: { value: '2026-09-01T07:00' } })
     expect(onVorschau).toHaveBeenLastCalledWith('basis:pv_gesamt', '2026-09-01T07:00')
     expect(await screen.findByText('Vorschau ab 2026-09-01T07:00')).toBeInTheDocument()

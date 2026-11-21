@@ -56,11 +56,14 @@ async def _verschiebe(ds, key: str, ab: int = _VERSATZ_AB, um: float = _VERSATZ)
 
 
 async def _ohne_anfang(ds, key: str) -> None:
-    """Der Kanal beginnt erst nach dem 01.06. — er deckt den Juni nicht (Regel (a) der Lese-Schicht)."""
-    n = (await ds.db.execute(text(
-        "DELETE FROM kanal_statistik WHERE start_ts < :t AND kanal_id = (SELECT id FROM kanal WHERE anlage_id = :a AND "
-        "key = :k)"), {"t": int(datetime(2026, 6, 2).timestamp()), "a": ds.aid, "k": key})).rowcount
+    """Der Kanal beginnt erst nach dem 01.06. — er deckt den Juni nicht (Regel (a) der Lese-Schicht). Seine Vorgeschichte
+    gilt als nicht nachgefüllt (keine Marke): HA führt Zeilen davor, nur der Spiegel hat sie nicht — sonst wäre die erste
+    Zeile der Beginn der HA-Statistik und zählte ab dem Anfangsstand 0 (Regel 21.11.2026, ``kanal/lesen._ha_beginn_sql``)."""
+    kid = "(SELECT id FROM kanal WHERE anlage_id = :a AND key = :k)"
+    n = (await ds.db.execute(text(f"DELETE FROM kanal_statistik WHERE start_ts < :t AND kanal_id = {kid}"),
+                             {"t": int(datetime(2026, 6, 2).timestamp()), "a": ds.aid, "k": key})).rowcount
     assert n > 0, key
+    await ds.db.execute(text(f"DELETE FROM kanal_nachfuellung WHERE kanal_id = {kid}"), {"a": ds.aid, "k": key})
     await ds.db.commit()
 
 

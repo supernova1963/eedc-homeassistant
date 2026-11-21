@@ -5,7 +5,7 @@
  * Erst prüfen (`pruefeQuelle`, derselbe Body wie das Senden — schreibt nichts), dann: ohne Frage sofort senden (die Zeile
  * zeigt die neue Quelle erst nach der Prüfung, also ohne Rücksprung); mit Frage den `SensorwechselDialog` öffnen und erst
  * nach «Übernehmen» mit Grund senden. Kein Fehlerstatus als Ablauf: die 422 der Route sieht nur ein Aufruf an der
- * Prüfung vorbei. Gestartete Korrektur-Läufe sammelt `laeufe` (Fortschritt an der Fläche) — dazu beim Laden die laufenden
+ * Prüfung vorbei. Gestartete Läufe («löschen», Ansetzen von «bleiben») sammelt `laeufe` (Fortschritt an der Fläche) — dazu beim Laden die laufenden
  * Läufe der Anlage (`korrekturLaeufe`, Bauplan §11 Nr. 50: der Fortschritt übersteht das Neuladen der Seite); je Lauf einmal.
  * U2 Lauf b: die Wechsel «bleiben», die eedc noch nicht wie Home Assistant rechnet (`wartende`, je Feld ein Satz vom Backend:
  * beim Laden `wartendeWechsel`, nach dem Senden `wartet` der Antwort); ein Feld, dessen Lauf startet, wartet nicht mehr.
@@ -90,13 +90,6 @@ export function useQuellenWechsel(anlageId: number | null, setzeFeld: (id: strin
       .catch(neuLaden)
   }, [anlageId, senden, neuLaden])
 
-  const vorschau = useCallback((_key: string, falschSeit: string) => {
-    if (anlageId == null || !offen) return Promise.resolve(null)
-    const a = offen.anfrage
-    return datenquellenApi.pruefeQuelle(anlageId, a.feld.id, a.quelle, a.gateway, a.entityId,
-      { grund: 'korrektur', falsch_seit: falschSeit }).then((p) => p.korrektur)
-  }, [anlageId, offen])
-
   // U2 Lauf b: «Der neue Sensor zählt ab» geändert — die Angaben zu «bleiben» an dieser Stunde (dieselbe Prüf-Route).
   const bleibenVorschau = useCallback((_key: string, zaehltAb: string) => {
     if (anlageId == null || !offen) return Promise.resolve(null)
@@ -116,7 +109,7 @@ export function useQuellenWechsel(anlageId: number | null, setzeFeld: (id: strin
   }, [offen, senden])
 
   const dialog = offen && (
-    <SensorwechselDialog isOpen fragen={offen.fragen} onVorschau={vorschau} onBleibenVorschau={bleibenVorschau}
+    <SensorwechselDialog isOpen fragen={offen.fragen} onBleibenVorschau={bleibenVorschau}
       onBestaetigen={bestaetigen} onAbbrechen={() => setOffen(null)} laeuft={laeuft} fehler={fehler} />
   )
   return { aendere, dialog, laeufe, merkeLaeufe, wartende, merkeWartende }

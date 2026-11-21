@@ -189,7 +189,7 @@ async def test_dialog_stand_alt_ist_der_zaehlerstand_und_erster_wert_aus_dem_kan
     p = await _pruefe(db, a.id, quelle="ha_app", entity_id="sensor.b")
     assert p["grund_erforderlich"] is True
     assert (p["erster_wert"], p["tage"], p["stand_alt"]) == ("2026-09-30T22:00:00", 2, 5001.0)
-    assert p["vorgabe_falsch_seit"] == "2026-09-30T22:00:00"          # Beginn der Quelle im Kanal
+    assert "vorgabe_falsch_seit" not in p          # Weg B: kein «Falsch seit» mehr im Dialog beim Wechsel
 
 
 async def test_stand_neu_ist_der_zaehlerstand_in_der_einheit_des_kanals(ha):
@@ -207,31 +207,8 @@ async def test_stand_neu_ist_der_zaehlerstand_in_der_einheit_des_kanals(ha):
     assert await abfrage._stand_neu(svc, None, "basis:einspeisung", {"art": "mqtt", "mqtt_key": "x"}) is None
 
 
-async def test_vorgabe_falsch_seit_ist_der_wechsel_der_die_quelle_brachte(db):
-    """Nr. 54: jüngster Wechsel mit ``nachher`` = bisherige Quelle — kein → «Keine», kein «Zähler getauscht» (``vorher =
-    nachher``). Mutant A13 (ältester Wechsel) ⇒ 01.08.; der Stand vor 3b-K (jüngster überhaupt) ⇒ 01.09."""
-    a = await _anlage(db, _klassisch())
-    aid = a.id
-    for ab, vorher, nachher, grund in ((datetime(2026, 8, 1, 10), {"art": "ha", "entity_id": "sensor.x"}, A, "fortsetzung"),
-                                       (datetime(2026, 8, 10, 10), A, KEINE, None),
-                                       (datetime(2026, 8, 20, 10), KEINE, A, None),
-                                       (datetime(2026, 9, 1, 10), A, A, "fortsetzung")):
-        db.add(_wechsel(aid, ab, vorher, nachher, grund))
-    await db.commit()
-    p = await _pruefe(db, aid, quelle="ha_app", entity_id="sensor.b")
-    assert p["vorgabe_falsch_seit"] == "2026-08-20T10:00:00"
-
-
-async def test_vorgabe_falsch_seit_im_kanal_ueber_fortsetzungen_derselben_kennung(db):
-    """Ohne verzeichneten Wechsel: Beginn der Folge gleicher Kennung im Kanal — eine Naht oder ein Nachtrag derselben Quelle
-    (neue Quellzeile) verschiebt die Vorgabe nicht; eine verworfene Quelle davor beendet die Folge."""
-    a = await _anlage(db, _klassisch(), werte=())
-    await _kanal(db, a.id, [(datetime(2026, 9, 1, 0), "spiegel", "sensor.alt", True),
-                            (datetime(2026, 9, 5, 0), "spiegel", "sensor.a", False),
-                            (datetime(2026, 9, 9, 7), "spiegel", "sensor.a", False)],
-                 [(datetime(2026, 9, 5, 0) + timedelta(hours=h), 1.0 + h, 1.0 + h) for h in range(3)])
-    await db.commit()
-    assert (await _pruefe(db, a.id, quelle="ha_app", entity_id="sensor.b"))["vorgabe_falsch_seit"] == "2026-09-05T00:00:00"
+# Weg B (Sitzung B1): die Proben zur Vorgabe «Falsch seit» beim Wechsel entfallen mit der Wahl (``abfrage._beginn_bisherige_
+# quelle``, ``kanal/angaben.beginn_juengste_quelle`` gelöscht); die Vorgabe im Nachtrag prüft test_sensorwechsel_s4_nachtrag.py.
 
 
 # ═══ Wann gefragt wird — die letzte Quelle mit Werten (Mutanten A02, A04, A05, A06) ════════════════════════════════════
@@ -268,20 +245,8 @@ async def test_letzte_quelle_mit_werten_ohne_aufgehobene_zeilen(db):
 
 # ═══ Korrektur mit Grund: Grenzen und Routen (Mutanten A07, A09, A10, D03, D06, D07) ════════════════════════════════════
 
-def test_intervall_endet_an_der_naechsten_vollen_stunde_und_falsch_seit_davor():
-    """A09: ``ab`` = die volle Stunde nach der Änderung (10:20 ⇒ 11:00), nicht die vergangene. A07: «falsch seit» in der
-    Stunde ``ab`` ist nicht erlaubt, die Stunde davor schon (abgerundet)."""
-    f = abfrage.Frage(NETZ_KEY, A, B, True)
-    jetzt = datetime(2026, 10, 1, 10, 20)
-    assert abfrage.korrektur_auftrag(1, f, datetime(2026, 9, 1, 7, 30), jetzt).ab == datetime(2026, 10, 1, 11)
-    assert abfrage.korrektur_auftrag(1, f, datetime(2026, 9, 1, 7, 30), jetzt).falsch_seit == datetime(2026, 9, 1, 7)
-    with pytest.raises(abfrage.GrundFehlt):
-        abfrage._pruefe_falsch_seit(f, datetime(2026, 10, 1, 11, 0), jetzt, "x")
-    abfrage._pruefe_falsch_seit(f, datetime(2026, 10, 1, 10, 59), jetzt, "x")
-
-
 async def test_ungueltiger_grund_gilt_nicht_als_grund(db):
-    """A10: der Dienst nimmt nur «fortsetzung»/«korrektur»; D03: die Feld-Route antwortet auf einen anderen 400."""
+    """A10: der Dienst nimmt nur «fortsetzung»/«loeschen» (Weg B); D03: die Feld-Route antwortet auf einen anderen 400."""
     from backend.services.zuordnung_wechsel.verzeichnen import momentaufnahme
 
     from backend.models.anlage import Anlage
@@ -295,40 +260,28 @@ async def test_ungueltiger_grund_gilt_nicht_als_grund(db):
     vorher = await momentaufnahme(db, a)
     a.sensor_mapping = {**_klassisch(), "quellen": {NETZ: {"quelle": "ha_app", "entity_id": "sensor.b"}}}
     with pytest.raises(abfrage.GrundFehlt):
-        await abfrage.vollziehe(db, a, vorher, {abfrage.ALLE: ("quatsch", None)})
+        await abfrage.vollziehe(db, a, vorher, {abfrage.ALLE: "quatsch"})
 
 
 async def test_feld_route_ruft_nach_dem_commit(db, monkeypatch):
-    """D06: nach dem Commit füllt ``nach_dem_commit`` den Kanal und startet den Lauf — die Feld-Route ruft es."""
+    """D06: nach dem Commit startet ``nach_dem_commit`` den Lauf — die Feld-Route ruft es (Weg B: «löschen»)."""
     gerufen = []
 
     async def spion(v):
         gerufen.append(v)
     monkeypatch.setattr(abfrage, "nach_dem_commit", spion)
     a = await _anlage(db, _klassisch())
-    await _setze(db, a.id, quelle="ha_app", entity_id="sensor.b", grund="korrektur", falsch_seit=datetime(2026, 8, 1))
-    assert len(gerufen) == 1 and gerufen[0].korrekturen
+    await _setze(db, a.id, quelle="ha_app", entity_id="sensor.b", grund="loeschen")
+    assert len(gerufen) == 1 and gerufen[0].geloescht
 
 
-async def test_pruef_route_korrektur_vorschau_nur_bei_frage(db):
-    """D07: → «Keine» wird ohne Frage verzeichnet — die Prüf-Route liefert dafür keine Korrektur-Vorschau."""
+async def test_pruef_route_loeschen_angaben_nur_bei_frage(db):
+    """D07: → «Keine» wird ohne Frage verzeichnet — die Prüf-Route liefert dafür keine Angaben zu «löschen» (Weg B; bis B1 die
+    Korrektur-Vorschau, deren Kanal-Sätze vor dem Rückweg stehen nur noch im Nachtrag)."""
     a = await _anlage(db, _klassisch())
     await db.commit()
-    p = await _pruefe(db, a.id, quelle="keine", grund="korrektur", falsch_seit=datetime(2026, 8, 1))
-    assert (p["grund_erforderlich"], p["verzeichnet"], p["korrektur"]) == (False, True, None)
-
-
-async def test_dialog_vorschau_nennt_den_kanal_vor_dem_rueckweg(db, monkeypatch):
-    """Nr. 48: die Vorschau des Dialogs trägt die Kanal-Sätze vor dem Satz zum Rückweg."""
-    async def kanal(_la, _svc, *, bis_zum_wechsel=False):
-        assert bis_zum_wechsel is False          # beim Wechsel endet das Intervall jetzt (4-K: im Nachtrag am Wechsel)
-        return ["KANAL"]
-    monkeypatch.setattr(kr, "kanal_saetze", kanal)
-    a = await _anlage(db, _klassisch())
-    await db.commit()
-    p = await _pruefe(db, a.id, quelle="ha_app", entity_id="sensor.b", grund="korrektur", falsch_seit=datetime(2026, 8, 1))
-    s = p["korrektur"]["saetze"]
-    assert s[-2:] == ["KANAL", kr.SATZ_RUECKWEG_OHNE]
+    p = await _pruefe(db, a.id, quelle="keine", grund="loeschen")
+    assert (p["grund_erforderlich"], p["verzeichnet"], p["loeschen"]) == (False, True, None)
 
 
 class _Kennzahlen:
@@ -383,8 +336,9 @@ async def test_preset_unbekannter_grund_400(db):
         assert (e.status_code, e.detail) == (400, "Unbekannter Grund: quatsch")
 
 
-async def test_preset_korrektur_traegt_falsch_seit_protokoll_und_nachlauf(db, monkeypatch):
-    """P02 («falsch seit» geht verloren), P03 (kein ``nach_dem_commit``), P04 (kein Protokoll)."""
+async def test_preset_loeschen_protokoll_und_nachlauf(db, monkeypatch):
+    """P03 (kein ``nach_dem_commit``), P04 (kein Protokoll); Weg B: «löschen» verzeichnet nichts (bis B1: P02, die Korrektur
+    trug «falsch seit»)."""
     from backend.api.routes.mqtt_presets import apply_preset
 
     gerufen = []
@@ -395,28 +349,22 @@ async def test_preset_korrektur_traegt_falsch_seit_protokoll_und_nachlauf(db, mo
     a = await _anlage(db, _preset_mapping(), werte=(GW_KEY,))
     aid = a.id
     await db.commit()
-    await apply_preset(_preset(aid, gruende={GW_KEY: {"grund": "korrektur", "falsch_seit": datetime(2026, 8, 1, 7, 30)}}),
-                       db)
-    (w,) = [w for w in await _zeilen(db, aid) if w.sensor_key == GW_KEY]
-    assert (w.grund, w.falsch_seit_ts) == ("korrektur", datetime(2026, 8, 1, 7))
-    assert len(gerufen) == 1
+    await apply_preset(_preset(aid, gruende={GW_KEY: {"grund": "loeschen"}}), db)
+    assert [w for w in await _zeilen(db, aid) if w.sensor_key == GW_KEY] == []
+    assert len(gerufen) == 1 and [g.key for g, _lauf in gerufen[0].geloescht] == [GW_KEY]
     log = (await db.execute(select(ActivityLog.aktion).where(ActivityLog.anlage_id == aid))).scalars().all()
     assert "Preset angewendet: evcc_ladepunkt" in log
 
 
-async def test_preset_korrektur_home_assistant_nicht_erreichbar_422(db, monkeypatch):
-    """P05: HA eingerichtet, aber nicht erreichbar ⇒ 422 wie an der Feld-Route; nichts bleibt stehen."""
+async def test_preset_korrektur_ist_kein_grund_mehr(db):
+    """Weg B: «korrektur» (verwerfen mit «falsch seit») ist an «Preset anwenden» kein Grund mehr — 400 (bis B1: P05, 422 ohne
+    erreichbares Home Assistant)."""
     from backend.api.routes.mqtt_presets import apply_preset
 
-    def nicht(_svc=None):
-        raise kr.KorrekturNichtStartbar("Home Assistant ist nicht erreichbar — …")
-    monkeypatch.setattr(kr, "ha_dienst", nicht)
     a = await _anlage(db, _preset_mapping(), werte=(GW_KEY,))
-    aid = a.id
     await db.commit()
-    e = await _ablehnung(apply_preset(_preset(aid, gruende={GW_KEY: {"grund": "korrektur",
-                                                                    "falsch_seit": datetime(2026, 8, 1)}}), db))
-    assert e.status_code == 422 and "nicht erreichbar" in e.detail
+    e = await _ablehnung(apply_preset(_preset(a.id, gruende={GW_KEY: {"grund": "korrektur"}}), db))
+    assert (e.status_code, e.detail) == (400, "Unbekannter Grund: korrektur")
 
 
 # ═══ Korrektur-Lauf: Aufräumen, offener Lauf, Nachlauf, Fortschritt (K01–K03, K06, K09, K10, K15, K17, R03, R05) ══════════

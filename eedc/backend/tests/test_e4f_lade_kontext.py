@@ -117,9 +117,14 @@ async def test_der_zweite_fakten_aufruf_einer_anfrage_fragt_die_kanaele_nicht_me
                 event.remove(ds.db.bind.sync_engine, "before_cursor_execute", z)
     assert _dump(erster) == _dump(zweiter)
     assert nach_erstem > 0
-    assert 1 <= rand_erster <= 4, f"höchstens eine Randstände-Anweisung je Gruppe, gemessen {rand_erster}"
+    # Je Gruppe eine Monatsreihe (Bilanz, E-Mob) und je Kanal-Monat der Bilanz eine Tagesreihe (Mai, Juni, Juli). Bis
+    # 21.11.2026 höchstens 4: der Mai (die Statistik beginnt am 31.05. 18:00) war kein Kanal-Monat; seit der Regel
+    # «Anfangsstand 0 am Beginn einer HA-Statistik» deckt der Kanal ihn (B1-Abschluss, gemessen HEAD 4 · Regel 5).
+    assert 1 <= rand_erster <= 5, f"höchstens eine Randstände-Anweisung je Reihe, gemessen {rand_erster}"
     assert nach_zweitem == nach_erstem, f"der zweite Aufruf fragte {nach_zweitem - nach_erstem}× kanal_statistik"
-    assert nach_erstem <= ohne, f"ohne Kontext {ohne}, im ersten Aufruf mit Kontext {nach_erstem}"
+    # Bis 21.11.2026 nach_erstem ≤ ohne (gemessen 5 ≤ 5). Seit der Regel «Anfangsstand 0» ist der Mai ein Kanal-Monat: seine
+    # Tagesreihe liest nur der erste Aufruf (6), den dritten ohne Kontext bedient für Mai und Juni der Merk-Speicher (5).
+    assert nach_erstem <= ohne + 1, f"ohne Kontext {ohne}, im ersten Aufruf mit Kontext {nach_erstem}"
 
 
 async def test_ein_weiteres_fenster_liest_nur_die_raender_die_die_anfrage_noch_nicht_kennt():

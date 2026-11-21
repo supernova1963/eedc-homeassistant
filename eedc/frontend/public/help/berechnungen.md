@@ -71,6 +71,22 @@ Felder erfasst.
 > * **Abdeckung:** ein Kanal deckt einen Zeitraum voll, wenn er einen Stand vor dem Anfang hat, sein Stand das Ende
 >   erreicht (im laufenden Zeitraum mit 70 Minuten Schreibverzug) und der Zeitraum nicht feiner ist als die Spanne
 >   zweier Stände über einen Rand. Ohne volle Abdeckung gibt es keinen Kanal-Wert.
+> * **Anfangsstand 0 am Beginn einer HA-Statistik** (Entscheid Gernot 21.11.2026): führt Home Assistant vor der ersten Zeile
+>   eines Sensors keine Zeile, gilt davor der Stand 0 — wie in Home Assistant. Der Tag (und Monat), an dem die Statistik
+>   beginnt, zählt damit ab ihrer ersten Stunde mit deren `sum` und ist für den Kanal gedeckt; vor der ersten Zeile hat das
+>   Feld keinen Wert («—»). Eine Bedingung an allen Lesern, die eine Menge aus Ständen bilden: im Kanal die erste Zeile der
+>   Spiegel-Quelle, deren Vorgeschichte das Nachfüllen ohne Grund abgeschlossen hat (`kanal/lesen._ha_beginn_sql`:
+>   `zeitraum`/`reihe`, `stunden`, `deltas`, `zellen`), in «Aus HA laden», dem Monatsabschluss-Vorschlag und dem LTS-Tag
+>   «HA führt keine Zeile davor» (`ha_statistics_service.get_sensor_fensterwert`, `get_hourly_slots_for_day`). Folgen: Tag,
+>   Monatssicht, «Aus HA laden» und Vorschlag nennen dieselbe Zahl wie Home Assistant; eine erste Zeile mit großem `sum`
+>   (importierte Statistik) zählt ganz — Home Assistant zeigt denselben Sprung, kein Befund nennt ihn (benannte Grenze).
+>   Sind an einem Tag **alle** Felder der Bilanz-Gruppe bewusst leer (vor ihrer ersten Zeile gelöscht), heißt die Wahl
+>   `bewusst_leer` (`kanal/bilanz_leser`): Zahlen «—», kein Tag «ohne Kanal-Deckung». Benannte Grenzen: der Drift-Vergleich
+>   mit Home Assistant liest für den ersten Tag einer Statistik das Fenster `[Vortag 23:00, 23:00)` und kann den Tag nennen,
+>   wenn dessen Stunde 23:00 mindestens 2 kWh und 5 % trägt (Lösungsweg `drift_tag`; eine Ausnahme je Feld unterdrückte auch
+>   den echten Fall N-791 — Spiegel mit Erstwert-Sprung gegen die in HA berichtigte Statistik); ein abgeleiteter Kanal
+>   (PV-Anteil der Heimladung) beginnt ohne Anfangsstand 0 — beginnt er am selben Tag wie die Wallbox-Statistik, liest die
+>   Gruppe E-Mobilität diesen Tag aus dem Bestand (Naht S4-R-3c).
 > * **Quellenwahl je Zeitraum** (ADR-002/**P14**): je Tag bzw. Monat und Gruppe EINE Wahl — die Kanäle nur, wenn
 >   **jeder** Eingang der Formel deckt (in einer Entweder-oder-Gruppe der erste deckende); sonst rechnet der bisherige
 >   Leser den **ganzen** Zeitraum aus Stunden-, Tages- und Monatszeilen (*Lesart 1*). Gruppen: Bilanz (Netz ·
@@ -4907,8 +4923,9 @@ Anker(h)      = höchster belegter Index < h (W1, über den Index, nicht den Zei
                 sonst Index −1, sonst die letzte Zeile mit sum vor dem Fenster (SQL eine Abfrage,
                 WebSocket rückwärts über 1 · 8 · 32 · 128 · 1024 Tage)
 Slot h        = round(Stand(h) − Stand(Anker), 3)      n = 1 bei Slot h = 0 (R2), sonst max(1, round(Δstart_ts / 3600))
-kein Anker    ⇒ der erste belegte Slot bleibt leer (die Reihe beginnt im Fenster) — benannte Abweichung zu HA,
-                das dort 0 als Anker nimmt und die erste Stunde zeigt
+kein Anker    ⇒ beginnt die HA-Statistik im Fenster (HA führt keine Zeile davor), zählt die erste Zeile ab dem
+                Anfangsstand 0 wie in HA (Regel «Anfangsstand 0», Abschnitt 1); nur wenn HA vor dem Fenster eine Zeile
+                führt, die kein Anker ist (Polster-Zeile vor Index −1), bleibt der erste belegte Slot leer
 ```
 
 Die Einheit wird **beim Lesen** umgerechnet (Fenster und Anker), die Differenz entsteht in kWh. Lesefehler (SQL oder
@@ -5656,11 +5673,10 @@ ohne Werte    = weder gefragt noch verzeichnet (§8 Nr. 17)
 
 **Wege:** Feld-Route und Preset lehnen eine gefragte Änderung ohne Grund mit 422 ab; die Prüf-Routen (`…/quelle/pruefen`,
 `…/presets/apply/pruefen`) machen dieselbe Änderung in der Sitzung, fragen dieselbe Funktion und rollen zurück — der Client
-fragt vor dem Senden. `fortsetzung` ⇒ Wechsel-Zeile mit Grund (die Naht oben); `korrektur` mit `falsch_seit` ⇒ der Lauf unten
-mit `ab` = erste volle Stunde ab der Änderung, `falsch_seit` auf die volle Stunde, richtig = die neue Quelle; Vorschau = Lauf
-(derselbe Auftrag, `korrektur.lage`; die Dialog-Vorschau nennt dazu den Kanal: ab wann Home Assistant die Geschichte des
-richtigen Sensors führt, wenn das nach dem Beginn des verworfenen Teils liegt — derselbe Beginn `h0` wie der Lauf —, bzw. dass eine
-MQTT-Quelle keine Geschichte nachholt, §11 Nr. 48). Energie-Vorschläge und Gateway-`PUT` ändern ein gefragtes Feld nicht (überspringen, nennen);
+fragt vor dem Senden. **Zwei Antworten** (Weg B, Entscheid Gernot 21.11.2026): `fortsetzung` («Bisherige Werte bleiben») ⇒
+Wechsel-Zeile mit Grund (die Naht oben); `loeschen` («Daten vor der Änderung löschen») ⇒ der Abschnitt «Daten vor der Änderung
+löschen» unten. «Verwerfen» mit «Falsch seit» bietet der Dialog nicht mehr an (`grund = korrektur` an Feld-Route und Preset: 400);
+der Korrektur-Lauf unten bleibt bis zum Rückbau für «Grund nachtragen», das Stück und die Werkbank. Energie-Vorschläge und Gateway-`PUT` ändern ein gefragtes Feld nicht (überspringen, nennen);
 Gateway-Zeile anlegen/löschen lehnt ab (422). Das Festschreiben beim Lesen (`/felder`, W7), die Stilllegung und Innengeräte (W9)
 sind kein Wechsel. **«Zähler getauscht (gleiche Quelle)»** (`zuordnung_wechsel/zaehler_getauscht.py`) — der Weg folgt der
 **Quelle des Kanals zur Stunde des Tauschs** (größtes `gueltig_ab ≤ Stunde`, §11 Nr. 44): ein (nicht verworfener)
@@ -5675,9 +5691,33 @@ nennt ihren bisherigen Zuwachs aus `lesen.stunden`, §11 Nr. 49); eine verworfen
 vor dem ersten eigenen Wert (`erster ≥ ab_ts`, Reihe oder Kanal) ⇒ nichts einzutragen, die Antwort nennt den ersten Wert (§11
 Nr. 45); kann der Kanal den Nachtrag dennoch nicht tragen ⇒ 422 mit Satz, nichts bleibt stehen. **Angaben des Dialogs:** die
 Stände sind Zählerstände (Spalte `state` der Kanalzeile bzw. der HA-Stundenzeile, §11 Nr. 47 — nicht HAs Statistik-Summe), ohne
-`state` entfällt die Angabe; die Vorgabe «falsch seit» ist der jüngste Wechsel, der die bisherige Quelle brachte (`nachher` = die
-letzte Quelle mit Werten, kein → «Keine», kein «Zähler getauscht»), sonst der Beginn ihres Abschnitts im Kanal. Proben:
-`test_sensorwechsel_s3b_abfrage.py`, `test_sensorwechsel_s3bk_proben.py`.
+`state` entfällt die Angabe; dazu was «löschen» tut (`loeschen`: Sätze und die Monate mit gespeichertem Monatswert). Proben:
+`test_sensorwechsel_s3b_abfrage.py`, `test_sensorwechsel_s3bk_proben.py`, `test_sensorwechsel_wegb_loeschen_proben.py`.
+
+#### Daten vor der Änderung löschen (Weg B, Bauplan Nr. 176–180)
+
+```
+löschen(Feld, T = Zeitpunkt der Änderung)              (services/feld_loeschen.py::loesche_vor, in der Sitzung der Route)
+  Kanal          = Zeilen mit start_ts < T weg; die Quellen davor ⇒ EIN Platzhalter (verworfen_ts = T, ohne Entity,
+                   gueltig_ab = Beginn der ersten), Nachfüll-Marke weg
+  Stände         = sensor_snapshots und MQTT-Rohstände des Schlüssels < T weg
+  Wechsel-Zeilen = alle des Schlüssels weg (es wird nichts verzeichnet)
+  Bestand        = Feld-Schlüssel in Stunden- und Tageszeilen bis zum Bestandstag von T, in ALLEN Monaten (leere_bestand)
+  abgeleitet     = abhängige abgeleitete Kanäle (PV-Anteil Heimladung, Strom je Betriebsart, Kosten) ab der ersten gelöschten Zeile
+  bleibt         = jedes andere Feld; gespeicherte Monatswerte (Monatsabschluss/Handeingabe)
+Lauf (Art loeschen, korrektur_lauf) = mit HA: Nachfüllen der Geschichte des neuen Sensors (das Nachfüllen übergeht nur den
+                   Platzhalter, nachfuellen._erste_ohne_platzhalter; HA nicht erreichbar ⇒ der Lauf bleibt offen, der
+                   Stundenlauf holt es nach) → abgeleitete Kanäle neu → Tage neu bilden (Tageszeile trug das Feld, Tag von T)
+```
+
+Danach verhält sich das Feld, als wäre der neue Sensor von Anfang an zugeordnet: was Home Assistant für ihn führt, zählt eedc
+wie Home Assistant (Regel «Anfangsstand 0», Abschnitt 1); davor zeigt das Feld «—»; die übrigen Felder behalten an jedem Tag ihre
+Kanal-Deckung (der Platzhalter macht das Feld dort bewusst leer, `bilanz_adapter.BewusstLeer`). Reicht die Geschichte des neuen
+Sensors weiter zurück als die gelöschten Daten, rückt der Platzhalter vor seine erste Zeile. MQTT: der Kanal beginnt mit dem
+ersten gespeicherten Stand der neuen Quelle (wie jede neue MQTT-Zuordnung). Nicht rücknehmbar. Der Dialog nennt die Monate mit
+gespeichertem Monatswert vom ersten eigenen Wert bis zur Änderung (benannte Grenze: eedc sieht den Monat, nicht ob er dieses Feld
+trägt) und den Weg zur Handkorrektur; Auskunft danach: `daten_vor_aenderung_geloescht`. Die Werkbank «Werte vor dem Sensorbeginn
+verwerfen» markiert reale Quellen (kein Platzhalter) — für sie holt kein Lauf etwas vor `t` zurück.
 
 #### Grund nachtragen (B-7, Sitzung 4)
 

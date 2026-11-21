@@ -425,16 +425,17 @@ def seed_ha(form: Form):
 
 def _zaehler_reihe(svc, sid: str, fn: RateFn, ohne: Optional[Callable] = None) -> None:
     mid = ha_lts_helfer.sensor(svc, sid, "kWh", has_sum=True)
-    stand, zeilen, t = 500.0, [], mx.REIHE_VON
+    start = stand = 500.0
+    zeilen, t = [], mx.REIHE_VON
     while t < mx.REIHE_BIS:
         stand += fn(t)
         if ohne is not None and ohne(t):
             t += timedelta(hours=1)
             continue
-        zeilen.append({"m": mid, "t": _zeit.mktime(t.timetuple()), "w": round(stand, 4)})
+        zeilen.append({"m": mid, "t": _zeit.mktime(t.timetuple()), "w": round(stand, 4), "s": round(stand - start, 4)})
         t += timedelta(hours=1)
-    with svc._engine.begin() as conn:
-        conn.execute(text("INSERT INTO statistics (metadata_id, start_ts, state, sum) VALUES (:m, :t, :w, :w)"),
+    with svc._engine.begin() as conn:      # ``sum`` ab dem Nullpunkt wie HA, ``state`` = Zählerstand (wie ``mx.seed_ha``)
+        conn.execute(text("INSERT INTO statistics (metadata_id, start_ts, state, sum) VALUES (:m, :t, :w, :s)"),
                      zeilen)
 
 

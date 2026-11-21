@@ -609,9 +609,9 @@ async def test_leser_verworfen_gilt_hier_und_grenze(ha, datei, monkeypatch, spre
     await _korrigieren(sitzungen, _auftrag(aid), svc)
     if sprengsatz == "hier_ignoriert":
         monkeypatch.setattr(lesen, "_beruehrt_verworfen",
-                            lambda f, von, bis: f is not None and f.verworfen_ab is not None and f.verworfen_ab < bis)
+                            lambda f, von, bis, *_: f is not None and f.verworfen_ab is not None and f.verworfen_ab < bis)
     elif sprengsatz == "grenze_inklusiv":
-        monkeypatch.setattr(lesen, "_beruehrt_verworfen", lambda f, von, bis: f is not None and (
+        monkeypatch.setattr(lesen, "_beruehrt_verworfen", lambda f, von, bis, *_: f is not None and (
             f.verworfen_hier or (f.verworfen_ab is not None and f.verworfen_ab <= bis)))
     drin = await _zr(sitzungen, k, F + timedelta(days=1), H0 + timedelta(hours=30))      # beginnt im verworfenen Teil
     davor = await _zr(sitzungen, k, F - timedelta(hours=2), F)

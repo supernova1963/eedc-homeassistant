@@ -28,7 +28,7 @@ from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 
 from backend.core.berechnungen.kosten_stunde import kosten_der_stunde
 from backend.tests import achsen_matrix as am
@@ -422,6 +422,9 @@ async def test_zeitfenster_gewicht_aus_den_kanaelen():
               ).scalar_one()
         await ds.db.execute(delete(KanalStatistik).where(
             KanalStatistik.kanal_id == nk.id, KanalStatistik.start_ts < int(datetime(2026, 6, 2).timestamp())))
+        # Vorgeschichte nicht nachgefüllt (keine Marke): HA führt Zeilen davor — sonst wäre die erste Zeile der Beginn der
+        # HA-Statistik und zählte ab dem Anfangsstand 0 (Regel 21.11.2026, ``kanal/lesen._ha_beginn_sql``).
+        await ds.db.execute(text("DELETE FROM kanal_nachfuellung WHERE kanal_id = :k"), {"k": nk.id})
         await ds.db.commit()
         with am.umgebung(am.MATRIX_FORMEN["M01"], ds.svc):
             assert await preis_leser.netzbezug_slots_des_monats(ds.db, ds.aid, 2026, 6) is None
@@ -463,10 +466,11 @@ async def test_beginn_mit_dem_laufenden_monat_und_neuaufbau():
 
     async with kg.datenstand("achsen", "M04", "HA") as ds:
         db, aid = ds.db, ds.aid
-        # Seed mit `ab_ts = REIHE_VON`: die erste Spiegel-Stunde hat keinen Vorstand — der Kanal beginnt eine Stunde später
+        # Seed mit `ab_ts = REIHE_VON`: die erste Spiegel-Stunde ist die erste Zeile der HA-Statistik und zählt ab dem
+        # Anfangsstand 0 (Regel 21.11.2026) — der Kanal beginnt mit ihr (bis dahin: ohne Vorstand, eine Stunde später).
         ks = (await db.execute(select(Kanal).where(Kanal.anlage_id == aid, Kanal.key.in_(list(KOSTEN_KANAELE))))
               ).scalars().all()
-        assert {k.aufbaubar_ab for k in ks} == {int(mx.REIHE_VON.timestamp()) + 3600}
+        assert {k.aufbaubar_ab for k in ks} == {int(mx.REIHE_VON.timestamp())}
         anlage = (await db.execute(select(Anlage).where(Anlage.id == aid))).scalar_one()
         await entfernen(db, aid, KOSTEN_KANAELE)
         with am.umgebung(am.MATRIX_FORMEN["M04"], ds.svc):

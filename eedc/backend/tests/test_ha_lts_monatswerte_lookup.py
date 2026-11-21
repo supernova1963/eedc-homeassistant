@@ -134,9 +134,11 @@ def test_monatswert_sum_bevorzugt_vor_state():
         meta = svc.get_metadata(conn, "sensor.pv")
         wert = svc.get_sensor_monatswert(conn, meta, "sensor.pv", 2026, 5)
     assert wert is not None
-    assert wert.start_wert == 100.0
+    # Regel «Anfangsstand 0 am Beginn einer HA-Statistik» (Weg B, 21.11.2026): HA führt vor Mai keine Zeile ⇒ die erste
+    # Zeile zählt ab 0 wie in HA (bis dahin Anker = erste Zeile: start 100, differenz 100).
+    assert wert.start_wert == 0.0
     assert wert.end_wert == 200.0
-    assert wert.differenz == 100.0  # sum-basiert, nicht state (das wäre 6.0)
+    assert wert.differenz == 200.0  # sum-basiert, nicht state
 
 
 def test_monatswert_ohne_sum_ist_none_wie_ha():
@@ -163,9 +165,9 @@ def test_monatswert_einheit_wh_skaliert_nach_kwh():
         meta = svc.get_metadata(conn, "sensor.pv_wh")
         wert = svc.get_sensor_monatswert(conn, meta, "sensor.pv_wh", 2026, 5)
     assert wert is not None
-    assert wert.start_wert == 1.0   # 1000 Wh → 1 kWh
-    assert wert.end_wert == 5.0
-    assert wert.differenz == 4.0
+    assert wert.start_wert == 0.0   # Anfangsstand 0 (die Statistik beginnt im Mai; bis 21.11.2026: 1,0 = erste Zeile)
+    assert wert.end_wert == 5.0     # 5000 Wh → 5 kWh
+    assert wert.differenz == 5.0    # bis 21.11.2026: 4,0
 
 
 def test_monatswert_anderer_monat_ausgeschlossen():
@@ -214,7 +216,7 @@ def test_get_monatswerte_aggregiert_und_skippt_unbekannte():
     assert resp.monat == 5
     assert resp.monat_name == "Mai"
     assert len(resp.sensoren) == 1  # unbekannter Sensor übersprungen
-    assert resp.sensoren[0].differenz == 30.0
+    assert resp.sensoren[0].differenz == 130.0   # Anfangsstand 0 (Statistik beginnt im Mai; bis 21.11.2026: 30,0)
 
 
 # ---------------------------------------------------------------------------

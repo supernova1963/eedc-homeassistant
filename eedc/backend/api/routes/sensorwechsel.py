@@ -174,9 +174,9 @@ async def _label(db: AsyncSession, anlage, sensor_key: str) -> str:
 
 
 def _grund(body: GrundNachtragRequest) -> Optional[str]:
-    from backend.services.zuordnung_wechsel.abfrage import GRUENDE
+    from backend.services.zuordnung_wechsel.nachtrag import GRUENDE_NACHTRAG
 
-    if body.grund is not None and body.grund not in GRUENDE:
+    if body.grund is not None and body.grund not in GRUENDE_NACHTRAG:
         raise HTTPException(status_code=400, detail=f"Unbekannter Grund: {body.grund}")
     return body.grund
 
@@ -229,7 +229,6 @@ async def grund_nachtragen(
     from backend.models.zuordnung_wechsel import GRUND_FORTSETZUNG
     from backend.services.zuordnung_wechsel import korrektur as kr
     from backend.services.zuordnung_wechsel import nachtrag as nt
-    from backend.services.zuordnung_wechsel.abfrage import SATZ_FALSCH_SEIT_FEHLT
 
     grund = _grund(body)
     anlage, la = await _nachtrag_lage(db, anlage_id, wechsel_id)
@@ -250,7 +249,7 @@ async def grund_nachtragen(
                 raise ValueError(SATZ_NUR_BLEIBEN)
             falsch_seit = la.stueck[0] if la.stueck else _falsch_seit(body)
             if falsch_seit is None:
-                raise nt.NachtragAbgelehnt(SATZ_FALSCH_SEIT_FEHLT.format(feld=label))
+                raise nt.NachtragAbgelehnt(nt.SATZ_FALSCH_SEIT_FEHLT.format(feld=label))
             jetzt = datetime.now().replace(microsecond=0)
             svc = kr.ha_dienst(None)
             ergebnis = await kr.fuehre_aus(db, nt.korrektur_auftrag(la.row, falsch_seit, jetzt, la.stueck), ha_svc=svc,

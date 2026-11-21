@@ -437,7 +437,8 @@ async def test_p5_nullpunkt_bleibt_neben_spaeterem_bleiben(db, ha, monkeypatch, 
     await _bleiben_c_nach_d(db, a.id, key)
     d_teil = round(ha.get_fensterwerte([("sensor.d", monat._unix(datetime(2026, 6, 13, 4)),
                                          monat._unix(datetime(2026, 7, 1)), False)])[0].differenz, 3)
-    assert await _juni(db, ha, a.id, "sensor.d") == round(2.4 + d_teil - (0.4 if sprengsatz else 0.0), 3)
+    # Weg B (B1): die Regel «Anfangsstand 0» deckt den Nullpunkt allgemein — der Sprengsatz zeigt dieselbe Zahl (bis B1: −0,4)
+    assert await _juni(db, ha, a.id, "sensor.d") == round(2.4 + d_teil, 3)
 
 
 # ═══ P6 — Sätze ═══════════════════════════════════════════════════════════════════════════════════════════════════════

@@ -67,14 +67,14 @@ def test_p13_anker_beliebig_weit_zurueck_luecke_ueber_monatsgrenze():
 
 
 def test_p13_ohne_anker_ist_der_aelteste_im_monat_der_anker():
-    """Die Reihe beginnt im Monat ⇒ ältester `sum` im Monat; die erste Stunde der
-    Reihe fehlt einmal (wie R1)."""
+    """Die Reihe beginnt im Monat (HA führt keine Zeile davor) ⇒ Anfangsstand 0 wie in HA: die erste Zeile zählt mit
+    ihrem `sum` (Regel 21.11.2026; bis dahin war der älteste `sum` im Monat der Anker, start 10,0 · Δ 60,0)."""
     svc = _make_service_with_mock_db()
     mid = _seed_sensor(svc, "sensor.pv", "kWh")
     _seed_row(svc, mid, datetime(2026, 6, 3, 8, 0), sum_val=10.0)
     _seed_row(svc, mid, datetime(2026, 6, 30, 23, 0), sum_val=70.0)
     w = _sql_wert(svc, "sensor.pv")
-    assert (w.start_wert, w.differenz) == (10.0, 60.0)
+    assert (w.start_wert, w.differenz) == (0.0, 70.0)
 
 
 def test_p13_anker_ueberspringt_null_sum():
@@ -161,8 +161,10 @@ def test_p13_ws_ohne_anker_aeltester_im_monat():
     zeilen = _monatsstunden(2026, 6, sid, startwert=1000.0, pro_stunde=0.5)
     svc, _ = _service_mit_ws({sid: WsSensorMeta("kWh", True, False)}, zeilen)
     w = svc.get_monatswerte([sid], 2026, 6).sensoren[0]
-    assert w.start_wert == 1000.0
-    assert w.differenz == round((len(zeilen[sid]) - 1) * 0.5, 2)
+    # Regel «Anfangsstand 0» (21.11.2026): ohne Zeile davor zählt die erste Zeile (sum 1 000) ganz, wie in HA
+    # (bis dahin: start 1 000, Δ (n − 1) · 0,5).
+    assert w.start_wert == 0.0
+    assert w.differenz == round(1000.0 + (len(zeilen[sid]) - 1) * 0.5, 2)
 
 
 # ── Vorlage §10 (W-R10): R4 und R3 gelten auch für den Monat ─────────────────

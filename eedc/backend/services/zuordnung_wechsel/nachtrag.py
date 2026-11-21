@@ -45,6 +45,10 @@ SATZ_KORREKTUR_NUR_JUENGSTER = ("«Bisherige Werte verwerfen» lässt sich hier 
                                 "dem die Quelle zur vorigen zurückkehrte — dann gilt die Korrektur für die Zeit seit dem Wechsel "
                                 "davor.")
 SATZ_FALSCH_SEIT_NACH_WECHSEL = "«Falsch seit» muss vor dem Wechsel liegen ({zeit} Uhr)."
+SATZ_FALSCH_SEIT_FEHLT = "Für eine Korrektur fehlt «falsch seit» ({feld})."
+#: Die Gründe, die «Grund nachtragen» und die Korrektur über ein Stück annehmen — bis zum Rückbau (Weg B, Sitzung B2) noch mit
+#: der Korrektur; beim Wechsel selbst gelten seit B1 ``abfrage.GRUENDE`` («bleiben», «löschen»).
+GRUENDE_NACHTRAG = (GRUND_FORTSETZUNG, GRUND_KORREKTUR)
 SATZ_NICHT_OFFEN = "Für diesen Wechsel ist kein Grund nachzutragen."
 SATZ_KORREKTUR_ENDGUELTIG = "Eine Korrektur lässt sich nicht mehr ändern."
 SATZ_GRUND_FEHLT = "Wähle, ob die bisherigen Werte bleiben oder verworfen werden."
