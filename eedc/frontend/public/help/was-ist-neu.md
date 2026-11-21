@@ -33,6 +33,8 @@
 
 **Komponenten → Sonstiges: Speicher mit Ladung und Entladung.** Ein Gerät der Kategorie „Speicher“ zeigt auf seiner Komponentenseite jetzt die Ladung und Entladung, die du im Monatsformular unter „Verbrauch/Ladung“ und „Erzeugung/Entladung“ einträgst, dazu Wirkungsgrad, Ersparnis, den Verlauf je Monat und den Jahresvergleich – bisher stand dort 0. → [Einstellungen: Komponenten](HANDBUCH_EINSTELLUNGEN.md#3-komponenten)
 
+**Wärmepumpe: Zusatzkosten der Alt-Heizung je Gerät.** Die bisherige Ersparnis deiner Wärmepumpen, aus der *Auswertungen → ROI* den Amortisations-Fortschritt rechnet, zählte die *Zusatzkosten Alt-Heizung (€/Jahr)* aller Wärmepumpen über alle Monate, in denen irgendeine von ihnen lief – zwei Wärmepumpen nacheinander (die alte bis Juni, die neue ab Juli, je 600 €/Jahr) trugen 600 € zu viel; auch ein Monat ganz ohne Strom und Wärme zählte ein Zwölftel. Jetzt zählt jede Wärmepumpe ihr Zwölftel nur in ihren eigenen Monaten mit Wärme, wie unter *Komponenten → Wärmepumpe* und im Cockpit. Bei mehreren Wärmepumpen oder Monaten ohne Betrieb kann die Ersparnis kleiner werden und die Amortisation später kommen. Anschaffungs- und Stilllegungsmonat zählen weiter als volles Zwölftel; eine Abweichung trägst du als Ausgabe an der Wärmepumpe ein. → [Wärme & Klima: Voraussetzungen](HANDBUCH_WAERME_KLIMA.md#2-voraussetzungen--welcher-zähler-für-welche-anzeige)
+
 **Texte.** Die Reparatur-Werkbank sagt „der laufende Tag ist noch nicht abgeschlossen“; der Lösungsweg „Zählerstand ist gefallen“ sagt genau, wann eedc keine Differenz zeigt; das Handbuch Wärme & Klima sagt, dass „Alternative“ die Heizung ist, die du stattdessen angeschafft hättest – nicht dein Altgerät.
 
 ---

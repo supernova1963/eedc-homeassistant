@@ -2199,7 +2199,7 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 > ⭐ **Warum Teilsummen und keine Sperre.** Die *Arbeitszahl* wird bei gemischten Bauarten gesperrt, weil ein Quotient über zwei Maßstäbe keine Aussage hat. Eine *CO₂-Menge* dagegen ist additiv — für sie genügt die Teilsumme. **Kennzahlen trennen wir je Bauart, Mengen summieren wir.**
 
 
-> **Alternativ-Zusatzkosten (#141):** `alternativ_zusatzkosten_jahr` (€/Jahr) deckt laufende Fixkosten der Vergleichsheizung (Schornsteinfeger, Wartung, Gaszähler-Grundpreis) ab. Berücksichtigt in Aussichten (historisch und Prognose), im HA-Sensor-Export inkl. WP-Sensor, im PDF-Jahresbericht, in der Investitions-Vorschau und im Monats-Layer (`berechne_wp_ersparnis`: Komponenten-Hub, Cockpit → Monat/Jahr, Vorjahresvergleich, Komponenten-Zeitreihe) — überall dieselbe Ersparnis. In historischen Aggregaten anteilig pro erfasstem Monat (`alternativ_zusatzkosten_jahr / 12`).
+> **Alternativ-Zusatzkosten (#141):** `alternativ_zusatzkosten_jahr` (€/Jahr) deckt laufende Fixkosten der Vergleichsheizung (Schornsteinfeger, Wartung, Gaszähler-Grundpreis) ab. Berücksichtigt in Aussichten (historisch und Prognose), im HA-Sensor-Export inkl. WP-Sensor, im PDF-Jahresbericht, in der Investitions-Vorschau und im Monats-Layer (`berechne_wp_ersparnis`: Komponenten-Hub, Cockpit → Monat/Jahr, Vorjahresvergleich, Komponenten-Zeitreihe) — überall dieselbe Ersparnis. In historischen Aggregaten anteilig `alternativ_zusatzkosten_jahr / 12` **je Wärmepumpe über ihre eigenen Monate mit Wärme** — die Summe über mehrere Geräte ist die Summe der Gerätezeilen (N-806; bis 21.11.2026 rechnete die Jahresformel in Aussichten die Zusatzkosten aller Geräte über die Vereinigung ihrer Monate). Ein Monat ohne Wärme (Strom und Wärme 0, nicht erfasst oder Standby nach N-670) trägt kein Zwölftel. **Anschaffungs- und Stilllegungsmonat zählen als volles Zwölftel** (keine Rechnung nach Tagen); eine tatsächliche Abweichung trägt der Anwender als Ausgabe an der Wärmepumpe ein (*Einstellungen → Daten → Monatsdaten*, *+ Sonstige Erträge & Ausgaben erfassen*, Typ *Ausgabe*; #447).
 
 #### Eingabefelder
 
@@ -4205,15 +4205,23 @@ Bisherige_Erträge = Σ(Einspeisung * Vergütung / 100)         (PV)
 Je Wärmepumpe, die eine Heizung ersetzt (N-88: Energieträger „keiner" bringt nichts ein), je Monat:
     Wärme         = waerme_gesamt_kwh(waerme_kwh, Heizwärme, Warmwasser)      # D1, §3.5 (N-391/N-398/N-379)
     Strom         = WP-Strom − Kühlstrom (modus_strom_zeile, gemessen vor abgeleitet)   # Kühlen ersetzt keine Heizung
-    Strom > 0, Wärme ≤ 0  ⇒  der Monat zählt nicht (N-670: Standby, kein Vergleich)
+    Wärme ≤ 0             ⇒  der Monat zählt nicht — weder Stromkosten noch Zwölftel (N-670: Standby;
+                             N-806: Strom und Wärme 0 bzw. nicht erfasst, wie die Gerätezeile 0 €)
     Gas_Preis     = Monatsdaten.gaspreis_cent_kwh                  # Monatswert, wenn gepflegt (#141)
                   ∨ Investition.parameter.alter_preis_cent_kwh     # sonst der Wert an der WP
                   ∨ 12 ct                                          # sonst die Vorgabe (PARAM_WAERMEPUMPE_DEFAULTS = GASPREIS_DEFAULT_CENT)
     Gas_Kosten    = Wärme / η_alt(Energieträger) * Gas_Preis / 100   # 0,90 Gas · 0,85 Öl · 1,0 Strom
     WP_Netzkosten = Strom * wp_preis_cent / 100                    # der GANZE Strom (SOLL S1b); Preis des Monats, §3.5b-V (N-663)
     Ersparnis     = Gas_Kosten - WP_Netzkosten
-  + alternativ_zusatzkosten_jahr × erfasste Monate / 12            # Zusatzkosten anteilig (#141)
+  + je Wärmepumpe: alternativ_zusatzkosten_jahr × gezählte Monate dieser WP / 12   # Zusatzkosten anteilig (#141, N-806)
 ```
+
+> **Summe der Gerätezeilen (N-806):** Die Jahresformel liefert für mehrere Wärmepumpen dieselbe Summe wie ihre Einzelaufrufe
+> (Aufteilung je Gerät in `finanz_zerlegung.py`, Rest 0) und wie die Gerätezeilen (`wp_ersparnis_zeile`). Bis 21.11.2026 stand
+> der Zusatzkosten-Term hinter der Geräteschleife und zählte die Zusatzkosten **aller** Wärmepumpen über die **Vereinigung**
+> ihrer Monate (zwei Geräte nacheinander, A Januar–Juni, B Juli–Dezember, je 600 €/Jahr: 1 466,65 statt 866,64 €), und ein
+> Monat mit Strom und Wärme 0 zählte ein Zwölftel (55,19 € bei 662,28 €/Jahr statt 0 €). Anschaffungs- und Stilllegungsmonat
+> zählen als volles Zwölftel (#447, s. §«Alternativ-Zusatzkosten (#141)»).
 
 > **Der ganze WP-Strom trägt den Netztarif (SOLL Wärme/Klima S1b, N-459), ohne Abschlag für den PV-Anteil.** Der PV-Strom, den die Wärmepumpe verbraucht, ist auf der PV-Seite bereits als Eigenverbrauch gutgeschrieben — ihn hier ein zweites Mal abzuziehen zählte dieselbe Kilowattstunde doppelt (ADR-002/P9). Code: `core/berechnungen/alternativkosten.py::berechne_wp_alternativkosten_ersparnis` (Aussichten, ROI-Fortschritt, Jahres-Ersparnis des HA-Exports); Begründung und Zahlenbeispiel im Kasten zur Planungsformel in [§3.5](#35-wärmepumpe-einsparung).
 

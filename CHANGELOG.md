@@ -120,6 +120,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Texte:** Reparatur-Werkbank „der laufende Tag ist noch nicht abgeschlossen“ statt eines Fachworts; Lösungsweg
   „Zählerstand ist gefallen“ sagt genau, wann eedc keine Differenz zeigt; Handbuch Wärme & Klima: „Alternative“ ist die
   Heizung, die du stattdessen angeschafft hättest, nicht dein Altgerät.
+- **Wärmepumpe: die bisherige Ersparnis zählt die Zusatzkosten der Alt-Heizung je Gerät.** Die bisherige Ersparnis der
+  Wärmepumpen, aus der *Auswertungen → ROI* den Amortisations-Fortschritt und das voraussichtliche Jahr der Amortisation
+  rechnet, zählte die *Zusatzkosten Alt-Heizung (€/Jahr)* aller Wärmepumpen über alle Monate, in denen irgendeine von ihnen
+  lief: zwei Wärmepumpen nacheinander (die alte bis Juni, die neue ab Juli, je 600 €/Jahr) trugen 600 € zu viel. Ebenso
+  zählte ein Monat, in dem eine Wärmepumpe weder Strom noch Wärme hatte, ein Zwölftel. Jetzt zählt jede Wärmepumpe ihr
+  Zwölftel nur in ihren eigenen Monaten mit Wärme — dieselbe Zahl wie die Summe ihrer Monate unter *Komponenten →
+  Wärmepumpe* und im Cockpit. Bei mehreren Wärmepumpen oder Monaten ohne Betrieb kann die bisherige Ersparnis deshalb
+  kleiner werden und die Amortisation später kommen. Anschaffungs- und Stilllegungsmonat zählen weiter als volles
+  Zwölftel; weichen deine Kosten dort ab, trägst du die Abweichung als Ausgabe an der Wärmepumpe ein (Handbuch Wärme &
+  Klima, #447).
 
 ## [4.3.1] - 2026-11-15
 

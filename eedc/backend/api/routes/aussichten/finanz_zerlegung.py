@@ -423,10 +423,10 @@ def roi_und_fortschritt(
     _abzug: dict[int, float] = {}
 
     # Wärmepumpe je Gerät — derselbe Layer-SoT, nur je WP gerufen.
-    # ⚠ Bei MEHREREN WPs mit unterschiedlicher Monatsabdeckung ist die Summe
-    # der Einzelaufrufe nicht bitgleich zum Gesamtaufruf: der anteilige
-    # Zusatzkosten-Term rechnet dort mit der VEREINIGUNG der Monate. Die
-    # Differenz landet sichtbar im Rest, statt eine Zeile zu verfälschen.
+    # N-806 (21.11.2026): die Summe der Einzelaufrufe ist der Gesamtaufruf —
+    # jede WP zählt ihr Zwölftel Zusatzkosten nur in ihren eigenen Monaten mit
+    # Wärme. Bis dahin rechnete der Gesamtaufruf den Zusatzkosten-Term über die
+    # VEREINIGUNG der Monate aller WPs; die Differenz stand hier als Rest.
     for _wp in waermepumpen:
         _direkt[_wp.id] = _direkt.get(_wp.id, 0.0) + berechne_wp_alternativkosten_ersparnis(
             [_wp],

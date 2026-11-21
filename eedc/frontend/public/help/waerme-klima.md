@@ -117,6 +117,8 @@ Diese Tabelle ist der Kern dieses Handbuchs. Sie beantwortet die Frage, die fast
 
 > ⚑ **Der Strom der Wärmepumpe wird immer voll gerechnet, auch der Teil aus der eigenen PV — dessen Wert steht auf der PV-Seite als Eigenverbrauch.** Sonst zählte dieselbe Kilowattstunde zweimal.
 
+> ⚑ **Die *Zusatzkosten Alt-Heizung (€/Jahr)*** (am Gerät unter *Einstellungen → Komponenten*, Abschnitt *Vergleich mit alter Heizung (ROI)*) **zählen je Monat mit Wärme ein volles Zwölftel — auch im Monat der Anschaffung und im Monat der Stilllegung.** eedc rechnet nicht nach Tagen. Weichen deine tatsächlichen Kosten in so einem Monat ab (die alte Heizung lief noch ein paar Tage mit, der Grundpreis lief weiter), trägst du die Abweichung als Ausgabe an der Wärmepumpe ein: *Einstellungen → Daten → Monatsdaten*, im Monat im Abschnitt der Wärmepumpe *+ Sonstige Erträge & Ausgaben erfassen*, Typ *Ausgabe*. Ein Monat ohne Wärme (Strom und Wärme 0 oder nur Strom im Standby) trägt kein Zwölftel — dort hat die Wärmepumpe nichts ersetzt. Bei mehreren Wärmepumpen zählt jede ihre Zusatzkosten nur in ihren eigenen Monaten.
+
 > ### ⚠ Monat da, Tag leer — das ist der häufigste Fall und kein Fehler
 >
 > Monats- und Tageswerte kommen aus **zwei verschiedenen Quellen**:
