@@ -31,7 +31,7 @@ describe('Lab-K W1 — Ein- und Mehrzahl', () => {
   })
   it('ein Tag mit Fehler: «1 Tag konnte nicht neu gebildet werden.»', () => {
     const z = lauf({ art: 'korrektur' as KorrekturLaufStand['art'], tage: 3, fehler: [{ tag: '2026-11-01', grund: 'x' }] })
-    expect(fortschrittSatz(z)).toBe('Korrektur abgeschlossen, 3 Tage bearbeitet. 1 Tag konnte nicht neu gebildet werden.')
+    expect(fortschrittSatz(z)).toBe('3 Tage neu gebildet. 1 Tag konnte nicht neu gebildet werden.')
   })
 })
 

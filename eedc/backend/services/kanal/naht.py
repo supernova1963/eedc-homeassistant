@@ -19,7 +19,7 @@ mit der Teilung schon zählt. **U3-K (B1):** endet an der Naht die Spanne mehrer
 (``rohstand.rand_der_naht``), endet die alte Periode am letzten Stand vor dem ersten Höhenwechsel; die Stände dazwischen zählen
 nicht (Kanal = Reihe).
 
-**Nachtrag** (``nachtrag_fortsetzung``; Aufrufer: Einstieg «Zähler getauscht» und «Grund nachtragen», Sitzung 4 — auch im
+**Nachtrag** (``nachtrag_fortsetzung``; Aufrufer: Einstieg «Zähler getauscht», Sitzung 4 — auch im
 Nachbau-Abschnitt vor der HA-Statistik, Familie Mitschrift, ``nachfuellen._rohstaende``): für schon geschriebene
 Zeilen eine Quellzeile mit ``gueltig_ab = H`` und ``offset = offset_alt − (wert(H) − wert(vorige Zeile))`` — die
 Naht-Stunde trägt danach keinen Zuwachs, keine Kanalzeile wird umgeschrieben (Rohstände braucht er nicht; sie reichen nur

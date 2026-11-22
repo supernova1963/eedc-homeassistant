@@ -39,7 +39,7 @@ Ansetzen die schon geschriebene Zeile ``H − 1`` ohne sie wieder zu füllen.
 6. abgeschlossene Tage ab dem Tag von G, die einen Schlüssel des Felds tragen, im Hintergrund neu bilden (``korrektur_lauf``,
    ohne Sperre: die Zeile trägt keinen Lauf).
 
-**Auslöser:** nach dem Commit der Route (Feld-Route, Preset, «Grund nachtragen»), wenn HA die neue Statistik schon führt; sonst
+**Auslöser:** nach dem Commit der Route (Feld-Route, Preset), wenn HA die neue Statistik schon führt; sonst
 nach jedem Stundenlauf für offene Zeilen (``offene_ansetzen``). ``kanal/schreiber._spiegel`` lässt einen Schlüssel mit offener
 Zeile aus. HA nicht erreichbar, noch keine Zeile des neuen oder ein offener Lauf am Schlüssel ⇒ die Zeile bleibt ``offen``
 (``Lage.wartet``) und liest so lange wie eine Naht ohne Rand-Werte. Trägt der Kanal an G keinen Spiegel der alten oder der

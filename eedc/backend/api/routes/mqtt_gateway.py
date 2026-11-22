@@ -203,8 +203,8 @@ async def _fragepflichtig(db: AsyncSession, anlage, vorher) -> list:
 
 #: Ablehnung bzw. Nennung, wenn eine Gateway-Zeile die Quelle eines Felds mit eigenen Werten wechseln würde.
 SATZ_GRUND_UEBER_FLAECHE = ("Die Zeile ändert die Quelle von {felder}, und dieses Feld hat eigene Werte. Wechsle die Quelle "
-                            "in den Datenquellen am Feld — dort fragt eedc, ob der neue Sensor dasselbe weiter misst oder "
-                            "bisher der falsche zugeordnet war.")
+                            "in den Datenquellen am Feld — dort fragt eedc, ob die bisherigen Werte bleiben oder die Daten "
+                            "vor der Änderung gelöscht werden.")
 
 
 def _schluessel(fragen) -> str:

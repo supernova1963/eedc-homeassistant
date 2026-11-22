@@ -15,7 +15,6 @@ const kanalAbgleich = vi.fn()
 const kanalAuswahl = vi.fn()
 const planFn = vi.fn()
 const executeFn = vi.fn()
-const korrekturLauf = vi.fn()
 
 vi.mock('../../api/repair', async (importOriginal) => {
   const echt = await importOriginal<typeof import('../../api/repair')>()
@@ -30,11 +29,6 @@ vi.mock('../../api/repair', async (importOriginal) => {
       execute: (...args: unknown[]) => executeFn(...args),
     },
   }
-})
-
-vi.mock('../../api/datenquellen', async (importOriginal) => {
-  const echt = await importOriginal<typeof import('../../api/datenquellen')>()
-  return { ...echt, datenquellenApi: { ...echt.datenquellenApi, korrekturLauf: (...a: unknown[]) => korrekturLauf(...a) } }
 })
 
 import RepairWorkbench from './RepairWorkbench'
@@ -174,25 +168,5 @@ describe('RepairWorkbench — Werte vor dem Sensorbeginn verwerfen (E-S3-5)', ()
     renderMitProvidern(<RepairWorkbench anlageId={7} />)
     waehleVerwerfen()
     expect(await screen.findByText(/Kein Feld dieser Anlage hat einen Sensortausch/)).toBeInTheDocument()
-  })
-
-  it('Sensorwechsel 3b-K (Mutant F09): nach dem Ausführen zeigt die Werkbank den Fortschritt des Laufs', async () => {
-    kanalAuswahl.mockResolvedValue({ kanaele: auswahl() })
-    planFn.mockResolvedValue({ ...planAntwort(), plan: { ...planAntwort().plan, estimated_changes: { kanalzeilen: 0 },
-      warnings: ['Das Füllen aus Home Assistant aus dem letzten Lauf steht noch aus …'] } })
-    executeFn.mockResolvedValue({
-      plan_id: 'p1', anlage_id: 7, operation: 'verwerfen_vor_quellbeginn', executed_at: '2026-10-15T10:01:00Z',
-      actual_changes: {}, audit_log_ids: [], operation_summary: { lauf: 'L1', fuellen_nachgeholt: 1 },
-    })
-    korrekturLauf.mockResolvedValue({
-      lauf: 'L1', sensor_key: 'basis:einspeisung', status: 'fertig', tage: 3, erledigt: 3, fehler: [], beginn: null,
-      ende: null, fuellen_offen: false })
-    renderMitProvidern(<RepairWorkbench anlageId={7} />)
-    waehleVerwerfen()
-    fireEvent.change(await screen.findByRole('combobox', { name: 'Feld' }), { target: { value: 'basis:einspeisung' } })
-    fireEvent.click(screen.getByRole('button', { name: /Plan erstellen/ }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Operation ausführen' }))
-    expect(await screen.findByText('Korrektur abgeschlossen, 3 Tage bearbeitet.')).toBeInTheDocument()
-    expect(korrekturLauf).toHaveBeenCalledWith(7, 'L1')
   })
 })

@@ -4,8 +4,7 @@
  *
  * Liest `GET /datenquellen/{anlage}/korrektur-lauf/{lauf}` alle paar Sekunden, solange der Lauf `laeuft`; zeigt nur die
  * Backend-Zahlen (Tage gesamt, erledigt, Tage mit Fehler) — der Client rechnet nichts. Steht an der Datenquellen-Fläche
- * (nach einer Korrektur im Dialog und für jeden laufenden Lauf beim Laden) und am Ergebnis der Werkbank-Operation «Werte vor
- * dem Sensorbeginn verwerfen». Ein Abruf-Fehler hält das Nachfragen nicht an: es fragt mit wachsendem Abstand weiter,
+ * (nach «Übernehmen» im Dialog und für jeden laufenden Lauf beim Laden). Ein Abruf-Fehler hält das Nachfragen nicht an: es fragt mit wachsendem Abstand weiter,
  * höchstens `FORTSCHRITT_VERSUCHE` Mal hintereinander; ein unbekannter Lauf (404) beendet es sofort.
  *
  * U2 Lauf b (a2 E-2): der Lauf eines Wechsels «bleiben» (`art: 'ansetzen'`) ist keine Korrektur — er liest die Werte nach dem
@@ -36,6 +35,9 @@ export const ANSETZEN_FERTIG_TAGE = (tage: string) => `Werte nach dem Sensorwech
 export const LOESCHEN_LAEUFT = 'Daten vor der Änderung gelöscht — eedc liest, was die neue Quelle führt, und bildet die Tage neu …'
 export const LOESCHEN_FERTIG = 'Daten vor der Änderung gelöscht.'
 export const LOESCHEN_FERTIG_TAGE = (tage: string) => `Daten vor der Änderung gelöscht, ${tage} neu gebildet.`
+/** Ein Lauf aus einem Stand vor Weg B (Art `korrektur`, nur noch zu Ende geführt). */
+export const LAUF_LAEUFT = 'Tage werden im Hintergrund neu gebildet …'
+export const LAUF_FERTIG = 'Tage neu gebildet.'
 
 /** Der Satz zum Stand — nur Anzeige der Backend-Zahlen. */
 export function fortschrittSatz(z: KorrekturLaufStand): string {
@@ -52,10 +54,9 @@ export function fortschrittSatz(z: KorrekturLaufStand): string {
     if (z.tage === 0) return ANSETZEN_LAEUFT
     return `Tage werden im Hintergrund neu gebildet: ${fmtZahl(z.erledigt)} von ${fmtZahl(z.tage)}.${mitFehler}`
   }
-  if (z.status === 'fertig') {
-    return z.tage > 0 ? `Korrektur abgeschlossen, ${tageText(z.tage)} bearbeitet.${mitFehler}` : 'Korrektur abgeschlossen.'
-  }
-  if (z.tage === 0) return 'Korrektur läuft …'
+  // Ein Lauf ohne Art (`korrektur`) stammt aus einem Stand vor Weg B — die Korrektur gibt es nicht mehr (B3b: neutrale Sätze).
+  if (z.status === 'fertig') return z.tage > 0 ? `${tageText(z.tage)} neu gebildet.${mitFehler}` : LAUF_FERTIG
+  if (z.tage === 0) return LAUF_LAEUFT
   return `Tage werden im Hintergrund neu gebildet: ${fmtZahl(z.erledigt)} von ${fmtZahl(z.tage)}.${mitFehler}`
 }
 

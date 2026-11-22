@@ -181,7 +181,7 @@ class RuecksprungChecks:
                 self.db, anlage.id, sensor_key, von, bis,
                 naehte=tuple(await fortsetzungs_naehte(self.db, anlage.id, sensor_key)),
             )
-            # Sensorwechsel U3 b (G4/G7): einen Rückgang, den «Zählerstand springt» oder der versetzte Abschnitt nennt, nennt
+            # Sensorwechsel U3 b (G4): einen Rückgang, den «Zählerstand springt (MQTT)» nennt, nennt
             # dieser Befund nicht noch einmal (ein Befund je Ursache).
             spruenge = [s for s in spruenge if not _benannt(s[0], benannt.get(sensor_key))]
             if spruenge:

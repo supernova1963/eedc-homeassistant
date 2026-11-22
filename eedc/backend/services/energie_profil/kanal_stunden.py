@@ -665,7 +665,7 @@ async def _komponenten_der_tageszeilen(db: AsyncSession, anlage_id: int, von: da
 async def kanal_schluessel_des_tages(db: AsyncSession, anlage_id: int, datum: date) -> frozenset[str]:
     """Die Schlüssel, deren Tagesmenge am Tag ``datum`` aus den Kanälen kommt: die Kanäle jeder Gruppe mit Wahl ``kanal``
     (``kanal_stundentag`` — dieselbe Wahl je Gruppe wie ``tages_eingaenge``). Ein Zählerfeld, das fehlt, rechnet an dem
-    Tag über die Standreihe (Daten-Checker «Zählerstände – versetzter Abschnitt», ``daten_checker/datenquelle/versatz.py``)."""
+    Tag über die Standreihe."""
     tag = await kanal_stundentag(db, anlage_id, datum)
     return frozenset(k for gs in tag.gruppen.values() for k in gs.mengen)
 

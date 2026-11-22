@@ -4,7 +4,7 @@ Rechenweg ``opus-berichte/SENSORWECHSEL-U2-RECHENWEG-2026-11-19.md`` F9/F10, Bau
 Der Dialog «Warum wechselt die Quelle?» stellt **eine** Frage: die bisherigen Werte bleiben oder verwerfen. Bei «bleiben»
 zwischen zwei HA-Sensoren rechnet eedc wie Home Assistant (``ansatz.py``: der alte Sensor bis zu seinem letzten Wert, der neue
 ab seinem ersten). Was dafür geschieht, sagt die Prüf-Antwort — **Vorschau = Lauf**: dieselbe ``ansatz.lage`` an einer
-gedachten Wechsel-Zeile (``pruef_zeile``), wie sie die Route oder «Grund nachtragen» anlegen würde.
+gedachten Wechsel-Zeile (``pruef_zeile``), wie sie die Route anlegen würde.
 
 * ``angaben``: seit wann HA den neuen Sensor führt (``seit`` = Beginn seiner ersten Stundenzeile), Überlappung, die Stunde, ab der
   der neue zählt (``zaehlt_ab``), bei Überlappung Vorgabe und zulässiger Bereich für «Der neue Sensor zählt ab» (frühestens

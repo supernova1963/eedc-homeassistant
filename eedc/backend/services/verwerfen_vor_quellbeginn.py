@@ -463,8 +463,8 @@ def _saetze_danach(la: Lage) -> list[str]:
     return s
 
 
-#: Der Rückweg (Wortlaut wie bis zum Rückbau des Korrektur-Kerns ohne Home Assistant, Sensorwechsel Weg B B3a).
-SATZ_RUECKWEG = "Die Korrektur lässt sich in eedc nicht rückgängig machen — der Rückweg ist eine Sicherung der eedc-Datenbank."
+#: Der Rückweg (Sensorwechsel Weg B, B3a; B3b: «Das Verwerfen» statt «Die Korrektur» — die Korrektur gibt es nicht mehr).
+SATZ_RUECKWEG = "Das Verwerfen lässt sich in eedc nicht rückgängig machen — der Rückweg ist eine Sicherung der eedc-Datenbank."
 
 
 def klartext(la: Lage) -> list[str]:

@@ -11,45 +11,46 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Added
 
-- **Sensorwechsel: eedc fragt, warum die Quelle eines Felds wechselt.** Änderst du unter *Einstellungen → Datenquellen* die
-  Zuordnung eines Felds, das schon eigene Werte hat, öffnet sich der Dialog „Warum wechselt die Quelle?“ mit zwei Antworten:
-  „Bisherige Werte bleiben — der neue Sensor setzt fort (Zähler oder Gerät getauscht, anderer Sensor für dasselbe Gerät)“
-  oder „Daten vor der Änderung löschen — das Feld beginnt mit dem neuen Sensor neu“. Unter „Was danach geschieht“ steht, bevor
-  etwas geändert wird, was eedc tut. „Bleiben“ zwischen zwei Sensoren aus Home Assistant rechnet wie Home Assistant mit
-  beiden (die Stunde des Wechsels zählt beide Sensoren; haben sie eine Zeit lang gleichzeitig gezählt, wählst du unter „Der
-  neue Sensor zählt ab“ die Stunde). „Löschen“ löscht nur die Daten dieses Felds vor der Änderung; danach verhält sich das
-  Feld, als wäre der neue Sensor von Anfang an zugeordnet — was Home Assistant für ihn führt, übernimmt eedc, davor zeigt es
-  „—“; alle anderen Felder bleiben, wie sie sind. Gespeicherte Monatswerte bleiben: der Dialog nennt die Monate und den Weg,
-  sie unter „Monatsdaten“ von Hand oder mit „Aus HA laden“ anzugleichen. „Löschen“ lässt sich nicht zurücknehmen — der
-  Dialog sagt es vorher.
-- **„Zähler getauscht (gleiche Quelle)“ am Feld.** Für einen Zähler aus Home Assistant nennt der Dialog den Weg in Home
-  Assistant („Summe anpassen“) und trägt nichts ein. Bei MQTT entscheidest du, ob an einer Zeit ein Tausch eingetragen wird:
-  eedc zeigt die Zählerstände vor und nach der gewählten Zeit und die Menge, die danach nicht zählt, und sagt, ob es dort einen
-  Sprung sieht; eingetragen wird erst, wenn der neue Zähler einen Stand gemeldet hat. Je Stunde und Feld geht ein Eintrag.
-- **Neue Daten-Checker-Befunde** zur Herkunft der Zählerstände: „Zählerstände – Zählerstand springt“ (Knopf „Aus Home
-  Assistant neu übernehmen“), „Zählerstände – Zählerstand springt (MQTT)“ (Knopf „Zähler getauscht“), „Zählerstände – Daten
-  vor der Änderung gelöscht“ (Auskunft „Was gilt“) und „Zählerstände – Gespeicherter Monatswert passt nicht mehr“ (Knopf
-  „Monat öffnen“).
+- **Sensorwechsel: eedc fragt, was mit den bisherigen Werten geschieht.** Änderst du unter *Einstellungen → Datenquellen*
+  die Quelle eines Felds, das schon eigene Werte hat, fragt der Dialog „Warum wechselt die Quelle?“ — mit genau zwei
+  Antworten: „Bisherige Werte bleiben — der neue Sensor setzt fort (Zähler oder Gerät getauscht, anderer Sensor für
+  dasselbe Gerät)“ oder „Daten vor der Änderung löschen — das Feld beginnt mit dem neuen Sensor neu“. Unter „Was danach
+  geschieht“ steht, bevor etwas geändert wird, was eedc tut. Bei „bleiben“ zwischen zwei Sensoren aus Home Assistant rechnet
+  eedc wie Home Assistant mit beiden: den bisherigen bis zu seinem letzten Wert, den neuen ab seinem ersten; haben sie eine
+  Zeit lang gleichzeitig gezählt, wählst du unter „Der neue Sensor zählt ab“ die Stunde. Bei „löschen“ gehen nur die Daten
+  dieses Felds aus der Zeit vor der Änderung weg; danach zeigt das Feld, was Home Assistant für den neuen Sensor führt, davor
+  „—“; jedes andere Feld bleibt, wie es ist. Gespeicherte Monatswerte bleiben bei beiden Antworten — der Dialog nennt die
+  Monate und den Weg, sie unter „Monatsdaten“ von Hand oder mit „Aus HA laden“ anzugleichen. „Löschen“ lässt sich nicht
+  zurücknehmen. Am Feld gibt es dazu **„Zähler getauscht (gleiche Quelle)“**: für einen Zähler aus Home Assistant nennt der
+  Dialog den Weg dort („Summe anpassen“) und trägt nichts ein; bei MQTT entscheidest du — eedc zeigt die Zählerstände vor
+  und nach der gewählten Zeit, die Menge, die danach nicht zählt, und ob es dort einen Sprung sieht, und trägt ein, sobald der
+  neue Zähler gemeldet hat. Neue Daten-Checker-Befunde: „Zählerstände – Zählerstand springt“ (Knopf „Aus Home Assistant neu
+  übernehmen“), „Zählerstände – Zählerstand springt (MQTT)“ (Knopf „Zähler getauscht“), „Zählerstände – Gespeicherter
+  Monatswert passt nicht mehr“ (Knopf „Monat öffnen“) und die Auskunft „Zählerstände – Daten vor der Änderung gelöscht“
+  (sagt danach je Feld, was gilt). Der Hinweis nach einer geänderten Zuordnung („Verstanden“, „Zur Reparatur-Werkbank“)
+  entfällt; an seine Stelle tritt der Dialog. Ein Wechsel, den du vor diesem Update vorgenommen hast, bleibt, wie er ist.
+  Was in welchem Fall geschieht — in eedc, in Home Assistant und was du tun kannst —, steht im Handbuch Einstellungen
+  §7.7 „Was passiert, wenn …“.
+
+  **Was sich an bestehenden Zahlen ändern kann:** Der Tag und der Monat, an dem die Statistik eines Sensors in Home
+  Assistant beginnt, zählen deren erste Stunde jetzt mit — wie Home Assistant (ab dem Stand 0). Tagesansicht, Monatssicht,
+  „Aus HA laden“ und der Vorschlag im Monatsabschluss können für diesen Tag und Monat um diese erste Stunde höher sein als
+  bisher (Beispiel aus der Messung: Netzbezug 47,5 → 48,0 kWh). Der erste Tag eines neuen Zählers zeigt einen Sprung beim
+  ersten Wert wie Home Assistant; der Weg ist, den Wert in Home Assistant zu berichtigen („Summe anpassen“) und danach im
+  Daten-Checker „Aus Home Assistant neu übernehmen“. Die Auskunft „Tage mit Mengen aus den gespeicherten Stundenwerten“
+  („… Tage ohne Kanal-Deckung …“) kann einen Tag weniger nennen — der Tag, an dem eine Statistik beginnt, zählt nicht mehr dazu. Am ersten Tag einer Statistik kann „Abweichung zu Home
+  Assistant an einem Tag (PV)“ den Tag nennen, wenn seine letzte Stunde viel trägt (der Vergleichswert endet um 23 Uhr; der
+  Lösungsweg sagt es). Gespeicherte Monatswerte und gespeicherte Tageswerte ändern sich nicht von selbst. Ein leerer Tag sagt
+  jetzt nur „Zähler zugeordnet, aber für diesen Tag liegen keine Zählerstände vor — eedc bildet für diesen Tag deshalb keinen
+  Tageswert.“ (bisher versprach der Satz ein Nachrechnen in der Reparatur-Werkbank).
 - **Menüwege von Home Assistant 2026.11** in Befunden, Lösungswegen, Handbüchern und Dialogen: „Einstellungen → Werkzeuge →
   Statistik (in älteren Home-Assistant-Versionen: Entwicklerwerkzeuge → Statistik)“, „Summe anpassen“, „Zeitpunkt auswählen“,
   „Neuer Wert“, „Anpassen“.
-- **Was sich an bestehenden Zahlen ändern kann:** an Feldern mit einem eingetragenen Wechsel — die Stunde und der Tag des
-  Wechsels zählen wie Home Assistant bzw. aus den Zählerständen vor und nach dem Tausch; nach „Daten vor der Änderung
-  löschen“ zeigt das Feld davor nur noch, was Home Assistant für den neuen Sensor führt. Der Monatsabschluss nennt am
-  Vorschlag „Zählerstand“, wenn im Monat ein Wechsel eingetragen ist. **Erster Tag und Monat einer Statistik:** beginnt die
-  Statistik eines Sensors in Home Assistant (ein neuer Sensor), zählt eedc ihre erste Stunde jetzt wie Home Assistant (ab
-  dem Stand 0): Tagesansicht, Monatssicht, „Aus HA laden“ und der Vorschlag im Monatsabschluss können für diesen Tag und
-  Monat um diese erste Stunde höher sein als bisher (Beispiel aus der Messung: Netzbezug 47,5 → 48,0 kWh), und der Tag zählt
-  nicht mehr als „Tag ohne Kanal-Deckung“. Am ersten Tag kann „Abweichung zu Home Assistant“ den Tag nennen, wenn seine letzte
-  Stunde viel trägt (der Vergleichswert aus Home Assistant endet um 23 Uhr; der Lösungsweg sagt es).
-  Gespeicherte Monatswerte und die gespeicherten Tageswerte ändern sich nicht von selbst — Tagesansicht und Monatssicht lesen
-  diesen Tag aus dem HA-Spiegel. Sonst bleibt jede Zahl, wie sie war. Ein leerer Tag sagt jetzt nur „Zähler
-  zugeordnet, aber für diesen Tag liegen keine Zählerstände vor — eedc bildet für diesen Tag deshalb keinen Tageswert.“
-  (bisher versprach der Satz ein Nachrechnen in der Reparatur-Werkbank). Der Hinweis nach einer geänderten Zuordnung, der
-  vorher an dieser Stelle stand, entfällt; an seine Stelle tritt der Dialog.
 
 ### Changed
 
+- **Reparatur-Werkbank „Werte vor dem Sensorbeginn verwerfen“:** hebt verzeichnete Sensorwechsel des Felds bis zur ersten
+  Stunde ab dem gewählten Zeitpunkt mit auf — danach rechnet eedc für das Feld, als hätte es den Wechsel nicht gegeben.
 - **Auswertungen → Prognose: die Abweichung heißt überall „MAPE“** — die Kachel nannte die mittlere prozentuale
   Abweichung oben „MAPE“, der Satz zur besten Quelle, die Kopfzeile „Korrektur ausgesetzt“ und der Hinweis am Ausreißer
   dieselbe Zahl „MAE“. Jetzt steht überall „MAPE“ (Mittel der täglichen Abweichung in Prozent vom IST); die Zahlen

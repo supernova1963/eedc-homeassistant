@@ -20,7 +20,9 @@ langer Ruhe (Wallbox nach Wochen, Wärmepumpe im ersten kalten Monat, PV nach Sc
 Zählers, der bisher nur Standby kannte; ein Zähler, der in den Tagen davor an weniger als 14 Tagen etwas gezählt hat
 (Neubeginn); ein Zähler, der bei 0 neu beginnt; ein Sensor, der kurz 0 gemeldet hat und
 zurückkehrt ([§4.8b](#48b-zaehlerstaende--sprung-in-home-assistant)); der Wechsel zwischen zwei Sensoren
-([Handbuch Einstellungen §7.7](HANDBUCH_EINSTELLUNGEN.md)). Ein gefallener Zählerstand steht in
+([Handbuch Einstellungen §7.7a](HANDBUCH_EINSTELLUNGEN.md#77a-die-frage-beim-wechsel-zwei-antworten)); die erste Stunde einer
+neuen Statistik, auch mit einem großen Wert (eine importierte Statistik, ein Zähler, der beim ersten Wert springt — eedc zeigt
+sie wie Home Assistant, [Handbuch Einstellungen §7.7c](HANDBUCH_EINSTELLUNGEN.md#77c-was-passiert-wenn)). Ein gefallener Zählerstand steht in
 [§4.8c](#48c-zaehlerstaende--rueckgang-in-home-assistant) bzw. bei Verbrauchszählern in [§4.23](#423-verbrauchszaehler-zaehlerstaende).
 
 **Zählerstände** (Gas, Wasser, Öl, Kilometerstand): eedc rechnet dort mit dem Stand, den der Sensor anzeigt, nicht mit der

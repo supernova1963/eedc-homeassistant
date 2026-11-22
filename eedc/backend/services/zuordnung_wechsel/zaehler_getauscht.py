@@ -145,7 +145,8 @@ SATZ_EIN_EINTRAG = "Für die Stunde bis {bis} Uhr ist danach kein weiterer Tausc
 SATZ_LIVE = ("Die Live-Anzeige rechnet direkt aus den Zählerständen: sie zeigt den Sprung am Tag des Tauschs unter „heute“ "
              "und am Tag danach unter „gestern“ weiter; Tag, Monat und Jahr zählen ihn nach dem Eintrag nicht.")
 SATZ_NICHT_MOEGLICH = ("Für die Zeit des Tauschs ({zeit}) kann eedc hier nichts eintragen: für diese Zeit hat eedc keine Werte "
-                       "dieses Zählers, die sich überbrücken lassen (etwa weil eine Korrektur sie verworfen hat).")
+                       "dieses Zählers, die sich überbrücken lassen (etwa weil sie mit „Daten vor der Änderung löschen“ "
+                       "oder in der Reparatur-Werkbank mit „Werte vor dem Sensorbeginn verwerfen“ entfernt wurden).")
 
 
 @dataclass
@@ -399,6 +400,15 @@ def _saetze_schritt(la: Lage) -> list[str]:
             SATZ_EIN_EINTRAG.format(bis=_zeit(ab_ts_aus(la.getauscht_am)))]
 
 
+def _live_zeigt_sprung(la: Lage) -> bool:
+    """Lab-Durchlauf 2b W13: der Satz zur Live-Anzeige nur, wenn es einen Sprung gibt — der Stand wechselt in der Stunde
+    eindeutig die Höhe (R1) oder der Schritt hebt sich ab (R2 mit ``SATZ_HINWEIS_UNKLAR``); nicht neben
+    ``SATZ_HINWEIS_KEIN_SPRUNG``."""
+    from backend.services.zuordnung_wechsel.rohstand import SPRUNG
+
+    return la.rohstand == SPRUNG or (la.rohstand == ROH_SCHRITT and la.abgehoben)
+
+
 def _saetze_fortsetzung(la: Lage) -> list[str]:
     from backend.core.zahlenformat import fmt_zahl
 
@@ -416,7 +426,7 @@ def _saetze_fortsetzung(la: Lage) -> list[str]:
         s.append(SATZ_NACHTRAG.format(stunde=_zeit(datetime.fromtimestamp(la.nachtrag_ts))))
         if la.zuwachs is not None:
             s.append(SATZ_NACHTRAG_BISHER.format(zuwachs=fmt_zahl(la.zuwachs, 2), einheit=la.einheit or "kWh"))
-    if la.rohstand is not None and la.heute is not None and (la.heute - la.getauscht_am.date()).days <= 1:
+    if _live_zeigt_sprung(la) and la.heute is not None and (la.heute - la.getauscht_am.date()).days <= 1:
         s.append(SATZ_LIVE)
     if la.vor_heute and la.tag_fest is not None:
         s.append(SATZ_TAG_FEST.format(tag=la.tag_fest[0].strftime("%d.%m.%Y"), wert=fmt_zahl(la.tag_fest[1], 2),

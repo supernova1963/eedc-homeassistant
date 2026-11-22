@@ -24,6 +24,8 @@ Stunde trägt und mehr als zehnmal so groß ist wie die Schritte der 24 Stunden 
 ein Zähler mit weniger als 14 Tagen mit Zuwachs (Neubeginn); die erste gewöhnliche Stunde nach Wochen mit nur Standby (eine
 Wallbox vor dem ersten Auto, eine Wärmepumpe nach dem Sommer); ein Stand, der um weniger als ein Zehntel fällt und in der
 nächsten Stunde zurückkehrt; eine Stunde, an der ein Zählertausch schon eingetragen
-ist.
+ist. **Grenze PV- und Einspeise-Felder:** springt dort der Zählerstand, zählt eedc die ganze Stunde nicht (die
+Plausibilitätsgrenze greift) — auch ihre echte Menge nicht —, und diese Kategorie nennt sie nicht. Der Weg ist dann
+«Zähler getauscht» am Feld selbst; der Dialog liest die Zählerstände ([Handbuch Einstellungen §7.7c](HANDBUCH_EINSTELLUNGEN.md#77c-was-passiert-wenn)).
 
 ---

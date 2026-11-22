@@ -13,7 +13,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import SensorwechselDialog, {
   GRUND_BLEIBEN_HA_FOLGE, GRUND_FORTSETZUNG, GRUND_FORTSETZUNG_FOLGE, GRUND_LOESCHEN, ZAEHLT_AB_LABEL,
 } from './SensorwechselDialog'
-import { ANSETZEN_FERTIG_TAGE, ANSETZEN_LAEUFT, WartendeWechsel, fortschrittSatz } from './KorrekturFortschritt'
+import { ANSETZEN_FERTIG_TAGE, ANSETZEN_LAEUFT, LAUF_LAEUFT, WartendeWechsel, fortschrittSatz } from './KorrekturFortschritt'
 import type { BleibenAngaben, KorrekturLaufStand, QuellePruefung } from '../../api/datenquellen'
 
 const BLEIBEN: BleibenAngaben = {
@@ -115,7 +115,8 @@ describe('Sensorwechsel U2 Lauf b — Nachlauf und Wartegründe an der Fläche',
     for (const z of [stand({ art: 'ansetzen' }), stand({ art: 'ansetzen', status: 'fertig' })]) {
       expect(fortschrittSatz(z)).not.toMatch(/Korrektur/)
     }
-    expect(fortschrittSatz(stand({}))).toBe('Korrektur läuft …')
+    // B3b: ein Lauf ohne Art (Stand vor Weg B) heißt ebenso nicht «Korrektur».
+    expect(fortschrittSatz(stand({}))).toBe(LAUF_LAEUFT)
   })
 
   it('(6) wartende Wechsel: Feld und Satz des Backends', () => {

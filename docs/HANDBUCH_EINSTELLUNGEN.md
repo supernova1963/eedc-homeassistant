@@ -899,109 +899,91 @@ Ordnest du einem Feld eine andere Quelle zu (oder kehrst ein Vorzeichen um), gil
 
 Praktisch heißt das: Wer eine neue Komponente ergänzt (zweiter Wechselrichter, weitere Module, ein Speicher), findet sie in Live und ab dem laufenden Tag überall wieder — in der Vergangenheit aber nicht.
 
-**Hat ein Zähler schon eigene Werte, fragt eedc nach dem Grund.** Wechselst du die Quelle eines Zählerfelds, das schon
-eigene Werte hat — anderer HA-Sensor, anderes Gateway-Topic oder anderer Faktor, Gateway statt Inbound —, öffnet sich **vor
-dem Speichern** der Dialog **„Warum wechselt die Quelle?"**. Er nennt, seit wann das Feld Werte hat, und — wo bekannt — den
-letzten Zählerstand der bisherigen und den Zählerstand der neuen Quelle. Er hat genau zwei Antworten — die bisherigen
-Werte bleiben, oder die Daten dieses Felds vor der Änderung werden gelöscht:
+**Der Maßstab ist Home Assistant.** Für ein Feld mit einem Sensor aus Home Assistant zeigt eedc, was Home Assistant für diesen Sensor führt — Stunde für Stunde, ab der ersten Stunde seiner Statistik. Wo Home Assistant für eine Zeit nichts führt, zeigt eedc „—“; wo ein Tag in Home Assistant nicht vollständig ist, ist er es in eedc auch. eedc schätzt, verteilt und überbrückt nichts. Bei MQTT bildet eedc die Stundenmengen aus den gemeldeten Zählerständen nach derselben Regel wie Home Assistant. Wie eedc rechnet, steht in der [Berechnungs-Referenz](BERECHNUNGEN.md#beginn-einer-statistik-und-löschen-so-rechnet-eedc-so-rechnet-home-assistant).
 
-- **„Bisherige Werte bleiben — der neue Sensor setzt fort (Zähler oder Gerät getauscht, anderer Sensor für dasselbe
-  Gerät)"** — **zwischen zwei Sensoren aus Home Assistant** rechnet eedc wie Home Assistant mit beiden: den bisherigen bis zu
-  seinem letzten Wert, den neuen ab seinem ersten; zwischen den Zählerständen der zwei Sensoren rechnet eedc keine Menge.
-  Unter **„Was danach geschieht"** steht, bevor etwas geändert wird, seit wann Home Assistant den neuen Sensor führt, ab
-  welcher Stunde er zählt und wie viele Stunden eedc dafür neu liest und Tage im Hintergrund neu bildet (Wetter und
-  Börsenpreis bleiben); gespeicherte Monatsabschlüsse bleiben, wie sie sind — angleichen lässt sich ein solcher Monat unter
-  „Monatsdaten“ mit „Aus HA laden“. Haben beide Sensoren nicht gleichzeitig gezählt, bestimmt Home Assistant die Stunde
-  selbst: die Stunde, in der der neue Sensor seinen ersten Wert hat, zählt beide (führt Home Assistant für den bisherigen in
-  dieser Stunde keinen Wert, zählt sie nur den neuen — die Vorschau sagt es). Haben sie eine Zeit lang gleichzeitig
-  gezählt, erscheint das Feld **„Der neue Sensor zählt ab"**, vorbelegt mit der Stunde des Wechsels; eine frühere Stunde
-  (nicht vor der ersten Stunde, die Home Assistant vom neuen Sensor führt, und nicht vor dem vorigen Wechsel dieses Felds —
-  der Hinweis am Feld nennt den Bereich, „Wählbar von … bis … Uhr") nimmst du, wenn der neue Sensor schon ab dann die
-  Werte des Geräts gemessen hat. Lässt der vorige Wechsel nur eine einzige Stunde zu, gibt es nichts zu wählen: das Feld
-  erscheint nicht, und die Vorschau nennt die Stunde. Führt Home Assistant den neuen Sensor noch nicht mit Stundenwerten (etwa bei einem Wechsel
-  in der Stunde des Tauschs) oder ist Home Assistant gerade nicht erreichbar, rechnet eedc den Wechsel, sobald es geht — es
-  prüft das jede Stunde; bis dahin nennt die Fläche oben den Grund. Den bisherigen Sensor kannst du in
-  Home Assistant löschen: seine Statistik bleibt dort lesbar, und eedc rechnet weiter mit ihr; was er in den letzten Minuten
-  vor dem Löschen noch gezählt hat (höchstens fünf), führt Home Assistant nicht mehr — eedc dann auch nicht. **Zwischen
-  zwei MQTT-Quellen** (anderes Gateway-Topic, Gateway statt Inbound) bleiben die bisherigen Werte, und der Unterschied
-  zwischen altem und neuem Zählerstand zählt nicht als Menge; die Stunde des Wechsels zählt, was die bisherige Quelle bis zu
-  ihrem letzten Zählerstand und die neue ab ihrem ersten gemeldet hat — aus den gespeicherten Zählerständen der letzten 31
-  Tage, sonst zählt sie keinen Zuwachs. eedc nimmt die zwei Stände um die Zeit des Wechsels — außer der Stand wechselt in
-  dieser Stunde eindeutig die Höhe, dann dort. **Zwischen einem Sensor aus Home Assistant und MQTT** rechnet eedc den Wechsel wie
-  bisher: der Unterschied zählt nicht als Menge, und wo eedc aus den gespeicherten Zählerständen rechnet, zählt die Stunde des
-  Wechsels keinen Zuwachs; der Dialog sagt es unter „Bisherige Werte bleiben“.
-- **„Daten vor der Änderung löschen — das Feld beginnt mit dem neuen Sensor neu"** — gelöscht werden **nur die Daten dieses
-  Felds** aus der Zeit vor der Änderung (Stunden- und Tageswerte, Zählerstände, auch in Monaten mit Monatsabschluss); alle
-  anderen Felder bleiben, wie sie sind. Danach verhält sich das Feld, als wäre der neue Sensor von Anfang an zugeordnet: was
-  Home Assistant für ihn führt, übernimmt eedc (auch für die Zeit vor der Änderung), für die Zeit davor zeigt das Feld „—“.
-  Beginnt der Sensor in Home Assistant mitten an einem Tag, zählt eedc diesen Tag wie Home Assistant ab der ersten Stunde.
-  Bei einer MQTT-Quelle zählt das Feld ab ihrem ersten gespeicherten Zählerstand. **Gespeicherte Monatswerte bleiben** — der
-  Dialog nennt die Monate unter **„Was danach geschieht"** und den Weg, sie anzugleichen: den Wert unter Einstellungen →
-  „Daten“ → „Monatsdaten“ von Hand ändern oder den Monat dort mit „Aus HA laden“ holen; führt Home Assistant den neuen Sensor
-  nur für einen Teil des Monats, schlägt „Aus HA laden“ nur diesen Teil vor. Das Löschen lässt sich nicht rückgängig machen.
-  Ist Home Assistant gerade nicht erreichbar, löscht eedc trotzdem und holt die Geschichte des neuen Sensors mit dem nächsten
-  Stundenlauf; solange die Tage neu gebildet werden, zeigt die Fläche oben den Fortschritt. Danach nennt der Daten-Checker
-  je Feld, was gilt ([Daten-Checker §4.8l](HANDBUCH_DATEN_CHECKER.md#48l-zaehlerstaende--daten-vor-der-aenderung-geloescht)).
+#### 7.7a Die Frage beim Wechsel: zwei Antworten
 
-**„Abbrechen"** lässt die bisherige Zuordnung stehen. Nicht gefragt wird bei einem Feld ohne eigene Werte (etwa der ersten
-Zuordnung), beim Wechsel auf **„Keine"** und bei der Rückkehr zur letzten Quelle mit Werten (Sensor A → „Keine" → wieder A).
-Jeder Wechsel eines Felds mit eigenen Werten wird mit Zeitpunkt und Grund verzeichnet — außer nach „Daten vor der Änderung
-löschen“: dann beginnt das Feld neu. Dieselbe Frage stellt **„Preset
-anwenden …"** — eine Zeile je Feld. Die **Energie-Dashboard-Vorschläge** im Einrichtungsassistenten übernehmen ein Feld mit
-eigenen Werten nicht, sondern nennen es; seine Quelle wechselst du hier am Feld.
+Wechselst du die Quelle eines Zählerfelds, das schon eigene Werte hat — anderer HA-Sensor, anderes Gateway-Topic oder anderer Faktor, Gateway statt Inbound —, öffnet sich **vor dem Speichern** der Dialog **„Warum wechselt die Quelle?"**. Er nennt, seit wann das Feld eigene Werte hat, und — wo bekannt — den letzten Zählerstand der bisherigen und den Zählerstand der neuen Quelle. Er hat genau zwei Antworten:
 
-**Zähler getauscht, die Quelle bleibt dieselbe.** Neben dem Wert eines Zählerfelds steht das Symbol **„Zähler getauscht
-(gleiche Quelle)"**. Du gibst **„Getauscht am"** an; was eedc dann tut, hängt an der Quelle, die zu dieser Zeit galt:
+- **„Bisherige Werte bleiben — der neue Sensor setzt fort (Zähler oder Gerät getauscht, anderer Sensor für dasselbe Gerät)"** — die Werte bis zum Wechsel bleiben; danach zählt die neue Quelle. Der Unterschied zwischen altem und neuem Zählerstand zählt nie als Menge.
+- **„Daten vor der Änderung löschen — das Feld beginnt mit dem neuen Sensor neu"** — die Daten **dieses Felds** aus der Zeit vor der Änderung werden gelöscht; danach verhält sich das Feld, als wäre der neue Sensor von Anfang an zugeordnet.
 
-- **Ein Zähler aus Home Assistant:** eedc übernimmt seine Summe so, wie Home Assistant sie führt. Einen Sprung beim Tausch
-  berichtigst du dort (Einstellungen → Werkzeuge → Statistik — in älteren Home-Assistant-Versionen Entwicklerwerkzeuge →
-  Statistik —, beim Symbol „Summe anpassen" unter „Zeitpunkt auswählen" die Zeit des Tauschs wählen, bei „Neuer Wert" die
-  echte Menge eintragen und „Anpassen" drücken); eedc übernimmt die berichtigte Statistik beim nächtlichen Abgleich und trägt selbst
-  nichts ein. Das gilt auch, wenn das Feld heute über MQTT kommt, der Tausch aber in die Zeit fällt, in der es aus Home
-  Assistant kam. Springt der Stand dabei deutlich, nennt der Daten-Checker die Stunde (Handbuch Daten-Checker §4.8h).
-- **Ein Zählerstand aus Home Assistant** (Gas, Wasser, Öl): eedc rechnet mit dem Stand, den der Sensor anzeigt; „Summe anpassen" ändert in Home Assistant nur die Summe und wirkt hier nicht. eedc trägt nichts ein und nennt zwei Wege: in Home
-  Assistant für den neuen Zähler einen eigenen Sensor oder Helfer anlegen, ihn dem Feld zuordnen und im Dialog **„Bisherige
-  Werte bleiben"** wählen; oder den neuen Zähler als eigenes Gerät anlegen und am alten ein Stilllegungsdatum setzen
-  (§3.4a).
-- **Ein Zähler über MQTT:** bei MQTT entscheidest du, ob an einer Zeit ein Tausch eingetragen wird. Wechselt der Stand in der
-  Stunde von „Getauscht am“ eindeutig die Höhe, setzt eedc den Eintrag dorthin — der Dialog nennt die Zeit und den Stand davor
-  und danach. Wechselt der Stand in der Stunde mehrmals die Höhe (das Gerät meldet kurz 0, ein anderes Gerät sendet kurz seinen
-  Stand), nimmt eedc den letzten Stand vor dem ersten und den ersten nach dem letzten Wechsel dieser Stunde; die Minuten
-  dazwischen zählen nicht. Geschieht das an einem Tag zweimal, trägst du jedes für sich ein. Sonst nimmt eedc den letzten Zählerstand
-  vor der gewählten Zeit und den nächsten anderen Stand danach (ein Stand, der nur wiederholt wurde, zählt nicht als neuer — auch
-  wenn er erst Tage später kommt), trägt den Tausch an der Zeit dieses Stands ein (der Dialog nennt beide Zeiten; das Feld
-  „Getauscht am“ behält deine Eingabe), zeigt beide Stände und die Menge dazwischen – sie zählt nach dem Eintrag nicht. Liegt
-  dieser Stand in einer Stunde, in der der Stand eindeutig die Höhe wechselt, setzt eedc den Eintrag dorthin wie oben. Hat der neue Zähler nach der gewählten Zeit noch keinen anderen Stand gemeldet, trägt eedc noch nichts ein und sagt es:
-  trag den Tausch ein, sobald er meldet. Je Stunde und Feld geht ein Eintrag — ein zweiter Tausch in derselben Stunde, auch nach
-  „Bisherige Werte bleiben“ in dieser Stunde, ist nicht eintragbar (der Dialog sagt „Dieser Tausch ist schon eingetragen.“). Sieht eedc an der Zeit
-  keinen Sprung, sagt der Dialog das („Einen Sprung sieht eedc an dieser Zeit nicht.“); eintragen kannst du trotzdem. Trägt
-  der Schritt fast den ganzen Zuwachs seiner Stunde und ist er mehr als zehnmal so groß wie die Schritte der 24 Stunden davor, sagt
-  er „Ob das ein Tausch ist oder eine gezählte Menge, erkennt eedc nicht.“ Der Unterschied zwischen altem und neuem Zählerstand zählt nicht als Menge; die Stunde des Tauschs zählt,
-  was der alte Zähler bis zu seinem letzten und der neue ab seinem ersten Stand gezählt hat. Ist die Stunde schon gespeichert,
-  nennt der Dialog, was sie danach statt bisher zählt; nur wenn sie danach weniger als nichts zählte, trägt eedc nichts ein und
-  sagt es. Der Knopf **„Zähler getauscht“** am Befund „Zählerstand springt (MQTT)“
-  ([Daten-Checker §4.8k](HANDBUCH_DATEN_CHECKER.md#48k-zaehlerstaende--zaehlerstand-springt-mqtt)) öffnet diesen Dialog mit der
-  Zeit des Schritts. Gespeicherte Zählerstände reichen 31 Tage zurück;
-  für einen älteren Tausch zählt die Stunde des Tauschs keinen Zuwachs. Die Live-Anzeige rechnet direkt aus den
-  Zählerständen und zeigt den Sprung am Tag des Tauschs unter „heute“ und am Tag danach unter „gestern“ weiter.
-- **Ein Feld ohne Spiegel aus Home Assistant** (vor dem Kanal, ohne Zählerstände über MQTT): du klickst **„Eintragen"** —
-  eedc überbrückt den Tausch; der Unterschied zählt nicht als Menge, und wo eedc aus den gespeicherten Zählerständen rechnet,
-  zählt die Stunde des Tauschs keinen Zuwachs. Ist die Stunde des Tauschs schon gespeichert, nennt eedc, was sie bisher zählt;
-  danach zählt sie keinen Zuwachs — auch nicht, was in dieser Stunde vor dem Tausch verbraucht wurde.
-- Für beide gilt: liegt der Tausch vor dem heutigen Tag und hat eedc für jenen Tag schon einen festen Tageswert dieses Felds
-  gespeichert, nennt der Dialog Tag und Wert: er bleibt, wie er ist, und kann den Unterschied weiter enthalten. Ein Eintrag lässt sich nicht zurücknehmen — der Dialog sagt
-  beides vor dem Eintragen. Sendet ein anderer Publisher
-  auf **demselben** Topic (etwa ein neues Gerät mit eigenem Zählerstand), nennt der Daten-Checker den Sprung
-  (§4.8k) — dieses Symbol ist dann der Weg.
-- **Vor dem ersten eigenen Wert** des Felds gibt es keinen Sprung zu überbrücken — eedc nennt den ersten Wert und trägt
-  nichts ein; ebenso in einer Zeit, deren Werte verworfen sind („Daten vor der Änderung löschen“, Reparatur-Werkbank).
+Unter **„Was danach geschieht"** steht, bevor etwas geändert wird, was eedc mit deiner Antwort tut. **„Abbrechen"** lässt die bisherige Zuordnung unverändert. Nicht gefragt wird bei einem Feld ohne eigene Werte (etwa der ersten Zuordnung), beim Wechsel auf **„Keine"** und bei der Rückkehr zur letzten Quelle mit Werten (Sensor A → „Keine" → wieder A). Dieselbe Frage stellt **„Preset anwenden …"** — eine Zeile je Feld. Die **Energie-Dashboard-Vorschläge** im Einrichtungsassistenten übernehmen ein Feld mit eigenen Werten nicht, sondern nennen es; seine Quelle wechselst du hier am Feld. Was in welchem Fall geschieht, steht in [§7.7c](#77c-was-passiert-wenn).
 
-**„Bisherige Werte bleiben" gewählt, aber der bisherige Sensor war doch der falsche?** Bei einem Feld aus Home Assistant ist der Weg die
-Operation **„Werte vor dem Sensorbeginn verwerfen"** in der Reparatur-Werkbank ([§5.2](#52-energieprofil-pflege)) mit
-**„Operation ausführen"**: sie verwirft die Werte dieses Felds vor dem Beginn des neuen Sensors — alles davor; was genau sie
-verwirft und was bleibt, steht in [§5.2](#52-energieprofil-pflege).
+**Fortschritt und Protokoll.** Bildet eedc nach deiner Antwort Tage neu, zeigt die Fläche oben den Fortschritt („Tage werden im Hintergrund neu gebildet: … von …“, am Ende etwa „Daten vor der Änderung gelöscht, 3 Tage neu gebildet.“); konnte ein Tag nicht neu gebildet werden, nennt der Satz ihre Zahl („1 Tag konnte nicht neu gebildet werden.“). Die Antwort steht danach im Aktivitätsprotokoll (*Einstellungen → System → Protokolle*, Reiter „Aktivitäten“): „… : bisherige Werte bleiben“ bzw. „… : Daten vor der Änderung gelöscht (… Stundenwerte, … Zählerstände; … Tage werden neu gebildet)“.
 
-Davon zu unterscheiden ist eine Korrektur **in Home Assistant** (Einstellungen → Werkzeuge → Statistik → „Summe anpassen"; in älteren Home-Assistant-Versionen unter Entwicklerwerkzeuge → Statistik): Sie übernimmt eedc in den HA-Spiegel, aus dem die Tages- und Monats-Kennzahlen kommen, beim nächtlichen Abgleich um 02:45 — oder sofort über **„HA-Spiegel jetzt abgleichen"** in der Reparatur-Werkbank.
+**Zwei Sensoren aus Home Assistant haben eine Zeit lang gleichzeitig gezählt** (bei „Bisherige Werte bleiben"): dann erscheint das Feld **„Der neue Sensor zählt ab"**, vorbelegt mit der Stunde des Wechsels. Eine frühere Stunde nimmst du, wenn der neue Sensor schon ab dann die Werte des Geräts gemessen hat; der Hinweis am Feld nennt den Bereich („Wählbar von … bis … Uhr“). Haben die zwei Sensoren nicht gleichzeitig gezählt, bestimmt Home Assistant die Stunde selbst, und das Feld erscheint nicht.
+
+**Den bisherigen Sensor kannst du in Home Assistant löschen:** seine Statistik bleibt dort lesbar, und eedc rechnet weiter mit ihr. Was er in den letzten Minuten vor dem Löschen noch gezählt hat (höchstens fünf), führt Home Assistant nicht mehr — eedc dann auch nicht.
+
+#### 7.7b Zähler getauscht (gleiche Quelle)
+
+Neben dem Wert eines Zählerfelds steht das Symbol **„Zähler getauscht (gleiche Quelle)"** — für den Fall, dass die Quelle dieselbe bleibt, der Zähler dahinter aber neu ist. Du gibst **„Getauscht am"** an; was eedc dann tut, hängt an der Quelle, die zu dieser Zeit galt:
+
+- **Ein Zähler aus Home Assistant:** eedc übernimmt seine Summe so, wie Home Assistant sie führt, und trägt selbst nichts ein. Einen Sprung beim Tausch berichtigst du in Home Assistant: unter Einstellungen → Werkzeuge → Statistik (in älteren Home-Assistant-Versionen: Entwicklerwerkzeuge → Statistik) den Sensor suchen, beim Symbol „Summe anpassen" unter „Zeitpunkt auswählen" die Zeit des Tauschs wählen, bei „Neuer Wert" die echte Menge eintragen und „Anpassen" drücken. eedc übernimmt die berichtigte Statistik beim nächtlichen Abgleich um 02:45 — sofort mit **„HA-Spiegel jetzt abgleichen"** in der Reparatur-Werkbank oder mit **„Aus Home Assistant neu übernehmen"** am Befund im Daten-Checker. Springt der Stand deutlich, nennt der Daten-Checker die Stunde ([Daten-Checker §4.8h](HANDBUCH_DATEN_CHECKER.md#48h-zaehlerstaende--zaehlerstand-springt)).
+- **Ein Zählerstand aus Home Assistant** (Gas, Wasser, Öl): eedc rechnet mit dem Stand, den der Sensor anzeigt; „Summe anpassen" ändert in Home Assistant nur die Summe und wirkt hier nicht. eedc trägt nichts ein und nennt zwei Wege: in Home Assistant für den neuen Zähler einen eigenen Sensor oder Helfer anlegen, ihn dem Feld zuordnen und **„Bisherige Werte bleiben"** wählen; oder den neuen Zähler als eigenes Gerät anlegen und am alten ein Stilllegungsdatum setzen ([§3.4a](#34a-verbrauchszähler-für-gas-öl-und-wasser-377)).
+- **Ein Zähler über MQTT:** du entscheidest, ob an einer Zeit ein Tausch eingetragen wird. Der Dialog zeigt den Zählerstand vor und nach der gewählten Zeit und die Menge, die nach dem Eintrag nicht zählt, und sagt, ob er dort einen Sprung sieht („Einen Sprung sieht eedc an dieser Zeit nicht.“ bzw. „Ob das ein Tausch ist oder eine gezählte Menge, erkennt eedc nicht.“). Wechselt der Stand in der Stunde eindeutig die Höhe, setzt eedc den Eintrag dorthin; sonst an den nächsten anderen Zählerstand nach der gewählten Zeit (der Dialog nennt beide Zeiten). Hat der neue Zähler noch nichts gemeldet, trägt eedc noch nichts ein und sagt es. Nach dem Eintrag zählt die Stunde des Tauschs, was der alte Zähler bis zu seinem letzten und der neue ab seinem ersten Stand gezählt hat; ist die Stunde schon gespeichert, nennt der Dialog, was sie danach statt bisher zählt. Je Stunde und Feld geht ein Eintrag („Dieser Tausch ist schon eingetragen.“). Gespeicherte Zählerstände reichen 31 Tage zurück; für einen älteren Tausch zählt die Stunde des Tauschs keinen Zuwachs. Der Knopf **„Zähler getauscht“** am Befund „Zählerstand springt (MQTT)“ ([Daten-Checker §4.8k](HANDBUCH_DATEN_CHECKER.md#48k-zaehlerstaende--zaehlerstand-springt-mqtt)) öffnet diesen Dialog mit der Zeit des Sprungs.
+- **Ein Feld ohne Zählerstände über MQTT und ohne Statistik aus Home Assistant:** **„Eintragen"** überbrückt den Tausch; der Unterschied zählt nicht als Menge, und die Stunde des Tauschs zählt keinen Zuwachs — ist sie schon gespeichert, nennt eedc, was sie bisher zählt.
+- **Für alle Wege:** ein Eintrag lässt sich nicht zurücknehmen, der Dialog sagt es vorher; er steht danach im Aktivitätsprotokoll („… : bisherige Werte bleiben, Tausch am …“). „Getauscht am“ kann nicht in der Zukunft liegen, und ein Feld ohne Quelle sagt „Dieses Feld hat keine Quelle — ordne zuerst eine zu.“ Liegt der Tausch vor dem heutigen Tag und hat eedc für jenen Tag schon einen festen Tageswert dieses Felds gespeichert, nennt der Dialog Tag und Wert: er bleibt, wie er ist. Vor dem ersten eigenen Wert des Felds und in einer Zeit, deren Werte gelöscht oder verworfen sind, gibt es nichts zu überbrücken — eedc trägt nichts ein und sagt es.
+
+#### 7.7c Was passiert, wenn …
+
+Je Fall: was eedc danach zeigt · was Home Assistant zeigt · was du tun kannst.
+
+**… du die Quelle wechselst und „Bisherige Werte bleiben" wählst**
+- *eedc:* **Zwischen zwei Sensoren aus Home Assistant** den bisherigen Sensor bis zu seinem letzten Wert und den neuen ab seinem ersten; die Stunde, in der der neue Sensor seinen ersten Wert hat, zählt beide (führt Home Assistant für den bisherigen in dieser Stunde keinen Wert, nur den neuen — die Vorschau sagt es); haben beide eine Zeit lang gleichzeitig gezählt, gilt die Stunde unter „Der neue Sensor zählt ab“ ([§7.7a](#77a-die-frage-beim-wechsel-zwei-antworten)). eedc liest dafür die Werte ab dieser Stunde neu aus Home Assistant und bildet die betroffenen Tage im Hintergrund neu (Wetter und Börsenpreis bleiben); die Fläche oben zeigt den Fortschritt. **Zwischen zwei MQTT-Quellen** (anderes Gateway-Topic, Gateway statt Inbound) bleiben die bisherigen Werte; die Stunde des Wechsels zählt, was die bisherige Quelle bis zu ihrem letzten und die neue ab ihrem ersten Zählerstand gemeldet hat. **Zwischen einem Sensor aus Home Assistant und MQTT** zählt die Stunde des Wechsels keinen Zuwachs, wo eedc aus den gespeicherten Zählerständen rechnet.
+- *Home Assistant:* führt für jeden der zwei Sensoren seine eigene Statistik; eedc nimmt von jedem die Stunden seiner Zeit. Die Zahl jeder Stunde findest du in Home Assistant beim jeweiligen Sensor. MQTT-Werte führt Home Assistant nicht.
+- *Du kannst:* nichts weiter tun. Gespeicherte Monatswerte bleiben (Fall „Monatswerte“ unten).
+
+**… du „Daten vor der Änderung löschen" wählst**
+- *eedc:* gelöscht werden nur die Daten **dieses Felds** aus der Zeit vor der Änderung — Stunden- und Tageswerte und Zählerstände, auch in Monaten mit Monatsabschluss; jedes andere Feld bleibt, wie es ist. Danach übernimmt eedc für das Feld, was Home Assistant für den neuen Sensor führt — auch für die Zeit vor der Änderung, wenn seine Statistik weiter zurückreicht —, und bildet die betroffenen Tage im Hintergrund neu. Für die Zeit davor zeigt das Feld „—“. Bei einer MQTT-Quelle zählt eedc ab dem ersten Zählerstand, den es von ihr speichert (die Minuten bis zur nächsten vollen Stunde nach dem Wechsel zählen nicht — wie bei jeder neuen MQTT-Zuordnung). Der Daten-Checker nennt danach je Feld, was gilt ([Daten-Checker §4.8l](HANDBUCH_DATEN_CHECKER.md#48l-zaehlerstaende--daten-vor-der-aenderung-geloescht)).
+- *Home Assistant:* unverändert — eedc löscht nur in eedc. Den bisherigen und den neuen Sensor führt Home Assistant weiter.
+- *Du kannst:* gespeicherte Monatswerte angleichen (Fall „Monatswerte“ unten). Das Löschen lässt sich nicht rückgängig machen; der Rückweg ist eine Sicherung der eedc-Datenbank von vorher.
+
+**… Home Assistant den neuen Sensor erst ab einer Stunde mitten am Tag führt (der erste Tag seiner Statistik)**
+- *eedc:* zeigt für dieses Feld an diesem Tag, was Home Assistant liefert: die Stunden ab der ersten Stunde der Statistik, gezählt ab dem Stand 0 wie in Home Assistant. Die Stunden davor fehlen — der Tag ist für dieses Feld nicht vollständig, und eedc ergänzt nichts. Monat und Jahr zählen diesen Tag genauso. Nach „Daten vor der Änderung löschen" sagt es die Auskunft im Daten-Checker: „Der … ist für dieses Feld deshalb nicht vollständig: eedc zählt ihn, wie Home Assistant, erst ab … Uhr.“ Bei einer ersten Zuordnung ohne „löschen“ gibt es diese Auskunft nicht; es gilt dasselbe.
+- *Home Assistant:* dieselbe Zahl — seine Statistik beginnt in dieser Stunde.
+- *Du kannst:* nichts tun; die Zahl ist die von Home Assistant. Kennst du die Menge des ganzen Monats aus einer anderen Quelle (etwa der Abrechnung), trägst du sie im Monatsabschluss ein.
+
+**… für Monate schon ein Monatswert gespeichert ist (Monatsabschluss, von Hand, Import)**
+- *eedc:* gespeicherte Monatswerte bleiben bei beiden Antworten, wie sie sind; ein abgeschlossener Monat zeigt den gespeicherten Wert. Der Dialog nennt die Monate unter „Was danach geschieht“. Nach „Bisherige Werte bleiben“ nennt der Daten-Checker einen Monat, dessen gespeicherter Wert um mindestens 1 kWh von den Stundenwerten abweicht ([Daten-Checker §4.8j](HANDBUCH_DATEN_CHECKER.md#48j-zaehlerstaende--gespeicherter-monatswert-passt-nicht-mehr)).
+- *Home Assistant:* führt die Monate des Sensors in seiner Statistik; für einen Monat, den es nur teilweise führt, nur diesen Teil.
+- *Du kannst:* unter Einstellungen → „Daten“ → „Monatsdaten“ am Monat den Stift wählen und den Wert überschreiben, oder den Monat dort mit **„Aus HA laden“** aus Home Assistant holen. Bei einem Zählerstand (Gas, Wasser, Öl) sagt der Monatsabschluss am Vorschlag „Zählerstand“, wenn im Monat ein Wechsel eingetragen ist: der Vorschlag ist der letzte gespeicherte Stand des Monats — nach dem Wechsel der des neuen Zählers; prüfe ihn gegen deine Ablesung. Führt Home Assistant den neuen Sensor nur für einen Teil des Monats, schlägt „Aus HA laden“ nur diesen Teil vor. Der Statistik-Import ([§6.4](#64-statistik-import)) überschreibt einen Wert, den du im Monatsabschluss gespeichert hast, nicht — er ist hier nicht der Weg.
+
+**… Home Assistant beim Löschen nicht erreichbar ist**
+- *eedc:* löscht trotzdem. Die Geschichte des neuen Sensors holt eedc, sobald Home Assistant erreichbar ist — es versucht es jede Stunde und nach jedem Start von selbst. Bis dahin zeigt die Fläche oben: „Das Füllen aus Home Assistant steht noch aus …“; danach sind die Zahlen dieselben wie bei einem Löschen mit erreichbarem Home Assistant.
+- *Home Assistant:* unverändert.
+- *Du kannst:* warten, bis die Meldung verschwindet; oder die Verbindung prüfen ([§6](#6-integration)).
+
+**… du wissen willst, ab wann der Wechsel wirkt**
+- *eedc:* die neue Zuordnung gilt sofort für Live und für alle neuen Werte. Stundenwerte schreibt eedc einmal je Stunde, fünf Minuten nach der vollen Stunde (der Stundenlauf); der laufende Tag wird alle 15 Minuten neu gebildet. Nach „Daten vor der Änderung löschen“ löscht eedc sofort und liest dann, was Home Assistant für den neuen Sensor führt. Nach „Bisherige Werte bleiben“ zwischen zwei Sensoren aus Home Assistant rechnet eedc den Wechsel sofort, wenn Home Assistant den neuen Sensor schon mit Stundenwerten führt; sonst (etwa bei einem Wechsel in der Stunde des Tauschs) mit dem nächsten Stundenlauf, der das kann. Bis dahin nennt die Fläche oben den Grund („Home Assistant führt für … noch keine Stundenwerte …“), und die Werte dieses Felds ab dem Wechsel — auch „Aus HA laden“ für diesen Monat — können unvollständig sein. Bei MQTT zählt die neue Quelle ab ihrem ersten gespeicherten Zählerstand.
+- *Home Assistant:* führt eine Stunde in seiner Langzeitstatistik erst, wenn sie vorbei ist; eedc liest sie fünf Minuten danach.
+- *Du kannst:* einen Monat erst nach dem nächsten Stundenlauf mit „Aus HA laden“ holen bzw. abschließen.
+
+**… bei MQTT der Zähler getauscht wurde, die Quelle aber bleibt**
+- *eedc:* zählt den Sprung des Zählerstands als Menge der Stunde, bis du den Tausch einträgst. Der Daten-Checker nennt die Stunde unter „Zählerstand springt (MQTT)“ mit dem Knopf **„Zähler getauscht“** — er zeigt nur, entscheiden tust du ([§7.7b](#77b-zähler-getauscht-gleiche-quelle)). Die Live-Anzeige rechnet direkt aus den Zählerständen: sie zeigt den Sprung am Tag des Tauschs unter „heute“ und am Tag danach unter „gestern“ weiter; Tag, Monat und Jahr zählen ihn nach dem Eintrag nicht.
+- *Home Assistant:* führt MQTT-Werte nicht.
+- *Du kannst:* den Tausch mit „Zähler getauscht“ eintragen. **Ausnahme PV- und Einspeise-Felder:** springt dort der Zählerstand, zählt eedc die ganze Stunde nicht (die Plausibilitätsgrenze greift) — auch die echte Menge dieser Stunde nicht —, und der Befund nennt sie nicht. Öffne dann „Zähler getauscht“ am Feld selbst und wähle die Zeit des Tauschs; der Dialog liest die Zählerstände und trägt ein.
+
+**… du nach „Bisherige Werte bleiben“ die alten Werte doch loswerden willst**
+- *eedc:* die Operation **„Werte vor dem Sensorbeginn verwerfen"** in der Reparatur-Werkbank ([Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)) verwirft die Werte dieses Felds vor einem Zeitpunkt (vorbelegt: Beginn des neuen Sensors) — in den Stundenwerten des HA-Spiegels und in den Stunden- und Tageswerten; Monate mit Monatsabschluss bleiben unberührt. Verzeichnete Wechsel dieses Felds bis zur ersten Stunde ab dem Zeitpunkt hebt sie mit auf — auch ein „Zähler getauscht“, den du für diese Stunde eingetragen hast. Anders als „Daten vor der Änderung löschen“ holt sie keine Geschichte aus Home Assistant nach: vor dem Zeitpunkt hat das Feld danach keine Werte mehr, außer in Monaten mit Monatsabschluss, deren Tageswerte bleiben.
+- *Home Assistant:* unverändert.
+- *Du kannst:* in der Werkbank **„Plan erstellen“**, die Vorschau lesen, dann **„Operation ausführen“**. Das Verwerfen lässt sich in eedc nicht rückgängig machen — der Rückweg ist eine Sicherung der eedc-Datenbank.
+
+**… ein Sensorwechsel aus der Zeit vor dieser Version stammt**
+- *eedc:* ein Wechsel, den du vor dieser Version vorgenommen hast, ist nicht verzeichnet: eedc fragt nachträglich nicht und rechnet über ihn wie bisher. Der frühere Hinweis nach einer geänderten Zuordnung („Verstanden“, „Zur Reparatur-Werkbank“) entfällt.
+- *Home Assistant:* führt den bisherigen und den neuen Sensor wie gewohnt.
+- *Du kannst:* sollen die Werte des alten Sensors weg, die Werkbank wie im vorigen Fall nutzen.
+
+**… ein neuer Zähler in Home Assistant beim ersten Wert springt**
+- *eedc:* zeigt den ersten Tag wie Home Assistant — mit dem Sprung (gemessen: ein Wärmepumpen-Zähler, dessen erster Wert in Home Assistant 123 923,3 kWh trug).
+- *Home Assistant:* zeigt denselben Sprung.
+- *Du kannst:* den Wert in Home Assistant berichtigen („Summe anpassen“, wie in [§7.7b](#77b-zähler-getauscht-gleiche-quelle)). Danach nennt der Daten-Checker den Tag als Abweichung zu Home Assistant (etwa „Ein Gerät weicht an Tagen von Home Assistant ab“); **„Aus Home Assistant neu übernehmen“** am Befund übernimmt den berichtigten Tag. „Tag neu aggregieren“ in der Werkbank behebt es nicht.
+
+**… eine importierte Statistik in Home Assistant mit einem großen ersten Wert beginnt**
+- *eedc:* zählt die erste Stunde mit ihrem ganzen Wert, wie Home Assistant — Tag, Monat und „Aus HA laden“ nennen dieselbe Zahl wie Home Assistant. Der Daten-Checker nennt den Tag unter „Abweichung zu Home Assistant an einem Tag (PV)“ (sein Vergleichswert lässt die große erste Stunde aus); „Zählerstand springt“ nennt ihn nicht.
+- *Home Assistant:* zeigt denselben Sprung.
+- *Du kannst:* prüfen, ob der erste Wert in Home Assistant stimmt; ist er falsch, ihn dort berichtigen wie im vorigen Fall.
 
 > **Ohne Antwort im Dialog passiert nichts von allein.** eedc rechnet die Historie nicht selbsttätig neu — nur „Daten vor der Änderung löschen“ und „Bisherige Werte bleiben" zwischen zwei Sensoren aus Home Assistant bilden die betroffenen Tage neu.
 

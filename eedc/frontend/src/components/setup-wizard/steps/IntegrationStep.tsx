@@ -33,7 +33,7 @@ type StandaloneWahl = 'offen' | 'remote_ha' | 'nur_mqtt'
 /** Sensorwechsel mit Grund: ein Feld mit eigenen Werten wechselt die Quelle nur am Feld, mit dem Grund. */
 export const UEBERSPRUNGEN_SATZ =
   'Nicht übernommen, weil diese Felder schon eigene Werte haben — wechsle ihre Quelle unter Einstellungen → Datenquellen ' +
-  'am Feld; dort fragt eedc, ob der neue Sensor dasselbe weiter misst oder bisher der falsche zugeordnet war:'
+  'am Feld; dort fragt eedc, ob die bisherigen Werte bleiben oder die Daten vor der Änderung gelöscht werden:'
 
 export default function IntegrationStep({ anlageId, onNext, onBack, onSkip }: IntegrationStepProps) {
   const haAvailable = useHAAvailable()

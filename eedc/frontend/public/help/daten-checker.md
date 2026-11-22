@@ -3423,7 +3423,9 @@ langer Ruhe (Wallbox nach Wochen, Wärmepumpe im ersten kalten Monat, PV nach Sc
 Zählers, der bisher nur Standby kannte; ein Zähler, der in den Tagen davor an weniger als 14 Tagen etwas gezählt hat
 (Neubeginn); ein Zähler, der bei 0 neu beginnt; ein Sensor, der kurz 0 gemeldet hat und
 zurückkehrt ([§4.8b](#48b-zaehlerstaende--sprung-in-home-assistant)); der Wechsel zwischen zwei Sensoren
-([Handbuch Einstellungen §7.7](HANDBUCH_EINSTELLUNGEN.md)). Ein gefallener Zählerstand steht in
+([Handbuch Einstellungen §7.7a](HANDBUCH_EINSTELLUNGEN.md#77a-die-frage-beim-wechsel-zwei-antworten)); die erste Stunde einer
+neuen Statistik, auch mit einem großen Wert (eine importierte Statistik, ein Zähler, der beim ersten Wert springt — eedc zeigt
+sie wie Home Assistant, [Handbuch Einstellungen §7.7c](HANDBUCH_EINSTELLUNGEN.md#77c-was-passiert-wenn)). Ein gefallener Zählerstand steht in
 [§4.8c](#48c-zaehlerstaende--rueckgang-in-home-assistant) bzw. bei Verbrauchszählern in [§4.23](#423-verbrauchszaehler-zaehlerstaende).
 
 **Zählerstände** (Gas, Wasser, Öl, Kilometerstand): eedc rechnet dort mit dem Stand, den der Sensor anzeigt, nicht mit der
@@ -3534,7 +3536,9 @@ Stunde trägt und mehr als zehnmal so groß ist wie die Schritte der 24 Stunden 
 ein Zähler mit weniger als 14 Tagen mit Zuwachs (Neubeginn); die erste gewöhnliche Stunde nach Wochen mit nur Standby (eine
 Wallbox vor dem ersten Auto, eine Wärmepumpe nach dem Sommer); ein Stand, der um weniger als ein Zehntel fällt und in der
 nächsten Stunde zurückkehrt; eine Stunde, an der ein Zählertausch schon eingetragen
-ist.
+ist. **Grenze PV- und Einspeise-Felder:** springt dort der Zählerstand, zählt eedc die ganze Stunde nicht (die
+Plausibilitätsgrenze greift) — auch ihre echte Menge nicht —, und diese Kategorie nennt sie nicht. Der Weg ist dann
+«Zähler getauscht» am Feld selbst; der Dialog liest die Zählerstände ([Handbuch Einstellungen §7.7c](HANDBUCH_EINSTELLUNGEN.md#77c-was-passiert-wenn)).
 
 ---
 
@@ -3589,7 +3593,9 @@ löschen». Mit «löschen» gehen nur die Daten dieses Felds aus der Zeit vor d
 wäre der neue Sensor von Anfang an zugeordnet — was Home Assistant für ihn führt, übernimmt eedc, davor zeigt das Feld «—».
 Diese Kategorie nennt je solchem Feld eine Auskunft: wann gelöscht wurde, seit wann Home Assistant den neuen Sensor führt, ob
 der erste Tag für das Feld nur teilweise zählt (der Sensor beginnt in Home Assistant mitten am Tag — eedc zählt den Tag wie Home
-Assistant ab dieser Stunde), und die Monate mit gespeichertem Monatswert, die bleiben.
+Assistant ab dieser Stunde), und die Monate mit gespeichertem Monatswert, die bleiben. Nach einer ersten Zuordnung ohne
+«löschen» gibt es diese Auskunft nicht, auch wenn der erste Tag dort ebenso nur ab der ersten Stunde der Statistik zählt
+([Handbuch Einstellungen §7.7c](HANDBUCH_EINSTELLUNGEN.md#77c-was-passiert-wenn)).
 
 ---
 
@@ -4221,8 +4227,10 @@ und anfällig für Lücken. Die Meldung nennt das Feld, die Details die zugeordn
 **Lösungsweg**
 1. Am Befund **«Sensor wechseln»** klicken — die Datenquellen-Zuordnung öffnet sich an diesem Feld.
 2. Dort einen fortlaufenden kWh-Zähler wählen. Hat das Feld schon eigene Werte, fragt eedc vor dem Speichern
-   **„Warum wechselt die Quelle?"** — hier ist es **„Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet"**: die Vorschau sagt, welche
-   Werte verworfen und, soweit Home Assistant die Geschichte des Zählers führt, aus ihm neu aufgebaut werden.
+   **„Warum wechselt die Quelle?"** — hier passt meist **„Daten vor der Änderung löschen — das Feld beginnt mit dem neuen
+   Sensor neu"**: die Werte dieses Felds aus der Zeit davor gehen weg, und eedc übernimmt, was Home Assistant für den neuen
+   Zähler führt. Unter **„Was danach geschieht"** steht vorher, welche gespeicherten Monatswerte bleiben; das Löschen lässt
+   sich nicht rückgängig machen (Handbuch Einstellungen, Abschnitt „Sensorwechsel“).
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 **Was ohne Handlung gilt**

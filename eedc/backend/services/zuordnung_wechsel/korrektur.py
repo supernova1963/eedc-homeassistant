@@ -32,8 +32,8 @@ class KorrekturNichtStartbar(ValueError):
     """Home Assistant ist eingerichtet, aber nicht erreichbar — der Lauf startet nicht."""
 
 
-SATZ_NICHT_ERREICHBAR = ("Home Assistant ist nicht erreichbar — die Korrektur startet erst, wenn eedc die Langzeitstatistik "
-                         "lesen kann.")
+SATZ_NICHT_ERREICHBAR = ("Home Assistant ist nicht erreichbar — eedc liest die Werte aus Home Assistant, sobald es die "
+                         "Langzeitstatistik lesen kann.")
 
 
 @dataclass(frozen=True)

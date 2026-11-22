@@ -364,10 +364,15 @@ async def nach_dem_commit(v: Vollzug) -> None:
         v.angesetzt.append({**e, "sensor_key": key, "vorher": vorher, "nachher": nachher})
 
 
-def aktivitaet_text(v: Vollzug, labels: dict[str, str]) -> str:
-    """Der Zusatz der Protokoll-Zeile: Antwort je Schlüssel."""
+def _anzahl(n: int, eins: str, mehr: str) -> str:
+    """«1 Tag» / «2 Tage» — die Anzahl mit Ein- oder Mehrzahl (Lab-Durchlauf 2b W11, wie ``lib/plural.ts`` im Client)."""
     from backend.core.zahlenformat import fmt_zahl
 
+    return f"{fmt_zahl(n)} {eins if n == 1 else mehr}"
+
+
+def aktivitaet_text(v: Vollzug, labels: dict[str, str]) -> str:
+    """Der Zusatz der Protokoll-Zeile: Antwort je Schlüssel."""
     teile = []
     geloescht = {g.key: g for g, _lauf in v.geloescht}
     for f in v.fragen:
@@ -376,8 +381,10 @@ def aktivitaet_text(v: Vollzug, labels: dict[str, str]) -> str:
         name = _je_key(labels, f.sensor_key, f.sensor_key)
         if f.sensor_key in geloescht:
             g = geloescht[f.sensor_key]
-            teile.append(f"{name}: Daten vor der Änderung gelöscht ({fmt_zahl(g.kanalzeilen)} Stundenwerte, "
-                         f"{fmt_zahl(g.staende + g.rohstaende)} Zählerstände; {fmt_zahl(len(g.tage))} Tage werden neu gebildet)")
+            n = len(g.tage)
+            teile.append(f"{name}: Daten vor der Änderung gelöscht ({_anzahl(g.kanalzeilen, 'Stundenwert', 'Stundenwerte')}, "
+                         f"{_anzahl(g.staende + g.rohstaende, 'Zählerstand', 'Zählerstände')}; "
+                         f"{_anzahl(n, 'Tag wird', 'Tage werden')} neu gebildet)")
         else:
             teile.append(f"{name}: bisherige Werte bleiben")
     return " · ".join(teile)
