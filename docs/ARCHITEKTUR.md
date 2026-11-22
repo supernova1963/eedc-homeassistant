@@ -1580,7 +1580,7 @@ POST /api/ha-statistics/import/{anlage_id}                         # Import mit 
 | `monthly_snapshot` | 1. des Monats 00:01 | ⚠ setzt **nur einen Log-Zeitstempel** — es gibt **keinen automatischen Monatsabschluss** |
 | `mqtt_auto_publish` | Intervall (konfigurierbar) | HA-Export per MQTT, mit Start-Publish beim Hochlauf |
 | `mqtt_energy_snapshot` · `mqtt_live_snapshot` | je alle 5 min | MQTT-Inbound: Energie-Zählerstände bzw. Live-Werte sichern |
-| `mqtt_energy_cleanup` · `mqtt_live_cleanup` | täglich 03:00 / 03:05 | MQTT-Snapshots älter als die Aufbewahrung löschen |
+| `mqtt_energy_cleanup` · `mqtt_live_cleanup` | täglich 03:00 / 03:18 (nicht auf :05 — dort schreibt der Stundenlauf) | MQTT-Snapshots älter als die Aufbewahrung löschen |
 
 ⚠ **Dass `monthly_snapshot` nichts abschließt, hat Folgen für jede Monats-Auswertung:** eine
 `Monatsdaten`-Zeile entsteht erst, wenn der Nutzer den Abschluss macht. Dem laufenden Monat fehlt sie

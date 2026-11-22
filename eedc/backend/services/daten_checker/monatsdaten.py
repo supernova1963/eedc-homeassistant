@@ -9,7 +9,7 @@ from datetime import date
 from typing import Optional
 
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
-from backend.core.berechnungen.waermepumpe_kennzahl import heizwaerme_kwh
+from backend.core.berechnungen.waermepumpe_kennzahl import heizwaerme_kwh, waerme_gesamt_kwh
 from backend.core.berechnungen.spez_ertrag import PV_ERZEUGER_TYPEN
 from backend.core.betriebsmodus import MODUS_STROM_FELD
 from backend.core.field_definitions import (
@@ -1147,6 +1147,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
         heiz_erwartet, ww_strom_gibt_es = ctx.heiz_erwartet, ctx.ww_strom_gibt_es
 
         fehlend_strom: list[str] = []
+        strom_null: list[str] = []     # Fund-Päckchen B (B3): Strom gemessen 0 kWh bei Wärme > 0
         fehlend_strom_heizen: list[str] = []
         fehlend_strom_ww: list[str] = []
         fehlend_heiz: list[str] = []
@@ -1218,6 +1219,9 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
             if (heiz_erwartet and heizwaerme_kwh(daten) is None
                     and daten.get("waerme_kwh") is None):
                 fehlend_heiz.append(label)
+            if (label not in fehlend_strom and label not in fehlend_strom_heizen and label not in fehlend_strom_ww
+                    and _strom_null_bei_waerme(daten, param, getrennte_strommessung)):
+                strom_null.append(label)
 
         def _monate(labels: list[str]) -> str:
             text = ", ".join(labels[:6])
@@ -1225,19 +1229,8 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                 text += f" (+{len(labels) - 6} weitere)"
             return text
 
-        if fehlend_strom:
-            if not getrennte_strommessung:
-                strom_label = "Stromverbrauch"
-            elif not ww_strom_gibt_es:
-                strom_label = "Strom Heizen"   # B5: keine Warmwasser-Seite
-            else:
-                strom_label = "Strom Heizen/Warmwasser"
-            ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.WARNING, code="wp_strom_fehlt_monate",
-                meldung=f"{name}: {strom_label} fehlt in {len(fehlend_strom)} Monat(en)",
-                details=_monate(fehlend_strom),
-                ziel=ziel_monat_label(fehlend_strom[0], geraet=inv.id, feld="strom_heizen_kwh" if getrennte_strommessung else "stromverbrauch_kwh"),
-            ))
+        if fehlend_strom or strom_null:
+            ergebnisse.append(_strom_befund(ctx, fehlend_strom, strom_null, _monate))
 
         # Je Seite eine Meldung — sie können nebeneinander stehen, ohne dasselbe
         # zu sagen: die eine nennt die Heiz-, die andere die Warmwasser-Achse,
@@ -1431,6 +1424,46 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
 # schließen sich gegenseitig aus — ein Sachverhalt, eine Meldung.
 WIEDERHOLUNG_AB_MONATEN = 3
 DOPPELERFASSUNG_AB_MONATEN = 2
+
+
+def _strom_befund(ctx: _WpMonatsKontext, fehlend_strom: list[str], strom_null: list[str], _monate) -> CheckErgebnis:
+    """Der Befund ``wp_strom_fehlt_monate`` (Phase ``_wp_fehlende_monate``). B3 (Fund-Päckchen B): ein Monat mit gemessen 0 kWh
+    Strom bei Wärme > 0 trägt seit Päckchen A (A2) keine Ersparnis und keine Arbeitszahl — derselbe Befund nennt ihn (Standby-
+    und 0/0-Monate nicht; «getrennte Strommessung aus, nur Teilfelder gepflegt» nennt `wp_strom_zugeordnet_getrennte_messung_aus`).
+    Nur «fehlt» ⇒ Wortlaut wie bisher."""
+    if not ctx.getrennte_strommessung:
+        strom_label = "Stromverbrauch"
+    elif not ctx.ww_strom_gibt_es:
+        strom_label = "Strom Heizen"   # B5: keine Warmwasser-Seite
+    else:
+        strom_label = "Strom Heizen/Warmwasser"
+    alle = sorted(fehlend_strom + strom_null, key=lambda m: (m[3:], m[:2]))
+    meldung = (f"{ctx.name}: {strom_label} fehlt in {len(fehlend_strom)} Monat(en)" if not strom_null else
+               f"{ctx.name}: {strom_label} fehlt oder ist 0 kWh bei erfasster Wärme in {len(alle)} Monat(en)")
+    details = _monate(fehlend_strom) if fehlend_strom else ""
+    if strom_null:
+        details += ("; " if details else "") + f"0 kWh Strom bei erfasster Wärme: {_monate(strom_null)}"
+    return CheckErgebnis(
+        kategorie=ctx.kat, schwere=CheckSeverity.WARNING, code="wp_strom_fehlt_monate",
+        meldung=meldung,
+        details=details,
+        ziel=ziel_monat_label(alle[0], geraet=ctx.inv.id,
+                              feld="strom_heizen_kwh" if ctx.getrennte_strommessung else "stromverbrauch_kwh"),
+    )
+
+
+def _strom_null_bei_waerme(daten: dict, param: dict, getrennt: bool) -> bool:
+    """B3 (Fund-Päckchen B, 22.11.2026): der Strom der Wärmepumpe ist im Monat **erfasst** und 0 kWh (``get_wp_strom_kwh``, wie
+    die Jahresformel ``alternativkosten.berechne_wp_alternativkosten_ersparnis``), die Wärme (``waerme_gesamt_kwh``) > 0. Nicht
+    erfasster Strom steht schon unter «fehlt»; ohne getrennte Messung mit gepflegten Teilfeldern «Strom Heizen/Warmwasser»
+    nennt die Lage ``wp_strom_zugeordnet_getrennte_messung_aus`` (kein Doppelbefund)."""
+    felder = ("stromverbrauch_kwh", "strom_heizen_kwh", "strom_warmwasser_kwh") if getrennt else ("stromverbrauch_kwh",)
+    if all(daten.get(f) is None for f in felder):
+        return False
+    if not getrennt and any((daten.get(f) or 0.0) > 0 for f in ("strom_heizen_kwh", "strom_warmwasser_kwh")):
+        return False
+    waerme = waerme_gesamt_kwh(daten.get("waerme_kwh"), heizwaerme_kwh(daten), get_wp_warmwasser_kwh(daten, param))
+    return waerme > 0 and get_wp_strom_kwh(daten, param) <= 0
 
 
 def _de_euro(betrag: float) -> str:

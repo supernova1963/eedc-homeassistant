@@ -160,8 +160,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Wärmepumpe zählten für einen solchen Monat die Gas-Ersparnis und ein Zwölftel der Zusatzkosten der Alt-Heizung
   (im Beispiel 109,10 € bei 400 kWh Wärme), die Gerätezeile unter *Komponenten → Wärmepumpe* und im Cockpit nicht. Ohne
   Strom ist die Ersparnis nicht bestimmbar — jetzt zählt der Monat in keiner Sicht (0 €); der Sensor entsteht erst, wenn
-  ein Monat Wärme und Strom trägt. Der Daten-Checker nennt fehlenden Wärmepumpen-Strom unter „Stromverbrauch fehlt in …
-  Monat(en)“.
+  ein Monat Wärme und Strom trägt. Das trifft auch eine Wärmepumpe, bei der nur „Strom Heizen“ und „Strom Warmwasser“
+  gepflegt sind, während „Getrennte Strommessung (Heizen / Warmwasser)“ aus ist: eedc zählt dann nur den Gesamtzähler,
+  der Sensor „WP Ersparnis“ fällt weg oder wird kleiner. Sind diese Felder in den Datenquellen zugeordnet, nennt der
+  Daten-Checker die Lage unter „Strom Heizen/Warmwasser zugeordnet, aber „Getrennte Strommessung“ ist aus“ (Knopf „Gerät
+  bearbeiten“). Fehlenden Wärmepumpen-Strom nennt er unter „Stromverbrauch fehlt in … Monat(en)“ — jetzt auch einen Monat,
+  in dem der Strom mit 0 kWh eingetragen ist, obwohl die Wärmepumpe Wärme abgegeben hat („… fehlt oder ist 0 kWh bei
+  erfasster Wärme …“, mit Knopf „Monat öffnen“); ein Monat ohne Strom und ohne Wärme und ein Monat nur mit Strom
+  (Bereitschaft) bleiben ohne Befund.
 - **USt auf den Eigenverbrauch (Regelbesteuerung): Anschaffung und Betriebskosten einer Komponente zählen nur über ihre
   Monate.** Kam eine Komponente im Lauf des Jahres dazu oder wurde stillgelegt, zählten ihre Abschreibung und ihre
   Betriebskosten über alle Monate der Anlage — im gemessenen Beispiel (PV ganzjährig, Speicher ab Juli) 80,94 € statt
@@ -173,6 +179,27 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   stillgelegten — im Beispiel (alte Wärmepumpe bis Juni 2025, neue ab Juli, je 600 €/Jahr) 1 507,85 € statt 907,85 €
   WP-Ersparnis je Jahr; der Jahres-Netto-Ertrag lag um 600 € zu hoch, die Amortisation zu früh. Jetzt zählen nur die
   Wärmepumpen, die heute in Betrieb sind — wie schon die Betriebskosten.
+- **Stundenlauf um 03:05 Uhr: kein „database is locked“ mehr durch das nächtliche Aufräumen.** Das tägliche Aufräumen
+  der MQTT-Live-Werte (Tagesverlauf) startete um 03:05 Uhr in derselben Sekunde wie der stündliche Lauf, der die
+  Zählerstände der vergangenen Stunde übernimmt. Traf es sich ungünstig, brach dieser Lauf an allen Anlagen mit
+  „database is locked“ ab: die Stunde ab 02:00 Uhr fehlte bis zum nächsten Lauf um 04:05 Uhr, und ein Sensorwechsel in
+  dieser Stunde wurde eine Stunde später angesetzt. Das Aufräumen läuft jetzt um 03:18 Uhr, in einer Minute, in der kein
+  anderer Job mit fester Uhrzeit startet.
+- **Daten-Checker: eine Statistik, die mit einem großen Stand beginnt, nennt „Zählerstand springt“.** Beginnt die
+  Statistik eines Sensors in Home Assistant nicht bei 0, sondern mit einem großen Stand (etwa nach einem Import), zählen
+  Home Assistant und eedc diesen Stand als Menge der ersten Stunde — im gemessenen Beispiel 5 004,66 kWh Ladung an einem
+  Tag einer Wallbox. Bisher nannte das an einer Wallbox oder Wärmepumpe kein Befund, an einem PV-Feld nur „Abweichung zu
+  Home Assistant an einem Tag (PV)“. Jetzt nennt „Zählerstände – Zählerstand springt“ die Stunde an jedem Feld („die
+  Statistik beginnt mit diesem Stand statt bei 0“), sobald der Wert größer ist, als eine Anlage in einer Stunde erzeugen
+  oder verbrauchen kann, mit dem Weg in Home Assistant („Summe anpassen“) und dem Knopf „Aus Home Assistant neu
+  übernehmen“. Die Zahl selbst ändert eedc nicht — sie ist, was Home Assistant führt.
+- **Texte.** Die Vorschau der Reparatur-Werkbank „Werte vor dem Sensorbeginn verwerfen“ sagt „1 Tag“ statt „1 Tage“ bzw.
+  „Tag(e)“ (ebenso Stundenzeilen, Tageszeilen, Monate). „Zählerstände – Rücksprung“ nennt neben dem Feld,
+  das „heute“ meint, auch den einzelnen Rückgang (neuer Zähler, vorübergehend falscher Stand der Quelle) und den Weg
+  „Zähler getauscht (gleiche Quelle)“. Im Kasten „Was noch möglich wäre“ in *Cockpit → Tag* steht zu „Zähler messen
+  verschiedene Zeiträume“ kein Rat zum Monatsabschluss mehr (den gibt es im Tag nicht), und zu „für diesen Tag keine
+  Zählerstände“ an einem Tag vor dem ersten Wert eines gelöschten Wärmepumpen-Zählers („Daten vor der Änderung löschen“)
+  nicht mehr „Den Tag in der Reparatur-Werkbank nachrechnen“ — dort gibt es nichts nachzurechnen.
 
 ## [4.3.1] - 2026-11-15
 

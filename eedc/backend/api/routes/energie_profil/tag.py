@@ -1290,6 +1290,22 @@ def _arbeitszahl_je_funktion(ctx: _TagKontext) -> None:
     )
 
 
+async def _ohne_handgriff_im_tag(db, anlage_id: int, datum: date, investitionen_by_id: dict) -> frozenset[str]:
+    """Fund-Päckchen B: die Gründe, deren Handgriff im Tag nichts bewirkt — Kasten-Zeile ohne Handgriff (Grund bleibt).
+    H5: «Zähler messen verschiedene Zeiträume» rät zum Monatsabschluss, den der Tag nicht hat (Handbuch Wärme & Klima §4: im
+    Tag nichts zu tun). H4: «für diesen Tag keine Zählerstände» rät zur Werkbank — vor der ersten Zeile eines gelöschten Felds
+    einer Wärmepumpe hat sie nichts nachzurechnen («Daten vor der Änderung löschen», Handbuch Einstellungen §7.7c)."""
+    from backend.core.berechnungen.waermepumpe_kennzahl import GRUND_ZEITRAUM
+    from backend.core.tageswert_grund import GRUND_KEINE_ZAEHLERSTAENDE, TAGESWERT_GRUND_KURZ
+    from backend.services.daten_checker.datenquelle.geloescht import tag_vor_erster_zeile
+
+    ohne = {GRUND_ZEITRAUM}
+    wp = tuple(f"inv:{i}:" for i, inv in investitionen_by_id.items() if inv.typ == "waermepumpe")
+    if wp and await tag_vor_erster_zeile(db, anlage_id, datum, wp):
+        ohne.add(TAGESWERT_GRUND_KURZ[GRUND_KEINE_ZAEHLERSTAENDE])
+    return frozenset(ohne)
+
+
 async def _antwort(ctx: _TagKontext) -> TagDetailResponse:
     """Phase von ``get_tag_detail`` (RF-71): die Gerätezeilen (D-Sicht 3, P-433-2c), die aktiven Geräte je Typ und
     die Antwort — Schlüssel und Reihenfolge wie bisher; die E-Mob-Phasen laufen an derselben Stelle wie bisher."""
@@ -1407,7 +1423,7 @@ async def _antwort(ctx: _TagKontext) -> TagDetailResponse:
             ("Arbeitszahl Kühlen", wp_az_kuehlen_tag.grund),
         # R-4: die Geräte-Ausstattungsgründe, dedupliziert gegen die Zeilen
         # darüber (WK-16h/N-502).
-        ], _wp_block_geraete),
+        ], _wp_block_geraete, ohne_handgriff=await _ohne_handgriff_im_tag(db, anlage.id, datum, investitionen_by_id)),
         # Bauschnitt 8: derselbe Wert, den die Kühlzahl eben als Zähler bekam.
         wp_kaelte_kwh=(
             round(detail["wp_kaelte_kwh"], 2)

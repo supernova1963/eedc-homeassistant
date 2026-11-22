@@ -408,7 +408,9 @@ def _quelle_satz(q: kv.QuelleInfo, t: int) -> str:
 
 
 def _spanne(tage: list[date]) -> str:
-    return f"{fmt_datum(tage[0])} … {fmt_datum(tage[-1])}" if tage else ""
+    if not tage:
+        return ""
+    return fmt_datum(tage[0]) if tage[0] == tage[-1] else f"{fmt_datum(tage[0])} … {fmt_datum(tage[-1])}"
 
 
 def _monate_text(monate: list[tuple[int, int]]) -> str:
@@ -422,7 +424,8 @@ def _saetze_kanal(la: Lage) -> list[str]:
          f"{la.kanal.juengste.statistic_id or ''} am {_zeit(la.kanal.juengste.gueltig_ab)}."]
     s += [_quelle_satz(q, la.t) for q in la.kanal.aeltere]
     if la.kanal.zeilen:
-        s.append(f"Kanal: {fmt_zahl(la.kanal.zeilen)} Stundenzeilen an {fmt_zahl(len(la.kanal.tage))} Tagen "
+        s.append(f"Kanal: {_anzahl(la.kanal.zeilen, 'Stundenzeile', 'Stundenzeilen')} an "
+                 f"{_anzahl(len(la.kanal.tage), 'Tag', 'Tagen')} "
                  f"({_spanne(list(la.kanal.tage))}) werden gelöscht; die Quellen bleiben als Herkunft mit Marke "
                  "«verworfen am» stehen.")
     return s
@@ -431,35 +434,44 @@ def _saetze_kanal(la: Lage) -> list[str]:
 def _saetze_bestand(la: Lage) -> list[str]:
     b, s = la.bestand, []
     if b.tage:
-        s.append(f"Bestand: an {fmt_zahl(len(b.tage))} Tagen ({_spanne(sorted(b.tage))}) werden nur die Werte dieses "
-                 f"Feldes geleert ({fmt_zahl(b.stundenzeilen)} Stundenzeilen, {fmt_zahl(b.tageszeilen)} Tageszeilen) "
+        s.append(f"Bestand: an {_anzahl(len(b.tage), 'Tag', 'Tagen')} ({_spanne(sorted(b.tage))}) werden nur die Werte "
+                 f"dieses Feldes geleert ({_anzahl(b.stundenzeilen, 'Stundenzeile', 'Stundenzeilen')}, "
+                 f"{_anzahl(b.tageszeilen, 'Tageszeile', 'Tageszeilen')}) "
                  "— Wetter, Prognose, Preise, Betriebsart, SoC und andere Geräte bleiben.")
     monate = la.abschluss_monate_betroffen()
     if monate:
-        s.append(f"{fmt_zahl(len(monate))} Monat(e) mit Abschluss bleiben im Bestand unberührt: {_monate_text(monate)}.")
+        s.append(f"{_anzahl(len(monate), 'Monat mit Abschluss bleibt', 'Monate mit Abschluss bleiben')} im Bestand "
+                 f"unberührt: {_monate_text(monate)}.")
     if la.ziele.mitbetroffen:
         s.append(f"Der Tageswert {', '.join(sorted(la.ziele.tz_keys))} trägt auch {', '.join(la.ziele.mitbetroffen)} "
                  "— er wird als Ganzes geleert.")
     if b.leistungspfad_stunden:
-        s.append(f"Die Leistungswerte des Geräts in {fmt_zahl(b.leistungspfad_stunden)} Stundenzeilen kommen von seinem "
+        s.append(f"Die Leistungswerte des Geräts in {_anzahl(b.leistungspfad_stunden, 'Stundenzeile', 'Stundenzeilen')} "
+                 "kommen von seinem "
                  "Leistungssensor, nicht von diesem Zähler — sie bleiben stehen.")
     return s
+
+
+def _anzahl(n: int, eins: str, mehr: str) -> str:
+    """«1 Tag» / «2 Tage» (Fund-Päckchen B, H1; wie ``zuordnung_wechsel.abfrage._anzahl`` und ``lib/plural.ts``)."""
+    return f"{fmt_zahl(n)} {eins if n == 1 else mehr}"
 
 
 def _saetze_danach(la: Lage) -> list[str]:
     s = []
     ohne = la.lesart1_ohne_werte()
     if ohne:
-        s.append(f"Danach haben {fmt_zahl(len(ohne))} Tage ({_spanne(ohne)}) keinen Wert dieses Feldes mehr: kein "
-                 "Kanal, und der Bestand trägt das Feld nicht mehr.")
+        s.append(f"Danach {'hat' if len(ohne) == 1 else 'haben'} {_anzahl(len(ohne), 'Tag', 'Tage')} ({_spanne(ohne)}) "
+                 "keinen Wert dieses Feldes mehr: kein Kanal, und der Bestand trägt das Feld nicht mehr.")
     if la.nur_kanal:
-        s.append(f"An {fmt_zahl(len(la.nur_kanal))} Tagen ({_spanne(list(la.nur_kanal))}), die nur der HA-Spiegel (bzw. die "
-                 "eigene Summe) trägt, gilt das Feld danach als nicht erfasst — die übrigen Felder des Tages bleiben "
+        s.append(f"An {_anzahl(len(la.nur_kanal), 'Tag', 'Tagen')} ({_spanne(list(la.nur_kanal))}), die nur der HA-Spiegel "
+                 "(bzw. die eigene Summe) trägt, gilt das Feld danach als nicht erfasst — die übrigen Felder des Tages bleiben "
                  "(auch in Monaten mit Abschluss).")
     mit = la.lesart1_mit_bestand()
     if mit:
-        s.append(f"{fmt_zahl(len(mit))} Tag(e) ({_spanne(mit)}) verlieren ihre Kanalzeilen, ihr Bestand bleibt "
-                 "unverändert (Monate mit Abschluss, der angebrochene Tag des Sensorwechsels).")
+        s.append(f"{_anzahl(len(mit), 'Tag verliert seine', 'Tage verlieren ihre')} Kanalzeilen ({_spanne(mit)}), "
+                 f"{'sein' if len(mit) == 1 else 'ihr'} Bestand bleibt unverändert (Monate mit Abschluss, der angebrochene "
+                 "Tag des Sensorwechsels).")
     s.append(SATZ_RUECKWEG)
     return s
 

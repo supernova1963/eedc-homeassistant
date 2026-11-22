@@ -11,8 +11,8 @@ die Prüfung den Tag nennen, obwohl eedc und Home Assistant für ihn dieselbe Za
 Home Assistant, der Vergleichswert der Prüfung reicht für diesen Tag aber nur bis 23 Uhr (die Stunde 23–24 Uhr zählt er zum
 Folgetag) — trägt diese letzte Stunde mindestens 2 kWh und 5 %, erscheint der Tag; und beginnt die Statistik mit einem großen
 ersten Wert (etwa eine importierte Statistik), lässt der Vergleichswert diese Stunde als unplausibel aus, Tagesansicht und Home
-Assistant zählen sie. Im zweiten Fall zeigt der Tag den großen ersten Wert wie Home Assistant — ist er dort falsch, berichtige
-ihn dort (Schritt 1).
+Assistant zählen sie. Im zweiten Fall zeigt der Tag den großen ersten Wert wie Home Assistant, und „Zählerstand springt“
+nennt diese erste Stunde — ist er dort falsch, berichtige ihn dort (Schritt 1).
 
 ## Lösungsweg
 1. In Home Assistant prüfen, welcher Wert stimmt. Ist die Statistik dort falsch (etwa ein Zählersprung), sie unter

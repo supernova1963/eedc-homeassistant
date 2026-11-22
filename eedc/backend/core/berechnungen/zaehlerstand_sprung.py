@@ -56,6 +56,14 @@ Handgriff richtige Quellwerte ändern lässt, wiegt schwerer als ein nicht gemel
 
 Der Arm «Neubeginn» bleibt, wie er war (Bezug mit ``BEZUG_MIN_TAGE`` Tagen, Maß über ``SCHWELLE_NEUBEGINN``).
 
+**Fünfter Fall «Beginn nicht bei 0»** (``BEGINN``, Fund-Päckchen B 22.11.2026, ``beginn_ueber_grenze``): die erste Zeile einer
+HA-Statistik trägt schon einen großen ``sum`` — etwa eine in Home Assistant importierte Statistik, die mit dem Zählerstand statt
+mit 0 beginnt. HA zählt vor ihr den Anfangsstand 0 (Energie-Dashboard), eedc ebenso (``kanal/lesen._ha_beginn_sql``); die erste
+Stunde trägt dann den ganzen Stand. Ein Zeilenpaar gibt es dort nicht — der Aufrufer reicht die erste Zeile nur, wenn eedc sie
+ab dem Anfangsstand 0 zählt. Gemeldet wird allein über der Grenze (b): ohne Vorgeschichte gibt es kein Maß; eine gewöhnliche
+erste Stunde liegt weit darunter (gemessen: Wallbox 5 000,7, PV 1 000,4, Wärmepumpe 3 000,5 kWh in der ersten Stunde — bis
+Päckchen B ohne Befund an Wallbox und Wärmepumpe, an PV nur ``drift_tag``).
+
 **Vierter Arm «Zwischenstand»** (``ZWISCHENSTAND``, U3-K B4; nur mit ``zwischenstand=True``, den der MQTT-Erzeuger setzt): ein
 Gerät meldet innerhalb einer Stunde kurz 0 oder ein anderes Gerät sendet kurz seinen Stand — am Stundenende steht der alte
 Zähler wieder, HAs Summenregel hat dazwischen aber einen Neubeginn gezählt. Die Zeile zeigt dann Δ ``sum`` − Δ ``state``
@@ -109,6 +117,8 @@ REIF_MIN_TAG = 1.0
 #: U3-K (B2 (b)): eine Stundenmenge über dieser Menge (kWh) — oder über 1,5 × Anlagenleistung, wenn das mehr ist — kann keine
 #: Anlage in einer Stunde verbrauchen oder erzeugen.
 MENGE_UNMOEGLICH_MIN = 100.0
+#: Fünfter Fall (Päckchen B): die erste Zeile einer HA-Statistik beginnt mit einem Stand über der Grenze (b) statt bei 0.
+BEGINN = "beginn"
 #: Arm D (U3-K, B4): innerhalb der Stunde hat der Stand kurz eine andere Höhe gezeigt und ist zurückgekehrt.
 ZWISCHENSTAND = "zwischenstand"
 #: Arm D: Δ sum − Δ state ab diesem Anteil des Stands davor.
@@ -220,6 +230,15 @@ def _ohne_mass(z0: tuple, z1: tuple, menge: float, rueckgang: bool, zwischenstan
     return None
 
 
+def beginn_ueber_grenze(zeile: tuple, grenze: Optional[float]) -> Optional[Standsprung]:
+    """Fünfter Fall ``BEGINN``: ``zeile`` = ``(start_ts, state, sum)`` ist die erste Zeile einer HA-Statistik, die eedc (wie HA)
+    ab dem Anfangsstand 0 zählt — das sagt der Aufrufer. Liegt ihr ``sum`` über ``grenze`` (B2 (b); ``None`` = keine Grenze),
+    zählt die erste Stunde den ganzen Stand: ein ``Standsprung`` von 0 auf ``sum`` ohne Maß, sonst ``None``."""
+    if grenze is None or not zeile or zeile[2] is None or zeile[2] <= grenze:
+        return None
+    return Standsprung(int(zeile[0]), BEGINN, float(zeile[2]), 0.0, float(zeile[2]), 0.0)
+
+
 def finde_standspruenge(zeilen: Sequence[tuple], *, stand: bool = False,
                         ausgenommen: frozenset[int] | set[int] = frozenset(), rueckgang: bool = False,
                         grenze: Optional[float] = None, zwischenstand: bool = False) -> list[Standsprung]:
@@ -269,6 +288,6 @@ def finde_standspruenge(zeilen: Sequence[tuple], *, stand: bool = False,
     return out
 
 
-__all__ = ["BEZUG_MIN_TAGE", "BEZUG_TAGE", "MENGE_UNMOEGLICH_MIN", "NEUBEGINN", "REIF_MIN_TAG", "RUECKGANG",
+__all__ = ["BEGINN", "BEZUG_MIN_TAGE", "BEZUG_TAGE", "MENGE_UNMOEGLICH_MIN", "NEUBEGINN", "REIF_MIN_TAG", "RUECKGANG",
            "RUECKGANG_SCHWELLE", "SCHWELLE_NEUBEGINN", "SCHWELLE_SPRUNG", "SPRUNG", "Standsprung", "ZWISCHENSTAND",
-           "ZWISCHEN_ANTEIL", "bezug", "finde_standspruenge", "grenze_der_zeile", "grenze_unmoeglich", "mass", "reif", "tageszuwachs"]
+           "ZWISCHEN_ANTEIL", "beginn_ueber_grenze", "bezug", "finde_standspruenge", "grenze_der_zeile", "grenze_unmoeglich", "mass", "reif", "tageszuwachs"]

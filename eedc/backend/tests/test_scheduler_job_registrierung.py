@@ -335,3 +335,96 @@ class TestRecoveryJob:
         }
         await energie_profil_aggregation_recovery_job()
         assert protokoll[0]["details"] == "1/3 Anlagen erfolgreich"
+
+
+def _werte(feld: str, bereich: range) -> set[int]:
+    """Die Werte eines Cron-Felds in den Formen, die der Scheduler nutzt: ``*``, ``n``, ``*/n``, ``a,b``.
+
+    Eine andere Form wirft — dann ist dieser Test zu erweitern, statt still zu schweigen.
+    """
+    werte: set[int] = set()
+    for teil in feld.split(","):
+        if teil == "*":
+            werte |= set(bereich)
+        elif teil.startswith("*/"):
+            werte |= set(bereich[:: int(teil[2:])])
+        elif teil.isdigit():
+            werte.add(int(teil))
+        else:
+            raise AssertionError(f"Cron-Form {feld!r} kennt dieser Test nicht — erweitern")
+    return werte
+
+
+#: Paare mit gleicher Minute, die es VOR dem Fund-Päckchen B schon gab (Auto-Publish auf :00 in der
+#: Voreinstellung 60 min gegen drei tägliche Jobs auf der vollen Stunde). Nicht gemessen gestört, offen beim
+#: Master (Bericht Funde B, 22.11.2026). Dieses Register schrumpft nur.
+BESTAND_GLEICHE_MINUTE = {
+    frozenset({"mqtt_auto_publish", "mqtt_energy_cleanup"}),   # 03:00
+    frozenset({"mqtt_auto_publish", "api_cache_cleanup"}),     # 04:00
+    frozenset({"mqtt_auto_publish", "kraftstoffpreis"}),       # 06:00
+}
+
+
+class TestKeineZweiJobsInDerselbenMinute:
+    """Lab 21.11.2026 (F13): «MQTT Live Cleanup» (täglich 03:05) und der Stundenlauf (:05) starteten in derselben
+    Sekunde; der Stundenlauf brach an allen Anlagen mit «database is locked» ab, die Stunde ab 02:00 fehlte bis 04:05.
+
+    Geprüft wird die Job-Tabelle in der Voreinstellung mit MQTT-Inbound: kein Paar von Jobs mit fester Uhrzeit
+    (``CronTrigger``) belegt dieselbe Stunde und Minute. Intervall-Jobs (``IntervalTrigger``) laufen ab ihrem
+    Start und haben keine feste Minute — sie stehen nicht in dieser Prüfung. Konfigurierte Felder, keine Wanduhr.
+    """
+
+    @staticmethod
+    def _belegung(s) -> dict[tuple[int, int], set[str]]:
+        from apscheduler.triggers.cron import CronTrigger
+
+        belegt: dict[tuple[int, int], set[str]] = {}
+        for job in s._scheduler.get_jobs():
+            if not isinstance(job.trigger, CronTrigger):
+                continue
+            felder = {f.name: str(f) for f in job.trigger.fields}
+            for stunde in _werte(felder["hour"], range(24)):
+                for minute in _werte(felder["minute"], range(60)):
+                    belegt.setdefault((stunde, minute), set()).add(job.id)
+        return belegt
+
+    @pytest.mark.asyncio
+    async def test_keine_zwei_cron_jobs_in_derselben_minute(self):
+        s = EEDCScheduler()
+        assert s.start() is True
+        try:
+            assert s.add_mqtt_snapshot_jobs() is True
+            belegt = self._belegung(s)
+        finally:
+            s.stop()
+        doppelt = {}
+        for (stunde, minute), ids in belegt.items():
+            paare = {frozenset({a, b}) for a in ids for b in ids if a < b}
+            neu = paare - BESTAND_GLEICHE_MINUTE
+            if neu:
+                doppelt[f"{stunde:02d}:{minute:02d}"] = sorted(sorted(p) for p in neu)
+        assert not doppelt, f"Jobs mit fester Uhrzeit in derselben Minute: {doppelt}"
+
+    @pytest.mark.asyncio
+    async def test_bestand_register_ist_nicht_verwaist(self):
+        s = EEDCScheduler()
+        assert s.start() is True
+        try:
+            assert s.add_mqtt_snapshot_jobs() is True
+            belegt = self._belegung(s)
+        finally:
+            s.stop()
+        gelebt = {frozenset({a, b}) for ids in belegt.values() for a in ids for b in ids if a < b}
+        assert BESTAND_GLEICHE_MINUTE <= gelebt, sorted(sorted(p) for p in BESTAND_GLEICHE_MINUTE - gelebt)
+
+    @pytest.mark.asyncio
+    async def test_mqtt_live_cleanup_liegt_nicht_auf_einem_vielfachen_von_5(self):
+        """Auto-Publish (*/5 … */60) und 5-Minuten-Snapshot (*/5) starten je nach Einstellung auf jedem Vielfachen von 5."""
+        s = EEDCScheduler()
+        assert s.start() is True
+        try:
+            assert s.add_mqtt_snapshot_jobs() is True
+            felder = {f.name: str(f) for f in s._scheduler.get_job("mqtt_live_cleanup").trigger.fields}
+        finally:
+            s.stop()
+        assert int(felder["minute"]) % 5 != 0

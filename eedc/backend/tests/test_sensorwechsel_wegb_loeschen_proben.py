@@ -507,8 +507,9 @@ def _tage(T: datetime, e_neu: datetime) -> list[date]:
 
 
 async def _pruefe_soll(w, T: datetime, e_neu: datetime, neu: str, okt_vorher: dict, *, felder=("pv", "pvk", "wb"),
-                      drift_tage: tuple[date, ...] = ()) -> dict:
-    """Das Soll der Tabelle A2 — über die Sichten gegen HA (die anderen Felder: ihre HA-Sensoren)."""
+                      drift_tage: tuple[date, ...] = (), erwartet: tuple[str, ...] = ()) -> dict:
+    """Das Soll der Tabelle A2 — über die Sichten gegen HA (die anderen Felder: ihre HA-Sensoren). ``erwartet``: Befund-Codes
+    aus ``VERBOTEN``, die in dieser Lage stehen müssen (Fund-Päckchen B: «Zählerstand springt» an der importierten Statistik)."""
     tage = _tage(T, e_neu)
     monate = sorted({(T.year, T.month), (e_neu.year, e_neu.month)})
     ha_eid = {"pv": neu, "pvk": PVC, "wb": WB}
@@ -542,7 +543,8 @@ async def _pruefe_soll(w, T: datetime, e_neu: datetime, neu: str, okt_vorher: di
     assert sorted(x[:10] for x in drift) == sorted(d.isoformat() for d in drift_tage), drift
     b["drift_tag"] = None
     b = {c: v for c, v in b.items() if v}
-    assert not [c for c in VERBOTEN if c in b], {c: b[c] for c in VERBOTEN if c in b}
+    assert all(c in b for c in erwartet), (erwartet, sorted(b))
+    assert not [c for c in VERBOTEN if c in b and c not in erwartet], {c: b[c] for c in VERBOTEN if c in b}
     assert len(b.get("daten_vor_aenderung_geloescht", [])) == 1, b.get("daten_vor_aenderung_geloescht")
     assert await gespeichert_okt(w) == okt_vorher
     return {"bild": bild, "befunde": b}
@@ -608,7 +610,8 @@ async def test_f2_nur_dieses_feld_bewusst_leere_tage_ohne_befund(db, monkeypatch
 
 async def test_a_importierte_statistik_zeigt_den_sprung_wie_ha(db, monkeypatch, stehende_uhr):
     """(a) Die erste Zeile der neuen Statistik trägt ``sum`` 1 000 (importiert): Tag, Monatssicht, «Aus HA laden» und Vorschlag
-    zählen sie ab dem Anfangsstand 0 — wie HA. Kein Befund nennt den Sprung (benannte Grenze; HA zeigt denselben)."""
+    zählen sie ab dem Anfangsstand 0 — wie HA. Seit Fund-Päckchen B (22.11.2026) nennt «Zählerstand springt» die erste Stunde
+    (Fall «Beginn nicht bei 0»; bis dahin kein Befund, benannte Grenze 2)."""
     w, T, e_neu, neu = await _welt_der_lage(db, monkeypatch, "import_1000")
     okt = await _bis_zum_wechsel(w, T)
     p, _r = await loeschen(w, T, "inv_energy_1_pv_erzeugung_kwh", quelle="ha_app", entity_id=neu)
@@ -616,7 +619,9 @@ async def test_a_importierte_statistik_zeigt_den_sprung_wie_ha(db, monkeypatch, 
     await _nach_dem_wechsel(w, T)
     # Gemessen (Lage a): die Drift-Prüfung nennt den Tag — ihr LTS-Tagesweg verwirft die Stunde mit 1 000 kWh als
     # unplausibel (PV 1.054,4 → HA 53,6), Tagesansicht und Monat zählen sie wie HAs Energie-Dashboard.
-    erg = await _pruefe_soll(w, T, e_neu, neu, okt, drift_tage=(T.date(),))
+    erg = await _pruefe_soll(w, T, e_neu, neu, okt, drift_tage=(T.date(),), erwartet=("ha_zaehlerstand_springt",))
+    assert "+1.000,4 kWh (Stand 0,0 → 1.000,4, die Statistik beginnt mit diesem Stand statt bei 0)" in \
+        erg["befunde"]["ha_zaehlerstand_springt"][0]
     pv = erg["bild"][("pv", (2026, 11))]
     assert (pv["tage"][T.date()], pv["monatssicht"], pv["aus_ha_laden"], pv["vorschlag"]) == (1006.4, 1007.6, 1007.6, 1007.6)
 

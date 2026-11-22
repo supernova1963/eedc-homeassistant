@@ -26,6 +26,12 @@ nach Wochen mit Standby ist kein Befund.
   den getauschten Zähler als eigenes Gerät führen (Handbuch Einstellungen §3.4a) und beim nächsten Tausch einen neuen Sensor
   zuordnen und «Bisherige Werte bleiben» wählen. Ohne Mengen-Fund ist die Zeile eine Auskunft mit Schwere Info (W-6).
 
+**Beginn nicht bei 0 (Fund-Päckchen B, 22.11.2026):** beginnt die Statistik eines Mengen-Zählers in HA mit einem Stand über
+der Grenze (b) — etwa eine importierte Statistik —, zählen HA und eedc (``kanal/lesen._ha_beginn_sql``, Anfangsstand 0) den
+ganzen Stand als Menge der ersten Stunde. Die Zeile nennt sie (``zaehlerstand_sprung.beginn_ueber_grenze``), nur wenn eedc
+diese erste Zeile ab 0 zählt (``kanal/bilanz_leser.ha_statistik_beginn`` — dieselbe Bedingung); sonst zählt sie nirgends.
+Derselbe Weg wie beim Sprung: «Summe anpassen» in HA an der ersten Stunde, danach «Aus Home Assistant neu übernehmen».
+
 Der Kanalwert eines Mengen-Kanals ist ``sum + offset``; die Differenz zweier Zeilen derselben Quelle ist Δ ``sum`` — der Kern
 liest ``sum`` und ``state`` wörtlich.
 """
@@ -37,7 +43,14 @@ from typing import Optional
 
 from sqlalchemy import select, text
 
-from backend.core.berechnungen.zaehlerstand_sprung import NEUBEGINN, Standsprung, finde_standspruenge, grenze_unmoeglich
+from backend.core.berechnungen.zaehlerstand_sprung import (
+    BEGINN,
+    NEUBEGINN,
+    Standsprung,
+    beginn_ueber_grenze,
+    finde_standspruenge,
+    grenze_unmoeglich,
+)
 from backend.core.zahlenformat import fmt_zahl
 from backend.models.anlage import Anlage
 from backend.services.daten_checker.datenquelle.ha_sprung import rueckkehr_stunden
@@ -93,12 +106,18 @@ def grenze_der_einheit(einheit: Optional[str], schwelle_anlage: Optional[float])
     return grenze_unmoeglich(schwelle_anlage) if einheit == "kWh" else None
 
 
-def finde(zeilen, schwelle_anlage: Optional[float] = None) -> list[_Fund]:
+def finde(zeilen, schwelle_anlage: Optional[float] = None, beginn: Optional[dict[str, int]] = None) -> list[_Fund]:
     """Reine Funktion über die Zeilen der Abfrage: je Sprung ein Fund, größte Menge zuerst. ``schwelle_anlage``: 1,5 × kWp der
-    Anlage (``snapshot/plausibility``), für die Grenze B2 (b)."""
+    Anlage (``snapshot/plausibility``), für die Grenze B2 (b). ``beginn``: je Mengen-Kanal, dessen erste Zeile eedc ab dem
+    Anfangsstand 0 zählt, ihr ``start_ts`` (``ha_statistik_beginn``) — dort prüft der Fall «Beginn nicht bei 0»."""
     funde: list[_Fund] = []
+    beginn = beginn or {}
     for (key, art, einheit, sid), z in _abschnitte(zeilen):
         stand = art == "stand"
+        if not stand and beginn.get(key) == z[0][0]:
+            sp = beginn_ueber_grenze(z[0], grenze_der_einheit(einheit, schwelle_anlage))
+            if sp is not None:
+                funde.append(_Fund(key, stand, einheit, sid, sp))
         for sp in finde_standspruenge(z, stand=stand, ausgenommen=rueckkehr_stunden(z),
                                       grenze=grenze_der_einheit(einheit, schwelle_anlage)):
             funde.append(_Fund(key, stand, einheit, sid, sp))
@@ -109,7 +128,8 @@ def finde(zeilen, schwelle_anlage: Optional[float] = None) -> list[_Fund]:
 def _zeile(f: _Fund, namen: dict) -> str:
     stunde = datetime.fromtimestamp(f.sprung.start_ts)
     einheit = f" {f.einheit}" if f.einheit else ""
-    wie = ("der neue Stand beginnt nicht bei 0" if f.sprung.art == NEUBEGINN else "der Stand springt nach oben")
+    wie = {NEUBEGINN: "der neue Stand beginnt nicht bei 0",
+           BEGINN: "die Statistik beginnt mit diesem Stand statt bei 0"}.get(f.sprung.art, "der Stand springt nach oben")
     return (f"{namen.get(f.key, f.key)} ({f.sensor}) am {stunde.strftime('%d.%m.%Y')}, Stunde ab {stunde.strftime('%H:%M')}: "
             f"+{fmt_zahl(f.sprung.menge, 1)}{einheit} (Stand {fmt_zahl(f.sprung.stand_vorher, 1)} → "
             f"{fmt_zahl(f.sprung.stand_nachher, 1)}, {wie})")
@@ -125,6 +145,8 @@ SATZ_WAS = ("In diesen Stunden ist der Zählerstand eines Sensors gesprungen —
             "Stunde; beginnt ein neuer Zähler nicht bei 0, zählt es seinen ganzen Stand. eedc übernimmt die Statistik so, wie "
             "das Energie-Dashboard von Home Assistant sie zeigt, und berichtigt nichts — der Sprung steht deshalb in Tag, Monat "
             "und Jahr.")
+SATZ_BEGINN = ("Beginnt die Statistik eines Sensors in Home Assistant mit einem großen Stand statt bei 0 — etwa, weil sie "
+               "importiert wurde —, zählt Home Assistant diesen Stand als Menge der ersten Stunde, eedc ebenso.")
 SATZ_MENGE = ("Gefunden: {namen}. Lösung in Home Assistant: Einstellungen → Werkzeuge → Statistik (in älteren "
               "Home-Assistant-Versionen: Entwicklerwerkzeuge → Statistik) → den Sensor suchen → beim Symbol „Summe anpassen“ "
               "unter „Zeitpunkt auswählen“ die Zeit des Sprungs in der genannten Stunde wählen, bei „Neuer Wert“ die echte "
@@ -146,16 +168,18 @@ class ZaehlerstandSpringtChecks:
     async def _check_ha_zaehlerstand_springt(self, anlage: Anlage) -> list[CheckErgebnis]:
         """Benennt Stunden, in denen HAs Statistik einen Zählerstand-Sprung als Menge zählt — Feld, Sensor, Stunde, Menge —
         mit dem Weg in Home Assistant. Ohne Spiegel (Standalone) kein Befund."""
+        from backend.services.kanal.bilanz_leser import ha_statistik_beginn
         from backend.services.snapshot.plausibility import schwelle_der_anlage_stunde_kwh
 
         zeilen = (await self.db.execute(text(_SQL), {"a": anlage.id})).all()
-        funde = finde(zeilen, await schwelle_der_anlage_stunde_kwh(self.db, anlage.id)) if zeilen else []
+        funde = (finde(zeilen, await schwelle_der_anlage_stunde_kwh(self.db, anlage.id),
+                       await ha_statistik_beginn(self.db, anlage.id)) if zeilen else [])
         if not funde:
             return []
         namen = await self._standsprung_namen(anlage.id, {f.key for f in funde})
         mengen = [f for f in funde if not f.stand]
         staende = [f for f in funde if f.stand]
-        teile = [SATZ_WAS]
+        teile = [SATZ_WAS] + ([SATZ_BEGINN] if any(f.sprung.art == BEGINN for f in funde) else [])
         if mengen:
             teile.append(SATZ_MENGE.format(namen=_aufzaehlung(mengen, namen)))
         if staende:

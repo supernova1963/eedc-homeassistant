@@ -79,8 +79,9 @@ Felder erfasst.
 >   `zeitraum`/`reihe`, `stunden`, `deltas`, `zellen`), in «Aus HA laden», dem Monatsabschluss-Vorschlag und dem LTS-Tag
 >   «HA führt keine Zeile davor» (`ha_statistics_service.get_sensor_fensterwert`, `get_hourly_slots_for_day`). Folgen: Tag,
 >   Monatssicht, «Aus HA laden» und Vorschlag nennen dieselbe Zahl wie Home Assistant; eine erste Zeile mit großem `sum`
->   (importierte Statistik) zählt ganz — Home Assistant zeigt denselben Sprung; kein Sprung-Befund nennt ihn, der Drift-Vergleich
->   nennt den Tag (benannte Grenzen 1–3 im Abschnitt «Benannte Grenzen des Sensorwechsels»).
+>   (importierte Statistik) zählt ganz — Home Assistant zeigt denselben Sprung; über der Grenze «mehr, als eine Anlage in einer
+>   Stunde leisten kann» nennt ihn «Zählerstand springt» (Fall «Beginn nicht bei 0», Fund-Päckchen B), der Drift-Vergleich
+>   nennt den Tag an PV (benannte Grenzen 1–3 im Abschnitt «Benannte Grenzen des Sensorwechsels»).
 >   Sind an einem Tag **alle** Felder der Bilanz-Gruppe bewusst leer (vor ihrer ersten Zeile gelöscht), heißt die Wahl
 >   `bewusst_leer` (`kanal/bilanz_leser`): Zahlen «—», kein Tag «ohne Kanal-Deckung». Benannte Grenzen: der Drift-Vergleich
 >   mit Home Assistant liest für den ersten Tag einer Statistik das Fenster `[Vortag 23:00, 23:00)` und kann den Tag nennen,
@@ -5529,7 +5530,9 @@ ersten doppelten Herbststunde zeigt die Reihe dann am Tag 13,7 statt 14,3 (gemes
 unberührt, Option A).
 Kanal, Tagesabschluss aus HA-Slots und Monat treffen dort das Soll. (5) Andere Kombinationen als Home Assistant → Home Assistant lesen bei «bleiben» wie bisher (U3). (6) Trägt die erste Zeile des neuen Sensors
 eine große Summe (eine importierte Statistik, ein Neubeginn in der ersten Stunde), zählt eedc sie wie Home Assistant; der Befund
-«Zählerstand springt» (unten) nennt sie nicht — er vergleicht nur Stunden desselben Sensors (Lauf c, gemessen in Lauf b «Ungeprüft c»).
+«Zählerstand springt» (unten) nennt sie, wenn eedc diese erste Zeile ab dem Anfangsstand 0 zählt (`kanal/bilanz_leser.ha_statistik_beginn`)
+und ihr Wert über der Grenze (b) liegt (Fall «Beginn nicht bei 0», `zaehlerstand_sprung.beginn_ueber_grenze`, Fund-Päckchen B
+22.11.2026; bis dahin verglich er nur Stunden desselben Sensors).
 
 **Jede Darstellung nimmt die Rand-Werte aus derselben Quelle wie ihre übrigen Werte:** die Reihe ihre gespeicherten Rand-Stände
 (`stand_alt_ende`/`stand_neu_null` in der Höhe der Reihe), der Kanal den Versatz seiner Quellzeile, die Leser direkt an Home
@@ -5678,7 +5681,7 @@ Geschätzt, verteilt oder überbrückt wird nichts. Eine Regel für jede Zuordnu
 | vor der ersten Zeile | kein Wert | «—»; ein Feld, dessen Quellen dort alle verworfen sind (Platzhalter von «löschen», Marke der Werkbank), nimmt der Anlage die Kanal-Deckung nicht (`kanal/bilanz_leser.GRUND_BEWUSST_LEER`, `bilanz_adapter.BewusstLeer`) | — |
 | erste Zeile einer späteren Quelle derselben Entity (A → B → A mit «bleiben», danach Werkbank «Werte vor dem Sensorbeginn verwerfen») | die Statistik von A beginnt früher; die Stunde zählt gegen die Zeile davor | kein Beginn: die erste Stunde nach dem Verwerfen zeigt «—», Tag und Monat ohne sie (wie v4.3.1); nie der laufende `sum` von A als Menge | `test_sensorwechsel_wegb_k_proben.py` (R1, Lagen-Tabelle) |
 | Lücke mitten in der Statistik | die Zeile nach der Lücke trägt die Menge der Lücke | Zählerlücke wie HA — gegen die Zeile vor der Lücke, kein Anfangsstand 0 | `test_kanal_lesen.py::test_anfangsstand_null_nur_am_beginn_der_statistik_luecke_mitten_drin_bleibt_zaehlerluecke` |
-| erste Zeile mit großem `sum` (importierte Statistik) | zählt ganz | zählt ganz (Tag, Monat, «Aus HA laden» = HA); kein Sprung-Befund; an einem PV-Feld nennt `drift_tag` den Tag (sein Tagesweg verwirft die Stunde als unplausibel), an einer Wallbox kein Befund (der Tag zählt dort ohne die erste Stunde, Grenze 4) | Bericht B1, Lage (a): 1 006,4 bzw. 1 007,6 ×3 = HA; Wallbox: Nachmessung Weg B, C3 (Tag 5 004,66, HA 5 005,98) |
+| erste Zeile mit großem `sum` (importierte Statistik) | zählt ganz | zählt ganz (Tag, Monat, «Aus HA laden» = HA); über der Grenze (b) nennt `ha_zaehlerstand_springt` die erste Stunde an jedem Feld (Fund-Päckchen B; gemessen PV 1 000,4, Wallbox 5 000,7, Wärmepumpe 3 000,5); an einem PV-Feld nennt zusätzlich `drift_tag` den Tag (sein Tagesweg verwirft die Stunde als unplausibel); an einer Wallbox zählt der Tag ohne die erste Stunde (Grenze 4) | Bericht B1, Lage (a): 1 006,4 bzw. 1 007,6 ×3 = HA; Wallbox: Nachmessung Weg B, C3 (Tag 5 004,66, HA 5 005,98) |
 | der erste Wert eines neuen Zählers springt | zählt ganz | zählt ganz; nach «Summe anpassen» in HA nennt `drift_komponente` den Tag, «Aus Home Assistant neu übernehmen» übernimmt ihn; «Tag neu aggregieren» nicht | `test_n791_reparatur_zaehler_ohne_leistungskurve.py` (123 923,3 → 13,7) |
 | «Daten vor der Änderung löschen» | unverändert (eedc schreibt nicht nach Home Assistant) | das Feld wie «erst jetzt zugeordnet» (Abschnitt oben); Geschichte des neuen Sensors, soweit HA sie führt | `services/feld_loeschen.py` |
 | «Bisherige Werte bleiben» zwischen zwei Sensoren | zwei Statistiken | je Geltungsabschnitt die Zeilen des jeweiligen Sensors (Rand-Werte oben); die Stunde des ersten Werts des neuen zählt beide | `zuordnung_wechsel/ansatz.py`, `monat.py` |
@@ -5709,9 +5712,12 @@ springt» (a)–(d) und der MQTT-Regeln (a)–(l) stehen bei ihren Abschnitten o
    die Prüfung bräuchte je Gerät den Beginn der Statistik und den Wert des Kalendertags — keine kleine Änderung an einer Stelle,
    und die importierte Statistik (Grenze 2) hat eine zweite Ursache. Ein Tag, an dem eine Statistik vor mehr als 90 Tagen begann,
    erscheint nicht.
-2. **Importierte Statistik mit großem erstem `sum`:** zählt wie in Home Assistant ganz; kein Sprung-Befund. An einem PV-Feld nennt
-   `drift_tag` den Tag (der Vergleichswert lässt die Stunde über der Plausibilitätsgrenze aus, Tagesansicht und Home Assistant
-   zählen sie — Bericht B1, Lage (a)); an einer Wallbox nennt ihn kein Befund (Nachmessung Weg B, C3).
+2. **Importierte Statistik mit großem erstem `sum`:** zählt wie in Home Assistant ganz. Seit Fund-Päckchen B (22.11.2026) nennt
+   «Zählerstand springt» die erste Stunde an jedem Feld, wenn ihr Wert über der Grenze (b) liegt (`test_funde_b.py`). An einem
+   PV-Feld nennt zusätzlich `drift_tag` den Tag (der Vergleichswert lässt die Stunde über der Plausibilitätsgrenze aus,
+   Tagesansicht und Home Assistant zählen sie — Bericht B1, Lage (a)). Nach «Summe anpassen» in Home Assistant und «Aus Home
+   Assistant neu übernehmen» folgen an PV und Wärmepumpe Tag und Monat; an einer Wallbox nur «Aus HA laden» — Tag und
+   Monatssicht der Wallbox behalten den alten Wert (gemessen, offen, Bericht Funde B).
 3. **Erster Wert eines neuen Zählers springt (N-791):** nur «Aus Home Assistant neu übernehmen» behebt die Drift nach der
    Berichtigung in HA, «Tag neu aggregieren» nicht (Probe N-791).
 4. **Abgeleiteter Kanal** (PV-Anteil der Heimladung) beginnt ohne Anfangsstand 0 — beginnt er am selben Tag wie die

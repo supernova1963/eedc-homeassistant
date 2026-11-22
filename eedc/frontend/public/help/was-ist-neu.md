@@ -37,13 +37,17 @@
 
 **Wärmepumpe: Arbeitszahl eines Tages aus einem Zeitraum.** Beginnt der Stromzähler deiner Wärmepumpe an einem Tag später als ihr Wärmezähler (etwa nach „Daten vor der Änderung löschen“ am Stromfeld), rechnet *Cockpit → Tag* jetzt nur mit der Wärme der Stunden, in denen auch Strom gemessen ist – im Beispiel 6,0 statt 9,0. Ohne Stundenwerte steht „—“ mit „Zähler messen verschiedene Zeiträume“. Monat und Jahr bleiben in dieser Lage wie bisher (Handbuch Wärme & Klima).
 
-**Wärmepumpe: Wärme ohne Strom zählt keine Ersparnis.** Ein Monat mit Wärme, aber ohne gemessenen Strom zählt in *Aussichten → Finanzen*, *Auswertungen → ROI* und im HA-Export keine Ersparnis mehr (bisher Gas-Ersparnis und ein Zwölftel der Zusatzkosten, im Beispiel 109,10 €) – wie schon unter *Komponenten → Wärmepumpe*.
+**Wärmepumpe: Wärme ohne Strom zählt keine Ersparnis.** Ein Monat mit Wärme, aber ohne gemessenen Strom zählt in *Aussichten → Finanzen*, *Auswertungen → ROI* und im HA-Export keine Ersparnis mehr (bisher Gas-Ersparnis und ein Zwölftel der Zusatzkosten, im Beispiel 109,10 €) – wie schon unter *Komponenten → Wärmepumpe*. Das trifft auch eine Wärmepumpe, bei der nur „Strom Heizen“ und „Strom Warmwasser“ gepflegt sind, während „Getrennte Strommessung“ aus ist; der Daten-Checker nennt die Lage, wenn diese Felder zugeordnet sind. „Stromverbrauch fehlt …“ nennt jetzt auch einen Monat mit 0 kWh Strom bei erfasster Wärme.
 
 **USt auf den Eigenverbrauch: je Komponente über ihre Monate.** Bei Regelbesteuerung zählen Abschreibung und Betriebskosten einer Komponente, die im Lauf des Jahres dazukam oder stillgelegt wurde, nur noch über ihre Monate (im Beispiel 68,97 € statt 80,94 €).
 
 **Aussichten → Finanzen: stillgelegte Wärmepumpe ohne Zusatzkosten in der Prognose.** Die Zusatzkosten der Alt-Heizung zählen in der Prognose nur noch für Wärmepumpen, die heute in Betrieb sind (im Beispiel 907,85 € statt 1 507,85 € WP-Ersparnis je Jahr).
 
-**Texte.** Die Reparatur-Werkbank sagt „der laufende Tag ist noch nicht abgeschlossen“; der Lösungsweg „Zählerstand ist gefallen“ sagt genau, wann eedc keine Differenz zeigt; das Handbuch Wärme & Klima sagt, dass „Alternative“ die Heizung ist, die du stattdessen angeschafft hättest – nicht dein Altgerät.
+**Stundenlauf um 03:05 Uhr ohne „database is locked“.** Das nächtliche Aufräumen der MQTT-Live-Werte lief zur selben Sekunde wie der stündliche Lauf, der die Zählerstände übernimmt; der brach dann an allen Anlagen ab, und die Stunde ab 02:00 Uhr fehlte bis 04:05 Uhr. Das Aufräumen läuft jetzt um 03:18 Uhr.
+
+**Daten-Checker: Statistik mit großem ersten Stand.** Beginnt die Statistik eines Sensors in Home Assistant mit einem großen Stand statt bei 0 (etwa nach einem Import), zählen Home Assistant und eedc ihn als Menge der ersten Stunde. „Zählerstände – Zählerstand springt“ nennt diese Stunde jetzt an jedem Feld, mit dem Weg in Home Assistant – bisher an einer Wallbox oder Wärmepumpe kein Befund.
+
+**Texte.** „1 Tag“ statt „1 Tage“ in der Vorschau „Werte vor dem Sensorbeginn verwerfen“; „Zählerstände – Rücksprung“ nennt auch den einzelnen Rückgang und „Zähler getauscht (gleiche Quelle)“; im Kasten „Was noch möglich wäre“ in *Cockpit → Tag* keine Ratschläge mehr, die dort nichts bewirken (Monatsabschluss, Werkbank vor dem ersten Wert eines gelöschten Wärmepumpen-Zählers). Die Reparatur-Werkbank sagt „der laufende Tag ist noch nicht abgeschlossen“; der Lösungsweg „Zählerstand ist gefallen“ sagt genau, wann eedc keine Differenz zeigt; das Handbuch Wärme & Klima sagt, dass „Alternative“ die Heizung ist, die du stattdessen angeschafft hättest – nicht dein Altgerät.
 
 ---
 

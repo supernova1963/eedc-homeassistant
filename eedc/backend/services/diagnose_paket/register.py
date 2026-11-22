@@ -185,9 +185,10 @@ REGISTER: dict[str, Tabelle] = {
         # `updated_at`: ISO-Zeitstempel, maschinengeschrieben (`datetime.now().isoformat()` der bis N-241 offenen Schreibtür
         # `api/routes/sensor_mapping.py`; am HEAD Altbestand) — Register-Nachtrag, Master 15.11.
         # `solcast_config` bleibt außerhalb der Allowlist (Marke; Konzept: fällt heraus).
+        # `historie_hinweis` (Hinweis-Block «Zuordnung geändert») ist seit Sensorwechsel S3b ohne Schreiber und seit Weg B
+        # ohne Leser; ein Alt-Vermerk in Bestandsdaten bleibt im Mapping, wirkt nicht und geht nicht ins Paket (Päckchen B, H3).
         sensor_mapping=_js("allowlist",
-                           ober=("basis", "investitionen", "quellen", "invertieren", "historie_hinweis", "live_sensors",
-                                 "updated_at"),
+                           ober=("basis", "investitionen", "quellen", "invertieren", "live_sensors", "updated_at"),
                            ts=("sensor_id", "strategie", "quelle", "entity_id", "id", "label", "name", "seit",
                                "updated_at"),
                            tu=("live", "live_sensors")),

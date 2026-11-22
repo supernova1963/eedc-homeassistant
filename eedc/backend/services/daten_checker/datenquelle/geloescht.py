@@ -91,6 +91,16 @@ async def geloeschte_felder(db, anlage_id: int) -> list[Geloescht]:
     return aus
 
 
+async def tag_vor_erster_zeile(db, anlage_id: int, tag: date, praefixe: tuple[str, ...]) -> bool:
+    """Fund-Päckchen B (H4): liegt ``tag`` ganz vor der ersten Zeile eines gelöschten Felds, dessen Schlüssel mit einem der
+    ``praefixe`` beginnt (oder hat es noch keine)? Dort hat «Den Tag in der Reparatur-Werkbank nachrechnen» nichts, woraus es
+    rechnen könnte — die Daten vor der Änderung sind gelöscht. Ohne Platzhalter eine Abfrage ohne Zeile."""
+    for g in await geloeschte_felder(db, anlage_id):
+        if g.sensor_key.startswith(praefixe) and g.beginn.date() <= tag and (g.erste is None or tag < g.erste.date()):
+            return True
+    return False
+
+
 def _uhr(t: datetime) -> str:
     return t.strftime("%d.%m.%Y %H:%M")
 

@@ -219,8 +219,11 @@ class RuecksprungChecks:
             details=(
                 f"Ein Zählerstand muss fortlaufend steigen. Bei diesen Feldern "
                 f"fällt er in den letzten {RUECKSPRUNG_FENSTER_TAGE} Tagen "
-                f"wieder auf einen niedrigeren Wert zurück — typisch für ein "
-                f"Feld, das „heute“ oder „diesen Monat“ meint. {beleg} "
+                f"wieder auf einen niedrigeren Wert zurück — fällt er immer "
+                f"wieder zurück, typisch für ein Feld, das „heute“ oder „diesen "
+                f"Monat“ meint; fällt er einmal, kann auch ein neuer Zähler "
+                f"begonnen oder die Quelle eine Zeit lang einen anderen Stand "
+                f"gesendet haben. {beleg} "
                 f"{folge}"
                 f"Lösung: Schicke den fortlaufenden Stand statt des Tageswerts. "
                 f"Kommt der Wert aus einem Home-Assistant-Helfer, steht die "
@@ -228,6 +231,10 @@ class RuecksprungChecks:
                 f"Zurücksetzen auf „nie“ (ohne Zyklus). Kommt er aus einer "
                 f"eigenen App oder einem Skript, sende den Lebenszählerstand. "
                 f"eedc bildet Tag, Monat und Jahr daraus selbst — und exakt. "
+                f"Wurde der Zähler getauscht, trag den Tausch in den Datenquellen "
+                f"am Feld mit „Zähler getauscht (gleiche Quelle)“ ein; hat die "
+                f"Quelle eine Zeit lang einen falschen Stand gesendet, liegt der "
+                f"Fehler dort. "
                 f"Betroffen: {namen}"
             ),
             ziel=ziel_datenquelle_schluessel(_key),

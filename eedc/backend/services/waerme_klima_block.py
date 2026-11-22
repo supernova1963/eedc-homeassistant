@@ -310,6 +310,7 @@ _GERAET_GROESSEN: tuple[tuple[str, str, str, Optional[str]], ...] = (
 def was_noch_moeglich(
     gruende: Iterable[tuple[str, Optional[str]]],
     geraete: Sequence[WpGeraetZeile] = (),
+    ohne_handgriff: frozenset[str] = frozenset(),
 ) -> list[WpMoeglichZeile]:
     """Der Kasten — **jeder Ausstattungs-Grund genau einmal**.
 
@@ -322,6 +323,10 @@ def was_noch_moeglich(
             **Ausstattungs**-Gründe kommen mit in den Kasten, mit dem
             Gerätenamen davor (*„Bosch Climate 5000 Multisplit: kein
             Wärmemengenzähler zugeordnet"*).
+        ohne_handgriff: rohe Gründe, deren Zeile hier ohne Handgriff und ohne Link steht, weil er in dieser Sicht
+            nichts bewirkt (Fund-Päckchen B, H4/H5: im Tag «Zähler messen verschiedene Zeiträume» — kein
+            Monatsabschluss im Tag; «für diesen Tag keine Zählerstände» vor der ersten Zeile eines gelöschten Felds —
+            die Werkbank hat dort nichts nachzurechnen). Grund und Größe bleiben stehen.
 
     ⭐ **Warum die Geräte-Gründe dazugehören** (WK-16h/**R-4**, N-502). Bis zum
     15.09.2026 trug der Kasten nur die anlagenweiten Zahlen. Gemessen an der
@@ -429,8 +434,8 @@ def was_noch_moeglich(
             groessen=list(groessen[z]),
             groesse=" · ".join(groessen[z]),
             grund=z,
-            handgriff=HANDGRIFF_JE_GRUND.get(roh_je_zeile[z]),
-            link=_link(roh_je_zeile[z]),
+            handgriff=None if roh_je_zeile[z] in ohne_handgriff else HANDGRIFF_JE_GRUND.get(roh_je_zeile[z]),
+            link=None if roh_je_zeile[z] in ohne_handgriff else _link(roh_je_zeile[z]),
         )
         for z in reihenfolge
     ]
