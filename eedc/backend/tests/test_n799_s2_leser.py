@@ -263,7 +263,7 @@ def test_ziel_befund():
     from backend.services.daten_checker import ziele
     from backend.services.daten_checker.kategorien import link_aus_ziel
 
-    assert link_aus_ziel(ziele.ziel_befund("zaehler_versatz")) == "/einstellungen/daten?block=datenchecker&befund=zaehler_versatz"
+    assert link_aus_ziel(ziele.ziel_befund("erfassung_stillstand")) == "/einstellungen/daten?block=datenchecker&befund=erfassung_stillstand"
     with pytest.raises(ValueError):
         ziele.ziel_befund("gibt_es_nicht")
 

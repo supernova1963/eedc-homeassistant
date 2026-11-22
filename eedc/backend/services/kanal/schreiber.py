@@ -370,7 +370,7 @@ async def _spiegel(db: AsyncSession, k: _Kontext, ha_svc) -> int:
             staende[key] = st
         zeilen = [_zeile(st.kanal.id, int(round(z["start_ts"])), FAMILIE_SPIEGEL,
                          sum=_mal(z["sum"], faktor), state=_mal(z["state"], faktor)) for z in roh]
-        # Sensorwechsel S3: hinter einem verworfenen Abschnitt (Korrektur) beginnt immer eine neue Quelle.
+        # Sensorwechsel S3: hinter einem verworfenen Abschnitt («löschen», Werkbank) beginnt immer eine neue Quelle.
         if (st.quelle is None or st.quelle.familie != FAMILIE_SPIEGEL or st.quelle.statistic_id != eid
                 or st.quelle.verworfen_ts is not None):
             await _neue_spiegel_quelle(db, ha_svc, st, eid, zeilen, faktor)

@@ -12,8 +12,7 @@
   "einstellungen/datenquellen": [
    "feld",
    "geraet",
-   "getauscht",
-   "stueck"
+   "getauscht"
   ],
   "einstellungen/integration#import-buendel": [
    "block",
@@ -55,11 +54,11 @@
     "bereich": "daten",
     "block": "datenchecker",
     "params": {
-     "befund": "zaehler_versatz"
+     "befund": "erfassung_stillstand"
     },
-    "anker": "zaehler_versatz"
+    "anker": "erfassung_stillstand"
    },
-   "pfad": "/einstellungen/daten?block=datenchecker&befund=zaehler_versatz"
+   "pfad": "/einstellungen/daten?block=datenchecker&befund=erfassung_stillstand"
   },
   {
    "ziel": {
@@ -429,18 +428,6 @@
     "anker": null
    },
    "pfad": "/einstellungen/datenquellen?geraet=1&getauscht=2026-01-01T10:20"
-  },
-  {
-   "ziel": {
-    "bereich": "datenquellen",
-    "block": null,
-    "params": {
-     "geraet": 1,
-     "stueck": "inv:1:aktiv~2026-01-01T00:00~2026-01-02T00:00"
-    },
-    "anker": null
-   },
-   "pfad": "/einstellungen/datenquellen?geraet=1&stueck=inv:1:aktiv~2026-01-01T00:00~2026-01-02T00:00"
   },
   {
    "ziel": {

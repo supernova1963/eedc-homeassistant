@@ -19,8 +19,8 @@ MQTT gewechselt hat und einen früheren Tausch meldet, trifft die Spiegel-Zeit):
   hinweg (``core/berechnungen/zaehler_naht.py``), der MQTT-Stundenlauf teilt dort die Periode (``kanal/naht.offene_naehte``);
   hat er die Stunde des Tauschs schon geschrieben, trägt ``kanal/naht.nachtrag_fortsetzung`` den Versatz nach (die Stunde
   zählt danach keinen Zuwachs — benannte Grenze B-3 «bis 1 h»; die Vorschau nennt, was sie bisher zählt, §11 Nr. 49).
-* **Verworfene Zeit** (``nicht_moeglich``): zur Stunde gilt eine bei einer Korrektur verworfene Quelle — dort führt der Kanal
-  keine Werte, nichts ist zu überbrücken (ebenso eine Quelle, die weder Spiegel noch Mitschrift ist).
+* **Verworfene Zeit** (``nicht_moeglich``): zur Stunde gilt eine verworfene Quelle («Daten vor der Änderung löschen», Werkbank
+  «Werte vor dem Sensorbeginn verwerfen») — dort führt der Kanal keine Werte, nichts ist zu überbrücken (ebenso eine Quelle, die weder Spiegel noch Mitschrift ist).
 * **Vor dem ersten eigenen Wert** (``vor_erstem_wert``, §11 Nr. 45): kein Stand davor, kein Sprung — nicht eingetragen, die
   Antwort nennt den ersten Wert. Ohne eigene Werte bzw. ohne Quelle gibt es ebenfalls nichts zu überbrücken.
 

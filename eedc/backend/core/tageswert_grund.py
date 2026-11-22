@@ -76,11 +76,6 @@ GRUND_KEINE_ZAEHLERSTAENDE: Final[str] = "keine_zaehlerstaende"
 #: Logzeile (``_tageswert_aus_raendern``).
 GRUND_ZAEHLER_RUECKSPRUNG: Final[str] = "zaehler_ruecksprung"
 
-#: Für diesen Tag fehlen die Zählerstände, weil eine Korrektur sie verworfen hat und nichts sie wieder füllt — eine **Lücke**
-#: (Sensorwechsel mit Grund, Bauplan «Zu §14» Nr. 116 S4): der Satz von :data:`GRUND_KEINE_ZAEHLERSTAENDE` («entstehen ab der
-#: Zuordnung», «in der Reparatur-Werkbank nachrechnen») wäre dort unwahr — in einer Lücke füllt kein Schreiber.
-GRUND_LUECKE_VERWORFEN: Final[str] = "luecke_verworfen"
-
 #: Der Wortlaut je Zustand. **Er beschreibt, er bewertet nicht** — ein Anwender,
 #: dessen Zähler zurückspringt, hat nichts falsch gemacht
 #: ([[feedback_eedc_ist_nicht_die_strom_polizei]]).
@@ -95,10 +90,6 @@ TAGESWERT_GRUND_TEXT: Final[dict[str, str]] = {
     GRUND_ZAEHLER_RUECKSPRUNG: (
         "Der Zähler ist an diesem Tag zurückgesprungen — für diesen Tag gibt es "
         "deshalb keine Aussage."
-    ),
-    GRUND_LUECKE_VERWORFEN: (
-        "Für diesen Tag liegen keine Zählerstände vor: eine Korrektur hat die "
-        "Zählerstände dieser Zeit verworfen."
     ),
 }
 
@@ -121,7 +112,6 @@ TAGESWERT_GRUND_KURZ: Final[dict[str, str]] = {
     GRUND_NICHT_ZUGEORDNET: "kein Wärmemengenzähler zugeordnet",
     GRUND_KEINE_ZAEHLERSTAENDE: "für diesen Tag keine Zählerstände",
     GRUND_ZAEHLER_RUECKSPRUNG: "Zählerrücksprung an diesem Tag",
-    GRUND_LUECKE_VERWORFEN: "Zählerstände durch eine Korrektur verworfen",
 }
 
 
@@ -144,8 +134,7 @@ def tageswert_grund_kurz(grund: Optional[str]) -> Optional[str]:
 GRUND_RANG: Final[dict[str, int]] = {
     GRUND_NICHT_ZUGEORDNET: 0,
     GRUND_KEINE_ZAEHLERSTAENDE: 1,
-    GRUND_LUECKE_VERWORFEN: 2,
-    GRUND_ZAEHLER_RUECKSPRUNG: 3,
+    GRUND_ZAEHLER_RUECKSPRUNG: 2,
 }
 
 

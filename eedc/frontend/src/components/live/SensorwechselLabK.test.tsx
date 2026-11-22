@@ -38,7 +38,7 @@ describe('Lab-K W1 — Ein- und Mehrzahl', () => {
 const FRAGE: QuellePruefung = {
   grund_erforderlich: true, erster_wert: '2026-10-08T00:00:00', tage: 1, stand_alt: 6117.8, stand_neu: 1.8,
   sensor_key: 'inv:42:pv_erzeugung_kwh', label: 'P1b – PV-Erzeugung', verzeichnet: true,
-  korrektur: null, bleiben: null,
+  bleiben: null,
 }
 
 describe('Lab-K W2 — eigene Werte seit', () => {
@@ -56,7 +56,7 @@ describe('Lab-K F5 — zulässiger Bereich von «Der neue Sensor zählt ab»', (
       zaehlt_ab_vorgabe: '2026-11-20T01:00:00', zaehlt_ab_frueheste: '2026-11-20T00:00:00',
       zaehlt_ab_spaeteste: '2026-11-20T01:00:00', stunden: 0, tage: 0, monate: [], saetze: ['Satz des Backends.'],
     }
-    render(<SensorwechselDialog isOpen fragen={[{ ...FRAGE, bleiben }]} onVorschau={vi.fn(() => Promise.resolve(null))}
+    render(<SensorwechselDialog isOpen fragen={[{ ...FRAGE, bleiben }]}
       onBestaetigen={vi.fn()} onAbbrechen={vi.fn()} />)
     ;(document.querySelector('input[type="radio"][value="fortsetzung"]') as HTMLInputElement).click()
     expect(screen.getByText(new RegExp(ZAEHLT_AB_BEREICH('20.11.2026 00:00', '20.11.2026 01:00').replace(/[.()]/g, '\\$&'))))

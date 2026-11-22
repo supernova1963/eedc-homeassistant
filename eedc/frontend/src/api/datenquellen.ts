@@ -280,9 +280,9 @@ export interface QuelleSaveResult {
   wartet?: WartenderWechsel[]
 }
 
-/** Antwort auf eine fragepflichtige Quellen-Änderung: beim Wechsel `fortsetzung` («Bisherige Werte bleiben») oder `loeschen`
- *  («Daten vor der Änderung löschen», Weg B); `korrektur` nur noch am versetzten Abschnitt (Stück). */
-export type WechselGrund = 'fortsetzung' | 'loeschen' | 'korrektur'
+/** Antwort auf eine fragepflichtige Quellen-Änderung: `fortsetzung` («Bisherige Werte bleiben») oder `loeschen` («Daten vor
+ *  der Änderung löschen», Weg B). */
+export type WechselGrund = 'fortsetzung' | 'loeschen'
 
 export interface GrundAngabe {
   grund: WechselGrund
@@ -318,14 +318,6 @@ export interface WartenderWechsel {
   satz: string
 }
 
-/** Vorschau des Korrektur-Dienstes (Sätze und Zahlen kommen aus dem Backend — der Client rechnet nichts). */
-export interface KorrekturVorschau {
-  saetze: string[]
-  startbar: boolean
-  zaehlerstaende?: number
-  tage_neu?: string[]
-}
-
 /** Weg B: was «Daten vor der Änderung löschen» tut (Backend `feld_loeschen.angaben`) — Sätze und die Monate mit gespeichertem
  *  Monatswert (`YYYY-MM`); der Client zeigt nur. */
 export interface LoeschenAngaben {
@@ -344,8 +336,6 @@ export interface QuellePruefung {
   label: string | null
   /** Die Änderung wird verzeichnet (eigene Werte, die wirksame Quelle wechselt). */
   verzeichnet: boolean
-  /** Nur am versetzten Abschnitt: Vorschau der Korrektur über das Stück. */
-  korrektur?: KorrekturVorschau | null
   /** Weg B: was «Daten vor der Änderung löschen» tut (nur an der Prüfung beim Wechsel). */
   loeschen?: LoeschenAngaben | null
   /** U2 Lauf b: nur zwischen zwei HA-Sensoren — was «Bisherige Werte bleiben» tut. */
@@ -365,7 +355,8 @@ export interface KorrekturLaufStart {
   art?: LaufArt
 }
 
-/** Wer einen Lauf angelegt hat: eine Korrektur, das Ansetzen eines Wechsels «bleiben» (U2 Lauf b) oder «löschen» (Weg B). */
+/** Wer einen Lauf angelegt hat: das Ansetzen eines Wechsels «bleiben» (U2 Lauf b) oder «löschen» (Weg B); `korrektur` nur noch
+ *  an einem Lauf der früheren Korrektur aus einer älteren Datenbank (seit Weg B, Sitzung B3a, legt ihn niemand mehr an). */
 export type LaufArt = 'korrektur' | 'ansetzen' | 'loeschen'
 
 /** Fortschritt eines Korrektur-Laufs (`GET …/korrektur-lauf/{lauf}`). */
@@ -389,35 +380,6 @@ export interface KorrekturLaufLaufend {
   sensor_key: string | null
   label: string
   beginn: string | null
-}
-
-/** «Grund nachtragen» am versetzten Abschnitt (`…/zaehler-versatz/pruefen`, Sitzung 4b-1): dieselben Angaben wie die
- *  Prüf-Route der Quelle, dazu der Abschnitt als Satz und die zulässigen Gründe. */
-export interface GrundNachtragPruefung extends QuellePruefung {
-  /** Immer `null` (am versetzten Abschnitt gibt es keine Wechsel-Zeile). */
-  wechsel_id: number | null
-  feld_id: string | null
-  grund: WechselGrund | null
-  wechsel_satz: string
-  gruende: WechselGrund[]
-  korrektur_nicht: string | null
-  /** Korrektur über ein festes Stück (Befund `zaehler_versatz`): der Beginn steht fest (Sprung), die Korrektur endet am
-   *  Rückgang. */
-  stueck?: { sprung: string; rueckgang: string } | null
-}
-
-/** Das Stück des Befunds `zaehler_versatz` (aus `stueck=<schlüssel>~<sprung>~<rückgang>`). */
-export interface StueckAngabe {
-  sensor_key: string
-  sprung: string
-  rueckgang: string
-}
-
-/** Antwort nach dem Eintragen: `korrektur` = die gestarteten Läufe (Fortschritt an der Fläche). */
-export type GrundNachtragErgebnis = Omit<GrundNachtragPruefung, 'korrektur'> & {
-  eingetragen: boolean
-  korrektur: KorrekturLaufStart[]
-  wartet?: WartenderWechsel[]
 }
 
 /** Einstieg «Zähler getauscht (gleiche Quelle)»: Weg je Quelle zur Stunde des Tauschs (Backend `zaehler_getauscht.py`). */
@@ -541,22 +503,13 @@ export const datenquellenApi = {
       getauschtAm ? { getauscht_am: getauschtAm } : {},
     ),
 
-  /** Fortschritt eines Korrektur-Laufs (Dialog und Werkbank). */
+  /** Fortschritt eines Laufs («löschen», «bleiben»). */
   korrekturLauf: (anlageId: number, lauf: string) =>
     api.get<KorrekturLaufStand>(`/datenquellen/${anlageId}/korrektur-lauf/${encodeURIComponent(lauf)}`),
 
   /** U2 Lauf b: die Wechsel «bleiben», die eedc noch nicht wie Home Assistant rechnet, je mit dem Grund (Fläche). */
   wartendeWechsel: (anlageId: number) =>
     api.get<WartenderWechsel[]>(`/datenquellen/${anlageId}/wartende-wechsel`),
-
-  /** «Grund nachtragen» am versetzten Abschnitt (Befund `zaehler_versatz`): prüfen — schreibt nichts; mit `grund:
-   *  'korrektur'` die Vorschau der Korrektur über das Stück (Vorschau = Lauf). */
-  pruefeStueck: (anlageId: number, stueck: StueckAngabe, grund?: WechselGrund) =>
-    api.post<GrundNachtragPruefung>(`/datenquellen/${anlageId}/zaehler-versatz/pruefen`, { ...stueck, grund: grund ?? null }),
-
-  /** «Grund nachtragen» am versetzten Abschnitt: die Korrektur über das Stück ausführen. */
-  stueckKorrigieren: (anlageId: number, stueck: StueckAngabe, grund: WechselGrund = 'korrektur') =>
-    api.post<GrundNachtragErgebnis>(`/datenquellen/${anlageId}/zaehler-versatz`, { ...stueck, grund }),
 
   /** Die laufenden Korrektur-Läufe der Anlage (die Fläche zeigt sie beim Laden, auch nach dem Neuladen der Seite). */
   korrekturLaeufe: (anlageId: number) =>

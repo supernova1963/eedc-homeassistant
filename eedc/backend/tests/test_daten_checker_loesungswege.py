@@ -113,7 +113,7 @@ def test_je_code_eine_datei_und_keine_waise():
     ist = {p.stem for p in QUELLE.glob("*.md")}
     assert set(HANDGRIFFE) - ist == set(), f"Lösungsweg fehlt: {sorted(set(HANDGRIFFE) - ist)}"
     assert ist - set(HANDGRIFFE) == set(), f"Datei ohne Code: {sorted(ist - set(HANDGRIFFE))}"
-    assert len(ist) == len(HANDGRIFFE) == 189  # Weg B, Sitzung B2: − zuordnung_grund_fehlt; Weg B: + daten_vor_aenderung_geloescht; 16.11.2026: + zaehler_versatz, + erfassung_stillstand (N-799 S3); + zuordnung_grund_fehlt (Sensorwechsel S4); + ha_zaehlerstand_springt (U2 Lauf c); + zaehler_zeit_verworfen, monatswert_ueberholt (U3 a); + mqtt_zaehlerstand_springt (U3 b)
+    assert len(ist) == len(HANDGRIFFE) == 187  # Weg B, Sitzung B3a: − zaehler_versatz, − zaehler_zeit_verworfen; Weg B, Sitzung B2: − zuordnung_grund_fehlt; Weg B: + daten_vor_aenderung_geloescht; 16.11.2026: + zaehler_versatz, + erfassung_stillstand (N-799 S3); + zuordnung_grund_fehlt (Sensorwechsel S4); + ha_zaehlerstand_springt (U2 Lauf c); + zaehler_zeit_verworfen, monatswert_ueberholt (U3 a); + mqtt_zaehlerstand_springt (U3 b)
 
 
 @pytest.mark.parametrize("code", list(HANDGRIFFE))

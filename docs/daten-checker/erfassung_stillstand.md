@@ -58,5 +58,3 @@ Was eedc nicht erkennt oder nicht kennzeichnet:
   eedc bewertet die Menge mit dem Preis dieser einen Stunde.
 - Ein Ausfall, der länger als 90 Tage dauert, wird nur in seinen letzten 90 Tagen erkannt.
 - Im Diagnose-Paket steht die Kennzeichnung nicht; sie entsteht beim Lesen und lässt sich aus den Daten nachrechnen.
-- Eine Zeit, deren Zählerstände eine Korrektur verworfen hat und die nichts wieder füllt, nennt dieser Befund nicht; sie
-  steht unter «Zählerstände – Zeit verworfen».

@@ -5,9 +5,7 @@ Reparatur (``monkeypatch`` im Prozess), die rot sein muss; dazu der Mutanten-Lau
 * **F1** das Ansetzen füllt bis zur Stunde, bis zu der seine Lage liest (``kanal/korrektur.fuell_ende`` = letzte volle Stunde
   vor jetzt): im Stundenlauf um :05 steht die Tausch-Stunde sofort, im Dialog zwischen H:05 und H:10 löscht es die schon
   geschriebene Zeile nicht; die abhängigen abgeleiteten Kanäle schreibt es bis jetzt fort (auch ohne verworfene Zeile).
-  Dieselbe Grenze trägt die Korrektur «Bisherige Werte verwerfen» (Messung M-V: dieselbe Klasse).
-* **W9/W5** Verwerfen-Vorschau: ein Fünf-Minuten-Stand vor «Falsch seit» prüft die Höhe gegen HAs Kurzzeitstatistik
-  (``stueck._ha_rohsumme``); eine Lücke, deren Ende noch vor uns liegt, endet «jetzt».
+* **W9/W5** (Verwerfen-Vorschau) und die Probe der Korrektur zu F1: entfernt mit der Korrektur (Weg B, Sitzung B3a).
 * **F2** Überführung des Altbestands: entfernt mit der Überführung (Weg B, Sitzung B2).
 * **F4** HA-Tag mit B-0: die frühere Entität eines Zählers, die heute ein anderer Zähler trägt, liest HAs eigene Reihe
   (``lts_aggregator._plan_anwenden(orig=…)``).
@@ -15,7 +13,7 @@ Reparatur (``monkeypatch`` im Prozess), die rot sein muss; dazu der Mutanten-Lau
 * **W1/W3/W4/W6/W2** Wortlaute der Prüf-Antwort; **H1** Bezeichnungen von Home Assistant 2026.11 in Texten und Lösungswegen.
 
 Schwesterdateien: test_sensorwechsel_u2a2_proben.py (Ansetzen), test_sensorwechsel_u2b_proben.py (Fragen, «zählt ab»),
-test_sensorwechsel_s3_korrektur.py (Korrektur), test_sensorwechsel_s1_verzeichnen.py, test_sensorwechsel_u3b_proben.py.
+test_sensorwechsel_s1_verzeichnen.py, test_sensorwechsel_u3b_proben.py.
 """
 
 from __future__ import annotations
@@ -222,42 +220,6 @@ async def _pruefen(w: Welt, monkeypatch, U: datetime, feld: str, neu: str, **k) 
     return out
 
 
-async def _korrektur(w: Welt, monkeypatch, U: datetime, feld: str, vorher: str, neu: str, falsch_seit: datetime, *,
-                     vorschau: bool) -> dict:
-    """Weg B (Sitzung B1): der Dialog beim Wechsel bietet «verwerfen» nicht mehr an — die Proben des Korrektur-Dienstes (er
-    bleibt bis zum Rückbau für «Grund nachtragen», das Stück und die Werkbank) rufen ihn mit dem Auftrag, den bis B1 die
-    Abfrage baute (``ab`` = volle Stunde nach der Änderung, Herkunft «wechsel»). ``vorschau``: nur die Vorschau
-    (``abfrage.vorschau_des_auftrags``), sonst Umstellung der Zuordnung + Lauf + Nachlauf wie bis B1 ``abfrage.vollziehe``."""
-    from backend.models.zuordnung_wechsel import HERKUNFT_WECHSEL
-    from backend.services.zuordnung_wechsel import korrektur as kr
-    from backend.services.zuordnung_wechsel.abfrage import vorschau_des_auftrags
-    from backend.services.zuordnung_wechsel.zeitpunkt import ab_ts_aus
-
-    inv, f, key = FELDER[feld]
-    au = kr.Auftrag(anlage_id=w.a.id, sensor_key=key, falsch_seit=falsch_seit.replace(minute=0, second=0),
-                    ab=ab_ts_aus(U), vorher={"art": "ha", "entity_id": vorher}, nachher={"art": "ha", "entity_id": neu},
-                    herkunft=HERKUNFT_WECHSEL, erklaert=U)
-    if not vorschau:
-        w.ha_bis(_ep(U.replace(minute=0, second=0)) - STUNDE)
-    _uhr(monkeypatch, U)
-    try:
-        if vorschau:
-            out = await vorschau_des_auftrags(w.db, au)
-        else:
-            a = await _anlage(w)
-            m = {**a.sensor_mapping, "investitionen": {**a.sensor_mapping["investitionen"],
-                                                       inv: {"felder": {f: {"strategie": "sensor", "sensor_id": neu}}}}}
-            a.sensor_mapping = m
-            erg = await kr.fuehre_aus(w.db, au, ha_svc=w.svc, jetzt=U)
-            await w.db.commit()
-            out = await kr.nach_dem_commit(erg, ha_svc=w.svc)
-    finally:
-        _uhr_aus(monkeypatch)
-    await _laeufe()
-    _frisch(w)
-    return out
-
-
 async def _kanal(w: Welt, key: str) -> dict[int, float]:
     """``{start_ts: sum + Versatz der Quelle}`` des Schlüssels."""
     k = (await w.db.execute(select(Kanal).where(Kanal.anlage_id == w.a.id, Kanal.key == key))).scalar_one_or_none()
@@ -363,82 +325,7 @@ async def test_f1_abgeleiteter_kanal_der_tauschstunde(db, monkeypatch, variante)
     assert (E1 in abgeleitet) is (variante == "gebaut")
 
 
-@pytest.mark.parametrize("variante", ["gebaut", "soll_ende"])
-async def test_verwerfen_zwischen_h05_und_h10_fuellt_die_letzte_stunde(db, monkeypatch, variante):
-    """Messung M-V, dieselbe Klasse wie F1: «Bisherige Werte verwerfen» um 00:07 (falsch seit 03.11. 00:00) löscht die vom
-    Stundenlauf 00:05 geschriebene Zeile 23:00 des falschen Sensors und füllt sie aus dem richtigen (1,0). Sprengsatz
-    «soll_ende» ⇒ die Stunde fehlt bis zum nächsten Stundenlauf."""
-    if variante == "soll_ende":
-        _soll_ende(monkeypatch)
-    ab0 = _ep(START) - 5 * STUNDE
-    w = await _welt(db, monkeypatch, {ALT: (ab0, lambda e: 0.6), NEU: (ab0, lambda e: 1.0), PVC: (ab0, lambda e: 2.0)},
-                    {"pv": ALT, "pvk": PVC})
-    await _betrieb(w, START, T1 + timedelta(hours=1))
-    await _korrektur(w, monkeypatch, T1 + timedelta(hours=1, minutes=7), "pv", ALT, NEU, datetime(2026, 11, 3, 0),
-                     vorschau=False)
-    stunde = _stunde(await _kanal(w, FELDER["pv"][2]), E1)
-    assert stunde is None if variante == "soll_ende" else stunde == pytest.approx(1.0)
-
-
 # ── W9 / W5: Verwerfen-Vorschau ────────────────────────────────────────────────────────────────────────────────────
-
-def _at(h: int, m: int, tag: int = 4) -> datetime:
-    return datetime(2026, 11, tag, h, m)
-
-
-@pytest.mark.parametrize("variante", ["gebaut", "stundenzeile"])
-async def test_w9_fuenf_minuten_stand_vor_falsch_seit_fuellt_aus_ha(db, monkeypatch, variante):
-    """Lab P1b (20.11. 02:14): eine Stunde mit fremdem Sensor, zurück mit «verwerfen» ab 01:00; vor «Falsch seit» liegt ein
-    Fünf-Minuten-Stand (00:55). Home Assistant führt den richtigen Sensor für die Zeit ⇒ keine Lücke, kein Satz «füllt
-    nichts». Sprengsatz «stundenzeile» (der Stand gegen HAs Stundenzeile geprüft, wie bisher) ⇒ Lücke 01:00 bis 03:00."""
-    import backend.services.zuordnung_wechsel.stueck as st
-    from backend.services.snapshot.writer import snapshot_anlage_5min
-    from backend.services.zuordnung_wechsel.korrektur import ha_abruf
-
-    if variante == "stundenzeile":
-        async def wie_bisher(ha_svc, eid, key, z):
-            import asyncio
-
-            return await ha_abruf(asyncio.to_thread(ha_svc.get_value_at, eid, z))
-        monkeypatch.setattr(st, "_ha_rohsumme", wie_bisher)
-    ab0 = _ep(START) - 5 * STUNDE
-    w = await _welt(db, monkeypatch, {NEU: (ab0, lambda e: 0.6), "sensor.fremd": (ab0, lambda e: 1.08),
-                                      PVC: (ab0, lambda e: 2.0)}, {"pv": NEU, "pvk": PVC})
-    await _betrieb(w, START, _at(1, 0))
-    w.kurz(NEU, _at(0, 0), _at(2, 30))
-    await snapshot_anlage_5min(w.db, await _anlage(w), _at(0, 55))
-    await w.db.commit()
-    await _umstellen(w, monkeypatch, _at(1, 27), "pv", "sensor.fremd", grund="fortsetzung")
-    await _lauf(w, _at(2, 0))
-    k = await _korrektur(w, monkeypatch, _at(2, 14), "pv", "sensor.fremd", NEU, _at(1, 0), vorschau=True)
-    luecke = any("füllt nichts" in s for s in k["saetze"])
-    if variante == "stundenzeile":
-        assert k["luecke"] is not None and luecke
-        return
-    assert k["luecke"] is None and not luecke, k["saetze"]
-
-
-@pytest.mark.parametrize("variante", ["gebaut", "ende_in_der_zukunft"])
-async def test_w5_vorschau_in_der_tauschstunde_nennt_keine_zukunft(db, monkeypatch, variante):
-    """Lab P1b (19.11. 23:44): «verwerfen», der richtige Sensor zählt erst seit 23:28 (noch keine volle Stunde). Die Vorschau
-    nennt keinen Zeitpunkt nach jetzt («bis jetzt») und sagt «noch keine Stundenwerte». Sprengsatz «ende_in_der_zukunft»
-    (der Satz wie bisher) ⇒ «bis 04.11.2026 00:00 Uhr»."""
-    import backend.services.zuordnung_wechsel.korrektur as kr
-
-    if variante == "ende_in_der_zukunft":
-        monkeypatch.setattr(kr, "SATZ_BIS_JETZT", "Vom {von} bis {bis} Uhr")
-    ab0 = _ep(START) - 5 * STUNDE
-    w = await _welt(db, monkeypatch, {ALT: (ab0, lambda e: 0.6 if e <= E1 else None), NEU: (E1, lambda e: 0.4 if e == E1 else 0.6),
-                                      PVC: (ab0, lambda e: 2.0)}, {"pv": ALT, "pvk": PVC})
-    await _betrieb(w, START, T1)
-    s = (await _korrektur(w, monkeypatch, T1 + timedelta(minutes=44), "pv", ALT, NEU, START, vorschau=True))["saetze"]
-    zukunft = any("04.11.2026 00:00" in x for x in s)
-    assert zukunft is (variante == "ende_in_der_zukunft"), s
-    if variante == "gebaut":
-        # U3-K3 (Nachmessung U3-K2, Satz B): «bis jetzt» → «bis zum Ende der laufenden Stunde» (die Zeit reicht bis zur
-        # nächsten vollen Stunde; weiterhin kein Zeitpunkt nach jetzt)
-        assert any(x.startswith(f"Vom {START:%d.%m.%Y %H:%M} Uhr bis zum Ende der laufenden Stunde füllt nichts") for x in s), s
-        assert kr.SATZ_KANAL_OHNE_GESCHICHTE in s and "noch keine Stundenwerte" in kr.SATZ_KANAL_OHNE_GESCHICHTE
 
 
 # ── F4: HA-Tag mit B-0, eine Entität in zwei Zählern ───────────────────────────────────────────────────────────────

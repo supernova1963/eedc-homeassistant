@@ -66,10 +66,6 @@ def test_quelle_am_regel():
     assert quelle_am(kette, t2) is HEUTE
     # vorher leer = unbekannt
     assert quelle_am([Wechsel(KEY, T, None, B)], datetime(2026, 1, 1)) is UNBEKANNT
-    # Korrektur: in [falsch_seit, ab_ts) gilt nachher
-    korr = [Wechsel(KEY, T, A, B, grund="korrektur", falsch_seit_ts=datetime(2026, 7, 1))]
-    assert quelle_am(korr, datetime(2026, 8, 1)) == B
-    assert quelle_am(korr, datetime(2026, 6, 30)) == A
     # eine aufgehobene Zeile zählt nicht
     assert quelle_am([Wechsel(KEY, T, A, B, aufgehoben_durch=7)], datetime(2026, 1, 1)) is HEUTE
 
@@ -479,15 +475,6 @@ async def test_b0_live_rueckfall_schreibt_keinen_mqtt_wert_vor_dem_wechsel(db):
 
 
 # ═══ Korrekturrunde 17.11. (Bauplan §8 Nr. 19–20, Nachmessung §2): weitere Proben, je mit Gegenprobe im selben Test ═══════
-
-def test_quelle_am_grenzen_des_korrektur_intervalls():
-    """``z == ab_ts`` gehört zur heutigen Quelle, ``z == falsch_seit_ts`` zum Intervall (``nachher``)."""
-    falsch_seit = datetime(2026, 7, 1)
-    korr = [Wechsel(KEY, T, A, B, grund="korrektur", falsch_seit_ts=falsch_seit)]
-    assert quelle_am(korr, T) is HEUTE
-    assert quelle_am(korr, T - timedelta(seconds=1)) == B
-    assert quelle_am(korr, falsch_seit) == B
-    assert quelle_am(korr, falsch_seit - timedelta(seconds=1)) == A
 
 
 @pytest.mark.parametrize("vorher", [{"art": "mqtt", "mqtt_key": "inv/2/ladung_kwh", "topic": None}, {"art": "keine"}, None],

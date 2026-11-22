@@ -369,7 +369,7 @@ async def _plan_ausfuehren(lage: _Lage, operation: str, params: dict) -> dict:
         return (await ro.execute(p.plan_id, db)).operation_summary
 
 
-async def test_w11_bereich_ueber_plan_und_ausfuehren_behebt_die_drift(tmp_path):
+async def test_w11_bereich_ueber_plan_und_ausfuehren_laesst_die_drift_am_kanal_tag(tmp_path):
     """W-11 (E3), «Tage neu aufbauen» (``REAGGREGATE_RANGE``) über Plan und Ausführen. Seit 21.11.2026 ist der 2.11. ein
     Kanal-Tag (``SICHTBAR_*``): der Lauf liest den Spiegel, die Drift bleibt (bis 21.11.: Bestandstag, Drift 1 → 0) — der
     Befund bietet dort «Aus Home Assistant neu übernehmen» an (nächste Probe)."""

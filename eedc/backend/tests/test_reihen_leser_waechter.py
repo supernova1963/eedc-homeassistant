@@ -65,13 +65,6 @@ REIHEN_LESER: dict[str, tuple[str, str, bool, str]] = {
     "services/snapshot/aggregator.py::_tagesdetail_boundary_diff_mit_grund": (
         "L2", NAHT, True, "Ränder und Rückfall; die Menge über _tageswert_aus_raendern. In get_tagesdetail_kwh gilt davor "
         "Kanal vor Reihe je Zähler (_typ_summe → kanal/feld_leser.kanal_feldwerte) — die 15 Tage der Produktiv-Anlage"),
-    "services/snapshot/luecken_rand.py::rand_nach_luecke": (
-        "L2/L3", PRIMITIV, True, "Sensorwechsel 4b-1-K (Nr. 102), seit 4b-1-K2 für Tagesansicht und Bereichs-Leser (Nr. 112): "
-        "der linke Rand hinter einem gesperrten Stück (Stand an seinem Ende oder erster Stand danach) — die Menge bildet der "
-        "Aufrufer"),
-    "services/snapshot/luecken_rand.py::gemessen_ausserhalb_der_luecken": (
-        "L2", NAHT, True, "Sensorwechsel 4b-1-K (Nr. 102): trägt das Fenster außerhalb der gesperrten Stücke zwei Stände ohne "
-        "Naht dazwischen (zaehler_naht.traegt_messung)? — sonst kein Wert statt 0,0"),
     "services/snapshot/aggregator.py::snapshot_tagestabelle": (
         "L5", NAHT, True, "Naht-Slot zählt nur den neuen Abschnitt, keine Gerade über eine Naht (_naht_trenner); eine Naht "
         "mit Rand-Ständen (U2 a1, F5) hebt die Stände beim Laden (zaehler_naht.gehobene_staende) und teilt nicht; "
@@ -101,14 +94,6 @@ REIHEN_LESER: dict[str, tuple[str, str, bool, str]] = {
         "L9", NAHT, True, "Differenz je Abschnitt (zaehler_naht.stand_differenz)"),
     "services/daten_checker/zaehler.py::_check_zaehlerstaende": (
         "L10", NAHT, True, "Bruch über eine Naht ist kein Bruch (finde_reihen_brueche mit Nähten)"),
-    "services/daten_checker/datenquelle/versatz.py::<modul>": (
-        "L12", KANAL, True, "Wirkungs-Prüfung über die Feld-Auskunft (feld_leser.feld_aus_kanal_am_tag); die Erkennung selbst "
-        "sucht genau die Niveau-Sprünge der Reihe (sie ist der Befund, keine Menge); ein Rand an einer Fortsetzungs-Naht ist "
-        "ohne Wirkung (zaehler_naht.ueber_naht, Sitzung 4-K)"),
-    "services/daten_checker/datenquelle/versatz_mqtt.py::<modul>": (
-        "L12", NAHT, False, "Sensorwechsel U3 b (G7): dieselbe Erkennung über die MQTT-Stände (quelle = mqtt_inbound) eines "
-        "Schlüssels mit MQTT-Kanal — sie sucht genau die Niveau-Sprünge (Befund, keine Menge); ein Schritt an einer "
-        "Fortsetzungs-Naht ist ohne Wirkung (zaehler_naht.ueber_naht)"),
     "services/kanal/schreiber.py::_eigene_summe": (
         "L16", NAHT, False, "MQTT «Eigene Summe»: eine Fortsetzung teilt die Periode (kanal/naht.zeilen_mit_naehten, B-4)"),
     "services/snapshot/reader.py::finde_zaehler_ruecksprunge": (
@@ -144,23 +129,9 @@ REIHEN_LESER: dict[str, tuple[str, str, bool, str]] = {
     "services/snapshot/bereichs_leser.py::_raender_mit_heilung": ("L3", PRIMITIV, True, "Ränder mit Heilung"),
     "services/snapshot/reaggregator.py::_db_snap_at": ("L14", PRIMITIV, True, "gespeicherter Stand der Vorschau"),
     "services/snapshot/reaggregator.py::_boundaries": ("L14", STAND, True, "Vorschau: Grenzstände alt/neu nebeneinander"),
-    "services/zuordnung_wechsel/stueck.py::_rand_vor": (
-        "—", STAND, True, "Korrektur über ein Stück (4b-1): der letzte Stand vor dem Sprung, verglichen mit HAs Rohsumme "
-        "(Füllbarkeit) — keine Menge"),
-    "services/zuordnung_wechsel/stueck.py::_rand_ab": (
-        "—", STAND, True, "Korrektur über ein Stück (4b-1): der Stand am Rückgang, verglichen mit HAs Rohsumme — keine Menge"),
-    "services/zuordnung_wechsel/stueck.py::_volle_stunde": (
-        "—", STAND, True, "Korrektur über ein Stück (U3-K, Nachmessung Lab-K LK-B2): der Stand zur vollen Stunde neben einem "
-        "Unterstunden-Rand, den HAs Kurzzeitstatistik nicht mehr führt, verglichen mit HAs Stundenzeile — keine Menge"),
-    "services/zuordnung_wechsel/zeitpunkt.py::staende_um": (
-        "—", STAND, True, "Sensorwechsel U1: nur die Zeitpunkte des letzten Stands vor und des ersten Stands nach einer Lücke "
-        "(Frage «Höhenwechsel dazwischen?») — kein Wert, keine Menge"),
     "services/zuordnung_wechsel/ansatz.py::_letzter_stand": (
         "—", STAND, True, "Sensorwechsel U2 a2: der gespeicherte Stand des alten Sensors am Rand eines Wechsels «bleiben» "
         "(Rand-Stand in der Höhe der Reihe, Rückfall nur aus HAs Statistik) — ein Stand, keine Menge"),
-    "services/zuordnung_wechsel/korrektur.py::_erster_stand_da": (
-        "—", STAND, True, "Sensorwechsel U1: der Zeitpunkt des ersten gespeicherten Stands nach dem Neulesen (führt Home "
-        "Assistant dort etwas?) — kein Wert, keine Menge"),
     "services/zaehlerstaende.py::lade_zaehler_verlaeufe": ("L9", PRIMITIV, True, "Punktreihe Snapshots + gepflegte Stände"),
     "services/mqtt_energy_history_service.py::_get_closest_snapshot": ("L17", PRIMITIV, False, "MQTT-Stand"),
     "services/mqtt_energy_history_service.py::_get_earliest_snapshot_after": ("L17", PRIMITIV, False, "MQTT-Stand"),

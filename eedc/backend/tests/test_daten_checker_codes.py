@@ -21,14 +21,15 @@ from backend.tests.werkzeug_daten_checker_stellen import erzeuger_dateien, stell
 #: Zahl anheben UND Katalog-Zeile. 16.11.2026: + `zaehler_versatz` (Verdacht N-803) ⇒ 183; + `erfassung_stillstand` (N-799 S3) ⇒ 184;
 #: + `zuordnung_grund_fehlt` (Sensorwechsel S4) ⇒ 185; + `ha_zaehlerstand_springt` (Sensorwechsel U2 Lauf c) ⇒ 186;
 #: + `zaehler_zeit_verworfen`, `monatswert_ueberholt` (Sensorwechsel U3 a) ⇒ 188; + `mqtt_zaehlerstand_springt` (U3 b) ⇒ 189;
-#: + `daten_vor_aenderung_geloescht` (Sensorwechsel Weg B) ⇒ 190; − `zuordnung_grund_fehlt` (Weg B, Sitzung B2) ⇒ 189.
-STELLEN = 189
+#: + `daten_vor_aenderung_geloescht` (Sensorwechsel Weg B) ⇒ 190; − `zuordnung_grund_fehlt` (Weg B, Sitzung B2) ⇒ 189;
+#: − `zaehler_versatz`, − `zaehler_zeit_verworfen` (Weg B, Sitzung B3a) ⇒ 187.
+STELLEN = 187
 #: Distinkte Codes seit E5 (Konzept §3.1 R1): 194 − 6 Zusammenlegungen − 6 Restzeilen = 182; jeder Code an genau einer Stelle.
 #: 16.11.2026: + `zaehler_versatz` ⇒ 183; + `erfassung_stillstand` (N-799 S3) ⇒ 184; + `zuordnung_grund_fehlt` ⇒ 185;
 #: + `ha_zaehlerstand_springt` ⇒ 186; + `zaehler_zeit_verworfen`, `monatswert_ueberholt` (U3 a) ⇒ 188;
 #: + `mqtt_zaehlerstand_springt` (U3 b) ⇒ 189; + `daten_vor_aenderung_geloescht` (Weg B) ⇒ 190;
-#: − `zuordnung_grund_fehlt` (Weg B, Sitzung B2) ⇒ 189.
-CODES = 189
+#: − `zuordnung_grund_fehlt` (Weg B, Sitzung B2) ⇒ 189; − `zaehler_versatz`, − `zaehler_zeit_verworfen` (Weg B, Sitzung B3a) ⇒ 187.
+CODES = 187
 ALTFELDER = ("link", "action_kind", "action_params", "action_label")
 
 
@@ -58,7 +59,7 @@ def test_zusammenlegungen_sind_vollzogen():
 
 def test_katalog_klassen_sind_bekannt():
     assert {h.klasse for h in HANDGRIFFE.values()} <= set(KLASSEN)
-    assert Counter(h.klasse for h in HANDGRIFFE.values()) == {"sprung": 120, "aktion": 19, "auskunft": 20, "ok": 30}  # Weg B: + 1 Auskunft; B2: − 1 Sprung (zuordnung_grund_fehlt)
+    assert Counter(h.klasse for h in HANDGRIFFE.values()) == {"sprung": 119, "aktion": 19, "auskunft": 19, "ok": 30}  # B3a: − 1 Sprung (zaehler_versatz), − 1 Auskunft (zaehler_zeit_verworfen); Weg B: + 1 Auskunft; B2: − 1 Sprung (zuordnung_grund_fehlt)
 
 
 def test_w3_kein_erzeuger_setzt_altfelder():

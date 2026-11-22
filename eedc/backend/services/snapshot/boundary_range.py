@@ -107,14 +107,6 @@ async def tageszeile_marken(db, anlage_id: int, datum: date, *, mit_mengen: bool
     return (await db.execute(select(*spalten).where(TZ.anlage_id == anlage_id, TZ.datum == datum))).one_or_none()
 
 
-async def tageszeile_des_tages_ist_rueckwaerts(db, anlage_id: int, datum: date) -> bool:
-    """``tageszeile_ist_rueckwaerts`` für die gespeicherte Tageszeile von ``datum`` (keine Zeile ⇒ ``False``) — dieselbe
-    Frage wie ``kanal_stunden.tages_eingaenge``; Leser: die Feld-Auskunft «Kanal vor Reihe» (``kanal/feld_leser``,
-    Sensorwechsel S2). Liest nur die Marken, keine Menge."""
-    tz = await tageszeile_marken(db, anlage_id, datum)
-    return tageszeile_ist_rueckwaerts(tz[0] if tz else None, tz[1] if tz else None)
-
-
 @dataclass(frozen=True)
 class BoundaryRange:
     """Typed Range über Snapshot-Zeitstempel für eine bestimmte Aggregat-Variante."""

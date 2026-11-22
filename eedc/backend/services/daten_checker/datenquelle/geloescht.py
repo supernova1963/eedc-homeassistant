@@ -13,7 +13,7 @@ Beginnt sie nicht zur vollen Tagesgrenze, ist der Tag für dieses Feld nicht vol
 ab dieser Stunde, und eedc zeigt für den Tag, was Home Assistant liefert. Dazu die Monate mit gespeichertem Monatswert
 (``feld_loeschen.gespeicherte_monate``) — er bleibt. Keine Lücken-Maschinerie, kein Vergleich, kein Schätzen.
 
-Schwesterdateien: ``verworfen.py`` (Lücke einer Korrektur), ``monatswert.py``, ``services/feld_loeschen.py``.
+Schwesterdateien: ``monatswert.py``, ``services/feld_loeschen.py``.
 """
 
 from __future__ import annotations

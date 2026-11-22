@@ -1,19 +1,18 @@
 /**
- * Sensorwechsel U3 Lauf b (Rechenweg G4/G7) — die zwei Sprünge des Daten-Checkers an MQTT-Reihen.
+ * Sensorwechsel U3 Lauf b (Rechenweg G4) — der Sprung des Daten-Checkers an MQTT-Reihen.
  *
- * (1) Befund «Zählerstand springt (MQTT)»: der Sprung `?feld=…&getauscht=<Zeit>` öffnet an der Datenquellen-Fläche den Dialog
+ * Befund «Zählerstand springt (MQTT)»: der Sprung `?feld=…&getauscht=<Zeit>` öffnet an der Datenquellen-Fläche den Dialog
  * «Zähler getauscht (gleiche Quelle)» beim Feld, «Getauscht am» steht auf der Zeit aus dem Befund, die Prüfung fragt mit ihr; ohne
- * `getauscht` öffnet nichts. (2) Befund «versetzter Abschnitt» an einer MQTT-Reihe: die Prüf-Antwort bietet beide Gründe; unter
- * «Bisherige Werte bleiben» steht der Satz der Antwort (`bleiben_satz`), «Übernehmen» sendet das Stück mit diesem Grund. Der
- * Client rechnet nichts.
+ * `getauscht` öffnet nichts. Der Client rechnet nichts. Der Befund «versetzter Abschnitt» (G7) samt Stück-Dialog ist seit Weg B,
+ * Sitzung B3a, entfernt.
  *
- * Schwesterdateien: SensorwechselStueck.test.tsx (Stück, «Korrektur»), ZaehlerGetauschtDialog (Einstieg am Feld).
+ * Schwesterdatei: ZaehlerGetauschtDialog (Einstieg am Feld).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import DatenquellenZuordnung from './DatenquellenZuordnung'
 import { ZG_TITEL } from './ZaehlerGetauschtDialog'
-import { datenquellenApi, type GrundNachtragPruefung } from '../../api/datenquellen'
+import { datenquellenApi } from '../../api/datenquellen'
 
 vi.mock('../../api/datenquellen', () => {
   const f = {
@@ -35,8 +34,6 @@ vi.mock('../../api/datenquellen', () => {
       wartendeWechsel: vi.fn(() => Promise.resolve([])),
       korrekturLauf: vi.fn(() => new Promise(() => {})),
       setQuelle: vi.fn(),
-      pruefeStueck: vi.fn(),
-      stueckKorrigieren: vi.fn(),
       pruefeZaehlerGetauscht: vi.fn(),
       zaehlerGetauscht: vi.fn(),
       haSensoren: vi.fn(() => Promise.resolve({ sensoren: [], vorschlaege: [], integrationen: [], warnungen: {} })),
@@ -79,36 +76,5 @@ describe('Sensorwechsel U3 b — Sprung «Zähler getauscht» mit Zeit', () => {
     await waitFor(() => expect(document.querySelector('[data-feld="basis_energy_netzbezug_kwh"]')).not.toBeNull())
     expect(document.querySelector('[data-zaehler-getauscht]')).toBeNull()
     expect(datenquellenApi.pruefeZaehlerGetauscht).not.toHaveBeenCalled()
-  })
-})
-
-const STUECK = { sprung: '2026-06-08T11:00:00', rueckgang: '2026-06-10T11:00:00' }
-const PRUEFUNG: GrundNachtragPruefung = {
-  grund_erforderlich: true, erster_wert: null, tage: 0, stand_alt: null, stand_neu: null,
-  sensor_key: 'basis:netzbezug', label: 'Netzbezug (kWh)', verzeichnet: false,
-  korrektur: null, wechsel_id: null, feld_id: 'basis_energy_netzbezug_kwh', grund: null,
-  wechsel_satz: 'Vom 08.06.2026 11:00 bis 10.06.2026 11:00 Uhr liegen die gespeicherten Zählerstände dieses Felds um 2.000,5 '
-    + 'kWh neben denen davor und danach; davor und danach gilt MQTT.',
-  gruende: ['fortsetzung', 'korrektur'], korrektur_nicht: null, stueck: STUECK,
-  bleiben_satz: 'Die Werte des Abschnitts bleiben: eedc trägt am Sprung und am Rückgang je einen Zählertausch ein.',
-}
-const PARAM = 'basis:netzbezug~2026-06-08T11:00~2026-06-10T11:00'
-const ANGABE = { sensor_key: 'basis:netzbezug', sprung: '2026-06-08T11:00', rueckgang: '2026-06-10T11:00' }
-const radio = (wert: string) => document.querySelector(`input[type="radio"][value="${wert}"]`) as HTMLInputElement | null
-
-describe('Sensorwechsel U3 b — versetzter Abschnitt einer MQTT-Reihe: beide Antworten', () => {
-  beforeEach(() => vi.clearAllMocks())
-
-  it('«Bisherige Werte bleiben» zeigt den Satz der Antwort und sendet das Stück mit diesem Grund', async () => {
-    vi.mocked(datenquellenApi.pruefeStueck).mockResolvedValue(PRUEFUNG)
-    vi.mocked(datenquellenApi.stueckKorrigieren).mockResolvedValue({ ...PRUEFUNG, eingetragen: true, korrektur: [] })
-    render(<DatenquellenZuordnung sprung={{ feld: 'netzbezug_kwh', stueck: PARAM }} />)
-    await waitFor(() => expect(radio('fortsetzung')).not.toBeNull())
-    expect(radio('korrektur')).not.toBeNull()
-    expect(screen.getByText(PRUEFUNG.bleiben_satz as string)).toBeInTheDocument()
-    fireEvent.click(radio('fortsetzung') as HTMLElement)
-    fireEvent.click(document.querySelector('[data-sensorwechsel-ok]') as HTMLElement)
-    await waitFor(() => expect(datenquellenApi.stueckKorrigieren).toHaveBeenCalledWith(1, ANGABE, 'fortsetzung'))
-    await waitFor(() => expect(document.querySelector('[data-sensorwechsel-dialog]')).toBeNull())
   })
 })

@@ -4962,30 +4962,6 @@ Ein Tag ohne Anfangs- oder Endstand und ein Tag mit Rücksprung **fehlen** im Er
 summiert die Geräte. Proben: `test_waerme_verlauf_bereichs_leser.py`, `test_zaehlerluecken_waerme_leser.py`,
 `test_rf56_kanal_leser_phasen.py`.
 
-**Versetzter Abschnitt der Standreihe** (Daten-Checker `zaehler_versatz`, Regel `core/berechnungen/zaehler_versatz.py`, zu
-N-803): die Standreihe läuft mit der heute zugeordneten Entität; ein Abschnitt mit den Ständen eines anderen Sensors springt
-um +X und fällt später um ≈ −X zurück — an den Rand-Tagen ist der Tageswert aus zwei Ständen falsch. **Benannte Grenzen**
-(Entscheid Gernot 16.11.2026): (1) ein **einzelner** alter Wechsel ohne Rückgang an einem Bestandstag wird nicht erkannt
-(die Regel braucht das Paar Sprung/Rückgang); (2) die **Netzladung des Speichers** im Monats-Rückfall — jeder Monat ohne Speicher-Zeile
-(`monats_fakten/laden.py::_netzladung_tage`) — liest die Standreihe (`monats_fakten/netzladung_tage.py::
-speicher_netzladung_aus_tagen`, `lade_tageswerte_je_feld`) an jedem Tag, den der eigene Kanal nicht deckt (seit
-Sensorwechsel S2 «Kanal zuerst»), und geht ohne Deckel in den Monat; (3) Anlagen **ohne HA-Stundenwerte** (Standalone, MQTT) rechnen jeden Tag über die Standreihe — dort
-wirkt ein versetzter Abschnitt an beiden Rändern. **Wirkung** (seit Sensorwechsel S2, je Schritt seit 4b-1): jeder Sprung und jeder
-Rückgang des Abschnitts (auch die inneren eines zerteilten Laufs) trifft den Tag, dessen Tagesfenster `(a, b]` seinen späteren
-Stand enthält (`kanal/feld_leser.tagesfenster_am_tag` — ein Bestandstag rückwärts beginnt um 23:00 des Vortags, ein Kanal-Tag um
-Mitternacht; ein Rückgang mit der Zeile 00:00 trifft dort den Folgetag; liegt der frühere Stand hinter einer Datenlücke vor dem
-Fenster, rückt ohne Home Assistant der Rand auf ihn zurück — derselbe Tag; mit Home Assistant heilt die Tagesansicht den Rand
-dazwischen, und ein Rückgang trifft den Tag seines früheren Stands), und wirkt nur, wenn die Tagesansicht das Feld an diesem Tag
-aus der Reihe liest — weder kommt seine Gruppe aus den Kanälen, noch trägt sein eigener Kanal den Tag (dieselbe Feld-Auskunft wie
-*Cockpit → Tag*, `kanal/feld_leser.feld_aus_kanal_am_tag`); ein Schritt an einer Naht (Fortsetzung, Rand einer Lücke) wirkt nicht.
-**Kein Saldo** (4b-1-K, Bauplan «Zu §14» Nr. 100): ein Tag mit einem Rückgang im Fenster hat keinen Wert («Zähler
-zurückgesprungen», auch neben einem Sprung im selben Fenster) und heißt «fehlt»; ein Tag nur mit Sprüngen ist zu hoch. Meldung
-und `werte` nennen diese Tage; «vom … bis …» der Meldung sind die Tage des ersten und des letzten versetzten Stands. **Handgriff** (seit 4b-1): «Grund nachtragen» → Korrektur über das Stück
-(unten, «Korrektur über ein abgeschlossenes Stück»); die Lage (`werte.lage`) prüft dieselbe Füllbarkeit wie der Dienst. **Ohne
-wirksamen Handgriff** (Nr. 104) ist der Befund eine Auskunft (INFO, ohne Sprung): verschiedene Quellen an den Rändern
-(`verschiedene_quellen`, die Meldung nennt beide) und Home Assistant eingerichtet, aber gerade nicht erreichbar, oder sein
-Abruf scheitert (`ha_nicht_erreichbar`). Home Assistant wird nur für einen gefundenen Abschnitt mit Wirkung gefragt.
-
 **Zählerstand springt** (Daten-Checker `ha_zaehlerstand_springt`, Regel `core/berechnungen/zaehlerstand_sprung.py`, Erzeuger
 `datenquelle/standsprung.py`; Sensorwechsel U2 Lauf c, Rechenweg F12, Leitlinie Gernot 19.11.2026): führt Home Assistant nach einem
 Gerätetausch dieselbe Entität weiter, zählt es den Sprung des Zählerstands als Menge der Stunde — einen Sprung nach oben ganz, einen
@@ -5040,40 +5016,11 @@ je Stunde 0 → 23; Haushalt, 500 kWp mit 400 kWh je Stunde und +480 nach 5 Stun
 Rohstände); nicht gebaut (Bauplan Nr. 165, P7).
 Proben: `test_sensorwechsel_u2c_proben.py`; Wirkung `test_daten_checker_handgriff_wirkt.py::test_w11_ha_zaehlerstand_springt_wirkt`.
 
-**Zählerstände verworfen** (Daten-Checker `zaehler_zeit_verworfen`, Erzeuger `datenquelle/verworfen.py`; Sensorwechsel U3 a,
-Rechenweg G1): je nicht aufgehobener Lücke (`zeitpunkt.ist_luecke`) eine Auskunft (INFO). Die Lage kommt aus denselben
-Funktionen wie Vorschau und Leser:
-
-```
-wie Zählerlücke  = Kanal führt die Zeit nicht als verworfen ohne Brücke (U3 b, kanal/korrektur.ist_ueberbrueckt)
-                   UND  zeitpunkt.ohne_hoehenwechsel(Zeilen, Stand vor, Stand nach, Lücke)
-                   ⇒ Menge am stueck.tragtag_der_luecke(bis); Tage darin ohne Wert (stueck.tage_der_luecke)
-keine Differenz  = sonst; Grund: «Höhe ungeprüft» (Lücken-Zeile mit ansatz = hoehe_ungeprueft) · Kanal (kanal_quelle.verworfen_ts
-                   ab einer Stunde vor der Lücke — die Stundenwerte zählen dort 0 und setzen ohne Zuwachs an; U3-K3: trägt der
-                   Kanal davor Werte und zählt die erste Zeile danach — «Regel 2» —, «ab der ersten Stunde des richtigen
-                   Sensors», kanal/korrektur.raender_der_verworfenen_zeit) · Höhenwechsel
-                   ⇒ Tage darin ohne Wert, Rand-Tage nur ihr Teil, die Menge fehlt in Tag, Monat und Jahr
-                   (U3-K3: trägt der Kanal davor Werte und setzt danach die richtige Quelle aus Home Assistant an, an
-                   Kanal-Tagen nach seinen Rändern, stueck.tage_im_kanal; MQTT wie bisher nach den gespeicherten Ständen)
-Monate           = Kalendermonate der Lücke; genannt nur die mit Monatsdaten-Zeile (verwerfen_vor_quellbeginn.abschluss_monate)
-```
-
-**Ein Befund je Ursache:** `erfassung_stillstand` lässt eine Stelle aus, wenn jede Achse, deren Menge sie über mehr als eine Stunde
-nachträgt (`spannen` n > 1), zu einem Bilanz-Zähler gehört, dessen Lücke die Stelle mit einer Stunde Rand umfasst
-(`verworfen.stelle_erklaert`). Ausgelassen wird nur im Text des Befunds; die Lesestelle der Fenster (`kanal/stillstand.py`) und
-die Kennzeichen der Tagesbilanz bleiben (Messfrage M5: die Stelle der Saat «Topic verwerfen» ist eine Lücke der Tagesbilanz,
-kein Stillstands-Fenster). **Eigener Entscheid U3 a:** führt der Kanal die Zeit als verworfen, gilt «keine Differenz», auch wenn
-die Reihe wie eine Zählerlücke rechnen würde — die Tagesansicht liest den Kanal vor der Reihe (Rechenweg «Widerlegt» 3: 6,0
-statt der Menge). **U3 b (P-1):** setzt der Kanal nach der Zeit mit ihrer Menge an (MQTT ohne Höhenwechsel, unten «Brücke»),
-liest die Auskunft dieselbe Regel (`kanal/korrektur.ist_ueberbrueckt` vergleicht den Versatz der Quellzeile danach mit dem, den
-`bruecken_versatz` setzen würde) und sagt «wie eine Zählerlücke».
-
 **Gespeicherter Monatswert passt nicht mehr** (Daten-Checker `monatswert_ueberholt`, Erzeuger `datenquelle/monatswert.py`, Vergleich
 `core/berechnungen/monatswert_vergleich.py`; Rechenweg G2): Warnung mit «Monat öffnen».
 
 ```
-berührt      = Monate von [falsch_seit, ab) jeder gültigen Korrektur-Zeile (keine Lücken-Zeile)
-               ∪ Monate ab ab_ts jeder gültigen Fortsetzung («bleiben», «Zähler getauscht»)
+berührt      = Monate ab ab_ts jeder gültigen Fortsetzung («bleiben», «Zähler getauscht»)
                je bis min(letzter abgeschlossener Monat, Monat von eingetragen_ts)                    (U3-K, B5)
 gespeichert  = Monatsdaten.einspeisung_kwh / netzbezug_kwh (Regel N-739 «erfasst») bzw. InvestitionMonatsdaten.verbrauch_daten[feld]
 Quelle       = Kanal-Δ über den Kalendermonat, nur bei echter Deckung (kanal/feld_leser.kanal_feldwerte_je_fenster)
@@ -5083,19 +5030,10 @@ Zeile        ⇔ berührt ∧ gespeichert ∧ Quelle ∧ |Quelle − gespeichert
 
 Ein Wechsel ohne Grund berührt nichts (dort rechnet eedc wie vorher); an der Produktiv-Kopie (eine Wechsel-Zeile ohne Grund) 0
 Zeilen, ohne Berührt-Filter und Vergleich wären es die 41 gespeicherten Monate des Schlüssels. «Bis zum Monat des Eintrags» (Rechenweg)
-gilt seit U3-K (Nachmessung B5) über `zuordnung_wechsel.eingetragen_ts` (wann eedc die Zeile eingetragen hat; Vorgabe der Spalte,
-ein Nachtrag legt eine neue Zeile an): berührt sind die Monate bis zu diesem Monat — einen späteren Monat hat der Anwender schon
+gilt seit U3-K (Nachmessung B5) über `zuordnung_wechsel.eingetragen_ts` (wann eedc die Zeile eingetragen hat; Vorgabe der Spalte): berührt sind die Monate bis zu diesem Monat — einen späteren Monat hat der Anwender schon
 mit dem Wechsel gespeichert; ohne die Grenze kam jeden Monat ein neuer Befund (Tausch 10.01.2025 ⇒ 22 Monate am 20.11.2026). Eine
 Bestandszeile ohne Zeitpunkt (`NULL`) berührt wie vorher jeden abgeschlossenen Monat ab dem Wechsel. **Benannt:** der Anlagen-PV-Zähler (`basis:pv_gesamt`, P7) und Felder ohne Kanal werden nicht geprüft;
 am Gerät springt «Monat öffnen» zum Gerät, nicht zum Feld.
-
-**Rest fremder Stände vor «Falsch seit»** (Rechenweg G8, `core/berechnungen/zaehler_versatz.rest_schritt`): der Schritt am Ende
-(vom letzten Stand vor `ende` zum ersten ab `ende`) muss über der Sprung-Schwelle der Reihe liegen; gesucht wird in
-`[falsch_seit − 24 h, falsch_seit)` ein Schritt über derselben Schwelle mit entgegengesetztem Vorzeichen und ähnlicher Größe
-(±20 %, `aehnlich`), der jüngste. An einer bestehenden Lücke ergibt diese Prüfung die Lage «Rest» des Befunds `zaehler_versatz`
-(die Vorgabe «Falsch seit» im Nachtrag ist mit «Grund nachtragen» entfernt, Weg B, Sitzung B2). Saat (A = 100 + 0,5 kWh/h, fremd ab 09.06. 22:00, Rückkehr 14.06. 19:00):
-14.06. = 0,5 × (335 − 213) = 61,0 statt 3 059,5 (fremd 3 000 darunter) bzw. 119,5 (60 darunter) bzw. «—» (3 000 darüber).
-**Benannt:** nur die Reihe der Erkennung (HA-Stände); ein Abschnitt unter dem Niveau ohne Wechsel-Zeile wird weiter nicht erkannt.
 
 **Fester Tageswert am Tag des Tauschs** (Rechenweg G3): «Zähler getauscht» nennt den Satz nur, wenn die Tageszeile des Bestandstags
 der Stunde vor `ab_ts` den Schlüssel trägt (`verwerfen_vor_quellbeginn.tz_keys_der_zeile`), mit Tag und Wert. **Benannt:** eine
@@ -5184,21 +5122,14 @@ Zählerstand springt (MQTT) (G4; Erzeuger services/daten_checker/datenquelle/mqt
   U3-K4 (K3-B2): steht der Fund nur auf einem solchen Schritt, sagen die Details, dass eedc Tausch und gezählte Menge nicht
   unterscheidet (SATZ_SPRUNG_EINZELSCHRITT mit Zeit, Ständen und Menge des Schritts, zwei Nachkommastellen;
   SATZ_WARUM_EINZELSCHRITT: «War es gezählte Menge, stimmt der Wert, und es ist nichts zu tun.»); Schwere, Code, Knopf gleich
-  zaehler_ruecksprung lässt einen Rücksprung aus, dessen Kanal-Stunde (Stand − 1 h … Stand) G4 als Neubeginn/Rückgang oder G7 nennt
-
-Versetzter Abschnitt einer MQTT-Reihe (G7; versatz_mqtt.py): dieselbe Erkennung über quelle = mqtt_inbound für Schlüssel mit
-  MQTT-Kanal; Wirkung = jeder Schritt, über den keine Fortsetzungs-Naht führt (der Kanal zählt ihn)
-  «bleiben»  = je Schritt ein Eintrag «Zähler getauscht» (stueck.tausch_lagen: Stunde des Stands davor, sonst danach)
-  «verwerfen» = Korrektur über das Stück; Kanal-Beginn eine Stunde vor «Falsch seit» (korrektur._kanal_beginn, der Sprung liegt in
-             der Kanal-Stunde vor dem ersten versetzten Stand der Reihe); ohne Höhenwechsel (korrektur._wie_zaehlerluecke) setzt
-             die Quellzeile danach mit der Menge der Zeit an: Versatz = Kanalwert davor + (Stand danach − Stand davor) − Wert
-             danach (kanal/korrektur.bruecken_versatz, rohstand_rand.bruecke)
+  zaehler_ruecksprung lässt einen Rücksprung aus, dessen Kanal-Stunde (Stand − 1 h … Stand) G4 als Neubeginn/Rückgang nennt
+  Seit Weg B, Sitzung B3a: der frühere «versetzte Abschnitt einer MQTT-Reihe» (G7, Befund zaehler_versatz) ist entfernt; seine
+  Schritte nennt G4 je Stunde mit dem Knopf «Zähler getauscht»
 ```
 
 **Gemessen** (Saat des Rechenwegs, `golden-master/sensorwechsel-saat/u3b/`; Netzbezug 12,0 je Tag, Ereignis 10:20): «Zähler
 getauscht» sofort wie später und für Sprung +2 000, Neubeginn bei 300 und −4 %: Naht-Stunde 0,458, Tag 11,958 in Kanal, Reihe und
-Tagesansicht (vorher 11,5 bzw. Reihe 11,5 bei sofort); Topic-Wechsel «bleiben» sofort 11,958 (vorher 11,958/11,5); Stück +2 000 über zwei Tage verworfen: Tagesansicht 5,0 · «—» · 31,0, Monat gleich dem Fall ohne Stück (Saat vom 20.11.: 229,0; vorher
-2 005,5 · «—» · 6,0, Monat 2 203,5); «bleiben» am Stück 11,958 · 12,0 · 11,958. M1: Kern an der Saat +2 000,5 (Maß 166,7), Neubeginn 300,458
+Tagesansicht (vorher 11,5 bzw. Reihe 11,5 bei sofort); Topic-Wechsel «bleiben» sofort 11,958 (vorher 11,958/11,5). M1: Kern an der Saat +2 000,5 (Maß 166,7), Neubeginn 300,458
 (25,0), Rückgang −206,9 (Arm C). M2: Stundenlauf «Eigene Summe» über die MQTT-Rohstände der GM-Sätze r27, r28, kanal, pruef
 (28–33 MQTT-Abschnitte, ≈ 1 150 Paare): 0 Funde, 0 Rückgänge unter −0,01. **E5:** Home Assistant ↔ MQTT bekommt keine
 Rand-Stände (wie bisher, die Prüf-Antwort sagt es: `rohstand.SATZ_BLEIBEN_HA_MQTT`). **E4:** Live «heute/gestern» rechnet bei MQTT
@@ -5376,15 +5307,13 @@ Tageszusammenfassung (unten).
 
 Vorhaben «Sensorwechsel mit Grund» (Bauplan Fassung 2, Sitzungen 1–3). Ein Wechsel der **wirksamen** Quelle eines Zählerschlüssels
 mit eigenen Werten steht als Zeile in `zuordnung_wechsel` (`erklaert_ts`, `ab_ts` = erste volle Stunde ab der Erklärung,
-`vorher`/`nachher`, `grund` ∈ {`fortsetzung`, `korrektur`, leer}). Ein Stand mit `zeitpunkt ≥ ab_ts` gehört zur neuen Quelle,
+`vorher`/`nachher`, `grund` ∈ {`fortsetzung`, leer}; die Korrektur mit `grund = korrektur` ist seit Weg B, Sitzung B3a, entfernt). Ein Stand mit `zeitpunkt ≥ ab_ts` gehört zur neuen Quelle,
 einer davor zur alten.
 
 #### Zuordnung zum Zeitpunkt (B-0)
 
 ```
 Quelle(Schlüssel, z) = vorher des frühesten nicht aufgehobenen Wechsels mit ab_ts > z,
-                       bei einer Korrektur in [falsch_seit_ts, ab_ts) deren nachher; vor falsch_seit_ts zählen die
-                       Zeilen, die sie aufgehoben hat, weiter (dort gilt, was ohne die Korrektur galt — Sitzung 4-K),
                        sonst die heutige Zuordnung                       (zuordnung_wechsel/zeitpunkt.py::quelle_am)
 Schreiben für z      = gilt um z die heutige Quelle ⇒ wie bisher (auch das Löschen einer Stunden-Zeile ohne HA-Wert, #184);
                        sonst füllt der Schreiber NUR fehlende Zeilen aus der Quelle zum Zeitpunkt — eine vorhandene
@@ -5407,7 +5336,7 @@ Verzeichnet wird nur ein Schlüssel **mit eigenen Werten** (§8 Nr. 17); ein Wec
 → A) wirkt für die Schreiber wie eine Fortsetzung (§8 Nr. 18) — seit Sitzung 3b fragt die Abfrage (unten) bei jedem anderen
 Wechsel nach dem Grund. **Grenzen:** ein schon vorhandener fremder Abschnitt bleibt stehen (B-0 verhindert
 neue; die Tagesansicht trägt ihn über «Kanal vor Reihe», wo der Kanal deckt) · vor einem verzeichneten Wechsel stellt «Tag neu
-aggregieren» keine vorhandene Zeile mehr richtig (der Weg ist ab Sitzung 3 die Korrektur) · Feld → «Keine», danach «Tag neu
+aggregieren» keine vorhandene Zeile mehr richtig (der Weg ist seit Weg B «Daten vor der Änderung löschen» beim Wechsel) · Feld → «Keine», danach «Tag neu
 aggregieren» eines Tags davor: die Tageszeile verliert den Schlüssel wie vor dem Vorhaben (nicht gebaut, übergeben).
 Proben: `test_sensorwechsel_s1_zeitpunkt.py`, `test_sensorwechsel_s2_b0_rest.py`.
 
@@ -5438,7 +5367,7 @@ Nachtrag      = für schon geschriebene Zeilen: Quellzeile gueltig_ab = H,
                 keine Kanalzeile umgeschrieben; spätere Quellzeilen rücken um dieselbe Verschiebung mit (ihr Versatz ist der
                 Kanalwert am Schluss der Vorgängerin — sonst käme der Sprung an ihrer Grenze zurück; bestätigt Master 17.11.); beginnt zwischen voriger Zeile und Naht-Zeile schon eine Quelle
                 (Naht des Laufs, früherer Nachtrag, Quellwechsel), tut er nichts — zweimal = einmal; verworfen werden
-                ab H nur die abgeleiteten Kanäle, die aus dem Feld rechnen (dieselbe Auskunft wie die Korrektur unten,
+                ab H nur die abgeleiteten Kanäle, die aus dem Feld rechnen (kanal/korrektur.abhaengige_abgeleitete,
                 Sitzung 4 — §10 Nr. 34) (kanal/naht.py::nachtrag_fortsetzung; Oberfläche: «Zähler getauscht»)
 Nachbau       = der Stände-Nachbau vor der ersten Kanalzeile (nachfuellen._rohstaende, Familie Mitschrift, HA-Stände
                 wörtlich) beginnt an einer verzeichneten Fortsetzung einen neuen Lauf (_laeufe) — eine eigene Quelle,
@@ -5452,8 +5381,6 @@ Naht-Stunde   = die Stunde, die der Nachtrag (Einstieg «Zähler getauscht») oh
                 wie der Stundenlauf und ist von ihm nicht zu unterscheiden — dort gilt die Stunde des Zeitpunkts
 Rücksprung    = ein Paar über eine Fortsetzungs-Naht ist kein Rücksprung (reader.finde_zaehler_ruecksprunge,
                 Befund zaehler_ruecksprung, Sitzung 4)
-Versatz       = ein Rand eines versetzten Abschnitts an einer Fortsetzungs-Naht ist ohne Wirkung — der Befund
-                zaehler_versatz meldet nur, solange ein Rand-Tag über die Reihe ohne Naht rechnet (Sitzung 4-K)
 ```
 
 **Benannte Grenze:** die Menge zwischen dem letzten Stand vor und dem ersten Stand ab `ab_ts` zählt nicht (stündliche Stände bis
@@ -5495,13 +5422,6 @@ Monat aus HA(F7)= je Geltungsabschnitt die Zeilenregel des Monatslesers (get_sen
                   Monat nicht nennt); start_wert/end_wert sind dann ein durchlaufender Stand, keine Zählerstände eines
                   Sensors (zaehler_naht.monat_aus_abschnitten; zuordnung_wechsel/monat.py) — vor dem Kanal-Ersatz der fünf
                   Kalendermonats-Wege (bilanz_leser.monatswerte_mit_kanaelen) und am laufenden Monat
-Falsch seit     = Pflichtpunkt P-1: erklärt eine Korrektur für ihre Zeit eine andere Home-Assistant-Entität als richtig als
-                  die davor geltende, ist falsch_seit_ts eine Naht — keine Differenz zweier Sensoren
-                  (zeitpunkt._falsch_seit_zwischen_zwei_sensoren); nur Home Assistant → Home Assistant. Seit a2 trägt die
-                  Korrektur-Zeile dort Rand-Stände nach derselben Regel wie «bleiben» mit Schnitt an G = falsch_seit − 1 h
-                  (ansatz = schnitt; gespeicherter Stand des bisherigen Sensors um G, Stand des richtigen dort aus HA;
-                  korrektur._rand_an_falsch_seit, zeitpunkt.korrektur_rand_versatz), wenn die Korrektur die Zeit ganz aus HA
-                  füllt — die Stunde vor «falsch seit» zählt dann in der Reihe den richtigen Sensor wie im Kanal
 ```
 
 #### Ansetzen eines Wechsels «bleiben» (U2 a2, Rechenweg F2, F3; Bauplan Nr. 143, 144)
@@ -5524,7 +5444,7 @@ T1              = die erste Stundenzeile des neuen Sensors (ha_statistik_rand.er
 Art und G       = ohne Überlappung: beide, G = T1;  mit Überlappung: schnitt, G = Stunde des verzeichneten Wechsels
                   (ab_ts − 1 h), frühestens T1 + 1 h;  danach ab_ts = G + 1 h
 «zählt ab»      = (U2 Lauf b, F9/F10) nur mit Überlappung wählbar: T1 + 1 h ≤ G ≤ Stunde des Wechsels und — Lab-K F5 — G nie
-                  vor dem vorigen verzeichneten Wechsel des Felds (dessen ab_ts, bei einer Korrektur «Falsch seit»;
+                  vor dem vorigen verzeichneten Wechsel des Felds (dessen ab_ts;
                   ansatz._vorige_grenze): sonst überschriebe das Ansetzen die Zeit der Quelle davor; die Vorgabe G liegt
                   nie davor (U3-K, LK-B3), und lässt der vorige Wechsel nur eine Stunde zu, bietet der Dialog kein Feld an
                   (zuordnung_wechsel/bleiben.setze_zaehlt_ab; sonst 422); die Zeile trägt dann ansatz = offen_schnitt und
@@ -5593,16 +5513,16 @@ mit HAs Rand-Ständen wäre es 2 149,371.
 
 Gemessen an der Saat (Lab-Zeilen 19.11.: alter Zähler bis 07:12 +0,6 in der Stunde 07, neuer ab 07:27 0,7 in derselben Stunde):
 Naht-Slot 1,3 in Reihe, Tagesabschluss aus HA-Slots und Kanal; Tag im Rückwärts-Raster 15,8; Monat aus HA mit und ohne
-Kanal-Deckung wie HA. Die Wechselstelle «Falsch seit» einer Korrektur zwischen zwei Sensoren: 10.06. 11,5 (a1, Naht ohne
-Rand-Stände) → 12,0 (a2, mit Rand-Ständen) in Tagesansicht, Bereichs-Leser und Tagesabschluss. Proben:
+Kanal-Deckung wie HA. Proben:
 `test_sensorwechsel_u2a1_proben.py` (die Leser mit von Hand gesetzten Zeilen), `test_sensorwechsel_u2a2_proben.py` (das Ansetzen
 über Route und Stundenlauf, Zeit-Proben, Nachtrag, Abgleiche).
 
 #### Fragen und Live (U2 Lauf b, Rechenweg F8–F10)
 
 ```
-Frage           = eine: «Bisherige Werte bleiben» (grund = fortsetzung) oder «Bisherige Werte verwerfen» (korrektur)
-Prüf-Antwort    = …/quelle/pruefen, Preset-Prüfung, …/grund/pruefen: bleiben = zuordnung_wechsel/bleiben.angaben —
+Frage           = eine: «Bisherige Werte bleiben» (grund = fortsetzung) oder — seit Weg B — «Daten vor der Änderung
+                  löschen» (loeschen; die frühere Antwort «Bisherige Werte verwerfen» ist entfernt)
+Prüf-Antwort    = …/quelle/pruefen, Preset-Prüfung: bleiben = zuordnung_wechsel/bleiben.angaben —
                   dieselbe ansatz.lage an einer gedachten Zeile (Vorschau = Lauf): seit = T1, ueberlappung, zaehlt_ab = G,
                   bei Überlappung Vorgabe (Stunde des Wechsels) und Bereich [T1 + 1 h, Stunde des Wechsels], stunden = Zahl
                   der Stundenzeilen ab G bis zur laufenden Stunde (Zähler), tage = die neu zu bildenden Tage, monate = deren
@@ -5644,7 +5564,7 @@ Bereichs-Leser = ohne Marke (Speicher-Netzladung der Monats-Fakten, kanal_feldwe
 ```
 
 Leser: *Cockpit → Tag*, Wärme-Verlauf Stunden und Wärme-Verteilung Tag (`get_tagesdetail_kwh`), die Speicher-Netzladung der
-Monats-Fakten (`netzladung_tage.py`, `kanal_zuerst=True`, nur bei echter Deckung) und die Wirkungs-Prüfung des Befunds `zaehler_versatz`. Die
+Monats-Fakten (`netzladung_tage.py`, `kanal_zuerst=True`, nur bei echter Deckung). Die
 Gruppen-Regel der Quellenwahl für Bilanz und Summen bleibt. Ein Kanal, der das Fenster nicht voll trägt (Beginn im Fenster,
 Ende vor dem Fenster-Ende, Spanne über dem Fenster), lässt die Reihe gelten. Gemessen (Produktiv-Sicherung 15.11.): an den
 15 Tagen der Wallbox «Ladung PV» mit Naht oder fremdem Abschnitt (1.7.–10.8.2026) zeigt die Tagesansicht jetzt den HA-Spiegel;
@@ -5672,7 +5592,7 @@ ohne Werte    = weder gefragt noch verzeichnet (§8 Nr. 17)
 fragt vor dem Senden. **Zwei Antworten** (Weg B, Entscheid Gernot 21.11.2026): `fortsetzung` («Bisherige Werte bleiben») ⇒
 Wechsel-Zeile mit Grund (die Naht oben); `loeschen` («Daten vor der Änderung löschen») ⇒ der Abschnitt «Daten vor der Änderung
 löschen» unten. «Verwerfen» mit «Falsch seit» bietet der Dialog nicht mehr an (`grund = korrektur` an Feld-Route und Preset: 400);
-der Korrektur-Lauf unten bleibt bis zum Rückbau für das Stück und die Werkbank («Grund nachtragen» ist seit Sitzung B2 entfernt). Energie-Vorschläge und Gateway-`PUT` ändern ein gefragtes Feld nicht (überspringen, nennen);
+«Grund nachtragen» (Sitzung B2) und die Korrektur samt der Korrektur am versetzten Abschnitt (Sitzung B3a) sind entfernt. Energie-Vorschläge und Gateway-`PUT` ändern ein gefragtes Feld nicht (überspringen, nennen);
 Gateway-Zeile anlegen/löschen lehnt ab (422). Das Festschreiben beim Lesen (`/felder`, W7), die Stilllegung und Innengeräte (W9)
 sind kein Wechsel. **«Zähler getauscht (gleiche Quelle)»** (`zuordnung_wechsel/zaehler_getauscht.py`) — der Weg folgt der
 **Quelle des Kanals zur Stunde des Tauschs** (größtes `gueltig_ab ≤ Stunde`, §11 Nr. 44): ein (nicht verworfener)
@@ -5732,301 +5652,6 @@ Grenze Tag    = benannte Grenze (Sitzung 4-K, Bauplan «Zu §13» Nr. 87): ein E
                 (_reparatur_aggregat → unveraendert:keine_live_zuordnung; der MQTT-Live-Verlauf reicht 15 Tage). Der
                 laufende Tag wird alle 15 Minuten neu gebildet. Der Einstieg nennt die Grenze (zaehler_getauscht.SATZ_TAG_FEST)
 ```
-
-#### Korrektur (B-6, Sitzung 3)
-
-«Bisher war der falsche Sensor zugeordnet, seit `falsch_seit`»: für `[falsch_seit, ab)` gilt danach die richtige (heutige) Quelle.
-Ein Lauf (`zuordnung_wechsel/korrektur.py`), aufgerufen von der Abfrage (oben) und von der Werkbank «Werte vor dem Sensorbeginn
-verwerfen» (`falsch_seit` offen = von Beginn an, `ab` = Beginn des jüngsten Sensors):
-
-```
-1  Wechsel-Zeile        grund = korrektur, falsch_seit_ts, ab_ts; aufgehoben werden: eine Zeile ohne Grund für denselben
-                        Wechsel (gleiche neue Quelle, ab_ts in [f, ab + 1 h]) und jede Zeile ohne Grund oder mit
-                        «Fortsetzung» des Intervalls — ab_ts in (falsch_seit, ab) (ohne falsch_seit: vor ab), am Rand
-                        ab_ts = falsch_seit nur, wenn ihr vorher die richtige Quelle ist (Sitzung 4-K, korrektur._im_intervall);
-                        Korrektur-Zeilen bleiben. Vor falsch_seit zählen die aufgehobenen Zeilen für B-0 weiter (oben):
-                        bei A → X → A mit Korrektur am zweiten Wechsel gilt vor dem ersten weiter A, nicht X
-2  verwerfen in [f, ab) Kanalzeilen nur der Abschnitte, deren Quelle nicht die richtige ist · Zählerstände · MQTT-Rohstände
-                        · Feldschlüssel der Tageszeilen (Tage, deren Fenster ganz im Intervall liegt; Monate mit Abschluss bleiben)
-3  Kanal                w0  = Beginn des falschen Teils (ab der Zeile falsch_seit − 1 h, die den Stand um falsch_seit trägt —
-                              mit HA-Entität als richtiger Quelle, U1), h0 = erste HA-Zeile der richtigen Entität ab w0
-                        Versatz (R2) = Kanalwert am letzten Stand vor w0 − Stand der richtigen Quelle am selben Zeitpunkt
-                                       (führt HA ihn nicht: an h0 — die erste Stunde zählt dann 0; U3-K3 «Regel 2»: beginnt HAs
-                                       Statistik erst an h0 und hat die Korrektur es so entschieden — unten —, an HAs Nullpunkt
-                                       0: die erste Stunde zählt, was HA für sie führt); die leere Zeit [w0, h0) zählt 0
-                        w0 (U3-K3, B2, korrektur.kanal_beginn): «Falsch seit» − 1 h (die Zeile trägt den Stand um «Falsch
-                                       seit»); auf einer vollen Stunde «Falsch seit», wenn HA dort keine Zeile des richtigen Sensors
-                                       führt und an der Zeile keine Quelle beginnt (kein Stück, mit HA): «Falsch seit» — die Stunde
-                                       davor zählt der bis dahin geltende Sensor (gemessen O-1 «vorlauf»: 31.10. 14,4 statt 13,8)
-                        eine Quelle [h0, …) mit diesem Versatz; spätere Quellzeilen derselben Entität entfallen, spätere andere
-                        rücken um die Änderung mit; die falsche Quelle bleibt mit verworfen_ts genau über [w0, h0);
-                        gefüllt mit neu_spiegeln ab h0 bis zur letzten vollen Stunde vor jetzt (kanal/korrektur.fuell_ende —
-                        Lab-K: dieselbe Stunde, bis zu der der Stundenlauf um :05 spiegelt; bis dahin das Soll-Ende der Leser,
-                        und zwischen H:05 und H:10 fehlte die Stunde H − 1 bis zum nächsten Lauf)
-   abgeleitete Kanäle   nur die vom Feld abhängigen (Ladezähler der Wallbox-Achse, Netzbezug, Einspeisung ⇒ PV-Anteil der
-                        Heimladung · Strom einer Wärmepumpe ⇒ deren Strom je Betriebsart · Bilanz-/PV-Zähler, Preis ⇒ Kosten ·
-                        Feld ohne bekannte Kategorie ⇒ alle) ab w0 bis zum Ende verworfen und nach dem Füllen im selben Lauf
-                        neu geschrieben (die drei Schreiber des Stundenlaufs) — kein Zeitfenster mit fehlenden Zeilen
-4  Tage                 neu gebildet (wie «Tag neu aggregieren» ohne Neu-Einlesen der Stände), die das Intervall schneiden und
-                        einen Schlüssel des Felds tragen (gleich welcher Herkunft — auch ein schon einmal neu gebildeter Tag)
-                        — auch in Monaten mit Abschluss; der ganze Tag wird neu gebildet («Neubildung des Tages»)
-                        Wetter und Börsenpreis bleiben: kein Abruf (energie_profil/_helpers.ohne_abruf), die Abruf-Spalten
-                        der Tages- und Stundenzeilen tragen danach den Stand vorher, auch ein leerer bleibt leer
-                        Einspeisung bei negativem Preis = gespeicherte Börsenpreise der Stunden × neue Einspeisung (Aggregator)
-                        Performance Ratio = neuer PV-Ertrag ÷ (gespeicherte GTI-Summe × kWp) (performance_ratio_des_tages)
-5  Merker               gemerkte Kanal-Tage und die Wechsel-Merkliste der Sitzung verworfen
-```
-
-**Lesen über einen verworfenen Abschnitt:** ein Zeitraum, der ihn berührt, ist **nicht voll** (`lesen.GRUND_VERWORFEN`) — auch
-in der Feld-Auskunft «Kanal vor Reihe»; der Konsistenzlauf vergleicht und füllt ihn nicht (`nachfuellen.abschnitte`);
-«bewusst leer» prüft die erste Zeile **je Abschnitt** (richtige Zeilen vor `w0` stören nicht); hinter einem verworfenen Abschnitt
-beginnt der Stundenlauf immer eine neue Quelle (MQTT: eine neue Periode, die am Kanalwert vor dem Abschnitt ansetzt).
-**Für die Reihe** heißt Korrektur «verwerfen, dann füllt B-0 aus der richtigen Quelle»: im Intervall liefert `quelle_am` `nachher`,
-das Heilen beim Lesen holt fehlende Ränder von dort (§8 Nr. 16), und seit 4b-1-K2 liest der Nachlauf die verworfenen Stände
-aus Home Assistant neu und speichert sie («Stände speichern», unten) — vor einem verzeichneten Wechsel stellt sonst kein
-Schreiber eine vorhandene Zeile richtig. **Home Assistant** eingerichtet, aber nicht erreichbar ⇒ der Lauf startet nicht; ohne Home
-Assistant laufen 1, 2 (die abhängigen abgeleiteten Kanäle neu aus den übrigen Eingängen) und 5. **Endgültig:** der Rückweg ist
-eine Sicherung von Home Assistant bzw. ohne Home Assistant der eedc-Datenbank. **Vorschau = Lauf:** die Vorschau zählt die
-Zählerstände bis zum wirksamen `ab_ts` (das spätere einer aufgehobenen Zeile) und nennt dieselben Tage wie der Lauf.
-**Preis der Neubildung alter Tage:** jenseits des Recorder-Verlaufs kommt die Leistung je Stunde danach aus der
-Langzeitstatistik (Stundenmittel) — die Vorschau sagt es. **Robust (Sitzung 3b):** eine wiederholte gleiche Korrektur (gleiche
-richtige Quelle, Intervall von einer Korrektur-Zeile gedeckt) legt keine zweite Zeile an; der Nachlauf nach dem Commit (Füllen,
-abhängige abgeleitete Kanäle, seit 4b-1-K2 das Speichern der Stände) steht als Auftrag im Zustand des Laufs (`settings` `korrektur_lauf:<lauf>`) — scheitert er,
-holt der Lauf ihn vor den Tagen nach; angestoßen wird jeder offene Lauf **stündlich** aus dem Stundenlauf
-(`korrektur_lauf.offene_anstossen`, §11 Nr. 46), nach dem Start und wenn die Werkbank dasselbe Feld noch einmal ausführt (ihre
-Vorschau sagt dann nur, dass das Füllen aussteht, und verwirft nichts weiter); der Fehler «Füllen: …» steht je Lauf einmal (der
-letzte Versuch); höchstens eine Aufgabe je Lauf; fertige Läufe werden nach 30 Tagen aufgeräumt; Fortschritt über
-`GET …/korrektur-lauf/{lauf}`, die laufenden Läufe der Anlage über `GET …/korrektur-laeufe` (die Datenquellen-Fläche zeigt sie
-beim Laden). Proben: `test_sensorwechsel_s3_korrektur.py`, `test_sensorwechsel_s3ak_proben.py`,
-`test_sensorwechsel_s3b_abfrage.py`, `test_kanal_verworfen_bewusst_leer.py`.
-
-**Überlappende Korrekturen** (Sitzung 4b-1, Bauplan Nr. 91 d): enthält das Intervall mehrerer nicht aufgehobener Korrektur-Zeilen
-den Zeitpunkt `z`, gilt die **jüngste** (höchste Zeilen-Nummer, `zeitpunkt._juengste_korrektur_am`) — eine spätere Korrektur, die
-eine frühere umschließt, liefert in der Überlappung ihre Quelle (vorher die ältere: 12.06. 3 012,0 statt 12,0).
-
-**Leere Zeit wie Zählerlücke, Lücke nur bei Höhenwechsel** (Sitzung 4b-1, Entscheid Gernot 18.11.2026, Bauplan Nr. 95 (1),
-Nr. 97; geändert durch Nr. 119 «Wie jede Zählerlücke», Nr. 127 Halt H-K2-1 Option A und das Zielbild Nr. 133 (4), gebaut in U1):
-füllt nichts die verworfene Zeit der Reihe — ohne Home Assistant, eine MQTT-Quelle, Home Assistant führt den richtigen Sensor dort
-nicht, ein Stück, dessen Ränder nicht zu HAs Rohsumme passen (`korrektur._luecke`) —, steht für diese Zeit eine **Lücke**: eine
-nicht aufgehobene Korrektur-Zeile, deren `nachher` keine Home-Assistant-Entität nennt (`zeitpunkt.ist_luecke`). Nennt die Korrektur
-eine Entität, schreibt der Dienst für den ungefüllten Teil eine zweite, jüngere Korrektur-Zeile mit `nachher` leer
-(`korrektur._luecken_zeile`) — **in jeder Lage**, mit und ohne Home Assistant. Sie ist das Merkmal «hier nicht aus Home Assistant
-heilen und nicht füllen»: in ihr liefert `quelle_am` «unbekannt», kein Schreiber füllt und kein Leser heilt einen Rand dort (sonst
-heilte «Zuordnung zum Zeitpunkt» aus HAs Summe — in der Lage «Stände passen nicht» auf einer anderen Höhe, gemessen 10.06. 1 918,5).
-**Ob ihre Ränder Nähte sind, entscheiden die Quellen und ein eingetragener Zählertausch** (`zeitpunkt.ohne_hoehenwechsel`, eine
-Regel, Regel Q1; die Höhe der Stände selbst prüft die Regel nicht — Korrekturrunde U1-K, Bauplan Nr. 141 (c)):
-
-```
-vor   = letzter gespeicherter Stand vor der Lücke         nach = erster gespeicherter Stand ab ihrem Ende   (zeitpunkt.staende_um)
-Quelle(z) = quelle_am(z); gilt dort die heutige Zuordnung: nachher des jüngsten gültigen Wechsels bis z (ohne Lücken-Zeilen) —
-            aus den Zeilen allein (zeitpunkt.quelle_aufgeloest), ohne Blick auf die heutige Zuordnung
-Erklärt(z) = nachher der jüngsten Korrektur-Zeile (keine Lücken-Zeile) mit z in ihrem Intervall — auch einer aufgehobenen,
-            solange die Zeile, die sie aufhob, z nicht deckt (Rest einer älteren Lücke); sonst unbekannt (zeitpunkt.erklaerte_quelle)
-Tausch     = eine Fortsetzung mit vor < ab_ts ≤ nach: gültig und Quelle(vor) beteiligt, oder ein Zählertausch derselben Quelle
-             (Quelle(vor) → Quelle(vor)) — auch von einer Korrektur aufgehoben (zeitpunkt._zaehlertausch_dazwischen)
-ohne Höhenwechsel ⇔ vor und nach vorhanden ∧ Quelle(vor) = Quelle(nach) = Erklärt(Beginn der Lücke und jede Korrektur-Grenze
-                    darin) ∧ kein Tausch
-ohne Höhenwechsel  ⇒ die Ränder sind keine Nähte: Stand(nach) − Stand(vor) ist die Menge der Zeit und steht am ersten Stand
-                     danach — wie an jeder Zählerlücke (Grundsatz «Zählerlücken wie HA»)
-mit Höhenwechsel   ⇒ beide Ränder sind Nähte (zeitpunkt.gesperrte_stuecke): kein Leser bildet eine Differenz über die Lücke
-```
-
-Gemessen (Saat, Stück 10.06. 01:00 … 14.06. 19:00, wahrer Zähler 12,0 je Tag) in vier Lagen gleich — ohne Home Assistant, Home
-Assistant erreichbar mit verschobener Summe, Lauf offen und Home Assistant führt danach nichts, MQTT mit derselben Quelle davor und
-danach: Tagesansicht 12,0 · 0,5 bis 00:00 · — · — · — · 59,5 · 12,0, `reader.delta` 9.–16.06. 84,0, Juni 336,0 (= ohne Korrektur),
-kein Stand im Stück geheilt; der Bereichs-Leser zeigt am Tag, an dem die Zeit beginnt, keinen Wert (ein fehlender rechter Rand
-ohne Naht, wie an jeder Zählerlücke), der Tagesabschluss eines Zähler-Felds speichert am End-Tag 59,5 mit der Spanne der Stunde
-(115 h, das bestehende Kennzeichen gebündelter Stunden). Mit Höhenwechsel (Wechsel A → C am Ende, 1 000 → 7 000; oder eine andere
-bzw. unbekannte Quelle davor): 0,5 · — · — · — · 2,0, nie 6 059,5. Die Vorschau fragt dieselbe Regel an den Zeilen, wie sie nach
-der Korrektur stehen (`korrektur._zeilen_danach`: aufgehobene Zeilen als aufgehoben, die neue Korrektur- und Lücken-Zeile
-gedacht dazu; endet die Zeit am Wechsel ohne Stand danach, zählt der erste Stand, den eedc dort schreiben wird) — Vorschau = Lauf;
-sie sagt `SATZ_ZAEHLERLUECKE` mit dem Tag der Menge (`tag_der_menge`; ohne Stand danach der Tag des ersten Stands, den eedc dort
-schreiben wird, `stueck.tragtag_der_luecke`) bzw. `SATZ_LUECKE`. Eine Fortsetzung **im** Intervall hebt die Korrektur auf (Bauplan
-§13 Nr. 67); ein **Zählertausch derselben Quelle** bleibt dennoch ein Höhenwechsel (U1-K (c) (ii) — gemessen: neuer Zähler
-4 000 höher, 14.06. 2,0 statt 4 059,5; 10 höher 2,0 statt 69,5), eine Fortsetzung nur einer anderen Quelle (X → X) nicht. Der
-Befund `zaehler_versatz` fragt dieselbe Regel (`versatz._versatz_tausch` über die Vorschau der Korrektur) und sagt bei einem
-Zählertausch zwischen den Ständen davor und danach, dass eedc über die leere Zeit keine Differenz bildet. Abgeleitet ohne neue
-Spalte; es gilt auch für schon eingetragene Korrekturen und Korrektur-Zeilen mit MQTT-Quelle.
-
-**Eine Lücken-Zeile ist kein Quellenwechsel** (Nr. 105, ein Prädikat `zeitpunkt.ist_luecken_zeile`): `quelle_am` vor ihr,
-`abfrage.letzte_quelle_mit_werten` überspringt sie (bis Sitzung B2 auch «Grund nachtragen» und die Sperre H-4). Dazu gilt — Nr. 106
-— das Intervall einer Korrektur als gesperrt (mit Nähten), solange ihr Lauf den Nachlauf (Füllen des Kanals, Speichern der Stände,
-unten) noch schuldet (`korrektur_lauf.offene_fuell_laeufe`; mit dem Nachlauf endet die Sperre). Die Ränder jedes gesperrten Stücks
-liefert die eine Ladestelle der Nähte (`zeitpunkt.fortsetzungs_naehte`) zusätzlich zu den Fortsetzungen — die Leser der Reihe
-erben die Regel ohne eigene Änderung (Wächter «Reihen-Leser»). Überdeckt eine spätere Korrektur eine ältere Lücke nur teilweise —
-eine Lücken-Zeile oder (Nr. 113) eine Korrektur-Zeile ohne Home-Assistant-Entität, etwa MQTT —, wird diese aufgehoben und ihr Rest
-außerhalb des neuen Intervalls als Lücken-Zeile geschrieben (`korrektur._aeltere_luecken`, `_rest_der_luecke`, Nr. 102); füllt die
-neue Korrektur, nennt die Vorschau je überdeckter Lücke, was danach aus dem richtigen Sensor kommt und was ohne Wert bleibt
-(`saetze_ueberdeckt`, `luecken_gekuerzt`); für den Rest gilt wieder die Regel oben, mit der Quelle, die für ihn erklärt ist
-(gemessen: Rest [10.06. 01:00, 12.06.) einer MQTT-Korrektur, A davor und neu gelesene Stände von A danach — für den Rest ist MQTT
-erklärt, also ein Höhenwechsel: 12.06. 11,5, Naht an den Rändern; U1 zählte den Zuwachs von A über die Zeit: 35,5). Nimmt eine
-wiederholte gleiche Korrektur über einen Teil die Zeile einer älteren wieder (`_gleiche_korrektur`), kürzt sie deren Lücke nur
-um ihr eigenes Intervall (`Lage.intervall`, U1-K (e)) — der Rest bleibt «nicht heilen» (gemessen mit HAs Summe 1 906,5 höher:
-0,5 · — · — · — · 59,5 statt 10.06. 1 918,5). **An einem gesperrten Stück eine Regel
-für zwei Leser** (`core/berechnungen/zaehler_naht`, Nr. 102 und Nr. 112, das Laden in `snapshot/luecken_rand.py`): die
-**Tagesansicht** (`snapshot/aggregator._tagesdetail_boundary_diff_mit_grund`) und der **Bereichs-Leser**
-(`snapshot/bereichs_leser._randstaende`, Wärme-Verlauf je Tag, Monats-Fakten Speicher-Netzladung) — nur für einen Schlüssel mit
-gesperrtem Stück: der linke Rand rückt nicht über ein gesperrtes Stück auf den letzten Stand davor (`ende_der_luecke_davor`), er
-beginnt an seinem Ende (dort geheilt, sonst am ersten Stand danach, `luecken_rand.rand_nach_luecke`) — **ohne Abdeckungs-Marke «ab
-…»** (U1 Punkt 5, Bauplan Nr. 136 (3): sie stand an der Wärmepumpen-Kachel auch für die Lücke eines anderen Geräts; der Wert
-bleibt der Teilwert); liegt das Fensterende im Stück, rückt der rechte Rand auf den letzten Stand im Fenster (`endet_in_luecke`;
-die Tagesansicht tut es als Anzeige ohnehin, «bis …»); ist im Fenster außerhalb der gesperrten Stücke nichts messbar
-(`traegt_messung`, etwa ein Rückgang genau am Fensterende), hat der Tag keinen Wert statt einer gemessenen 0,0. Der Grund am «—»
-eines Tages, dessen Fenster eine verworfene, nicht gefüllte Zeit schneidet (auch ohne Höhenwechsel und während das Füllen
-aussteht, `zeitpunkt.verworfen_ohne_fuellen`), ist `luecke_verworfen` («… eine Korrektur hat die Zählerstände dieser Zeit
-verworfen.», `core/tageswert_grund.py`) statt `keine_zaehlerstaende`. Die Vorschau nennt Zeit, Tage ohne Wert, Rand-Tage und
-— ohne Höhenwechsel — den Tag der Menge (im Tagesfenster der Tagesansicht, über die ungemessene Zeit vom letzten Stand vor bis
-zum ersten Stand ab dem Ende, `stueck.tage_der_luecke`, `stueck.tragtag_der_luecke`).
-
-**Leer bleibt nur die Zeit, für die Home Assistant nichts führt** (U1 Punkt 3, Gegenprüfung Zeile 5): beginnt HAs Geschichte des
-richtigen Sensors erst im Intervall (erste HA-Zeile `h` nach dem ersten verworfenen Stand), ist die Lücke `[falsch_seit, h + 1 h)`;
-ab dem ersten Stand aus Home Assistant liest der Lauf die Stände neu und speichert sie (unten), die Vorschau sagt es
-(`SATZ_STAENDE_AB`; eine Zeit für Stände und Kanal — seit U3-K3 das Ende der Lücke, dieselbe Zeit wie der Lücken-Satz;
-`SATZ_KANAL_AB` entfällt dann, U1-K S5).
-**«Regel 2»** (U3-K3, Bauplan Nr. 163; `zuordnung_wechsel/nullpunkt.py`): ist `h` die erste Zeile der Statistik überhaupt
-(`kanal/korrektur.ha_beginnt_bei`), prüft kein Rand-Stand die Höhe (`_hoehe_pruefung` ⇒ `None`), beginnt die Zeile am Nullpunkt
-(ihre Summe ≤ max(100 kWh, 1,5 × kWp), `nullpunkt_der_reihe`) und ist es ein Mengen-Feld, endet die Lücke an `h`: der Kanal setzt
-den Versatz an HAs Nullpunkt (die erste Stunde zählt wie in HA, dieselbe Regel wie «beide»), die Lücken-Zeile trägt den Nullpunkt
-als `stand_neu_null`, die Hülle «Monat je Geltungsabschnitt» setzt Anker 0 an `h` (`monat._nullpunkt_teile`), die Stände liest der
-Lauf ab `h + 1 h` (`_erster_neuer_stand`). Die Vorschau sagt es (`SATZ_STAENDE_AB_KANAL`, wenn der Kanal davor Werte trägt, sonst
-`SATZ_STAENDE_AB_MONAT`) und nennt die Tage an Kanal-Tagen nach den Rändern des Kanals (`stueck.tage_im_kanal`, «Die Tagesansicht
-zeigt …»). Gemessen (O-1, `golden-master/sensorwechsel-saat/u3k3/o1/`; PV 0,6/h, richtiger Sensor neu ab 03.11. 23:00 mit 0,4):
-mit Vorlauf Stunde 0,4 · Tagesansicht 03.11. 0,4 nach dem Self-Healing · Stundenwerte 23 h 2,4 · Monat 1,0 (01:07) / 1,6 (02:20) in
-Monatssicht, «Aus HA laden» und Monatsabschluss — wie die Gegenprobe ohne «verwerfen» (`o1/test_nm_o1_null.py`); ohne Vorlauf
-(`spaet_0020`, `rand_1000`) «Aus HA laden» und Monatsabschluss = HA (1,0/1,6 bzw. 8,8/9,4), der Tag wie bisher. **Benannte Grenzen:**
-(a) ohne Vorlauf zählen Kanal-Stunde und Tagesansicht die erste Zeile nicht (Leseregel (a) in `kanal/lesen.py`, wie v4.3.1 bei einem
-Kanal, der mit der Zeile beginnt); (b) die Reihe zählt die erste Stunde nicht — ein Rand-Stand am Nullpunkt verschöbe den Teilwert
-der Rand-Tage (`rand_1000` 7,2 → 7,6) und zeigte mit Vorlauf bis zum Self-Healing 0,0 statt «—» (nicht gebaut, Bericht U3-K3 H-3);
-(c) «verwerfen» in der Stunde, in der HA den Sensor beginnt («Regel 1», nicht gebaut): der Stundenlauf übernimmt die erste Zeile
-in den Kanal, «Aus HA laden» und Monatsabschluss zählen sie nicht (1,2 statt 1,6) — die Vorschau sagt es
-(`SATZ_KANAL_ERSTE_STUNDE_OFFEN`); (d) Stand-Felder und eine erste Zeile über der Grenze (importierte Statistik, gelöschte
-Geschichte): keine «Regel 2».
-**U3-K4 (K3-B4) «Falsch seit» auf der ersten Zeile** (`f = h`): dieselbe Regel ohne Lücke — `_luecke` gibt `(None, Nullpunkt)`, der
-Kanal setzt am Nullpunkt an, die **Korrektur-Zeile** trägt den Nullpunkt als `stand_neu_null` (ohne `ansatz`; die Rand-Stände an
-«Falsch seit», `_rand_an_falsch_seit`, entfallen dort — HA führt davor keine Zeile), `nullpunkt.abschnitte` liest sie (G =
-`falsch_seit_ts`), die Stände liest der Lauf ab `h + 1 h` (`_erster_neuer_stand`, ohne Lücke ab «Falsch seit»). Ohne Werte davor
-nennt die Vorschau `SATZ_STAENDE_AB_MONAT` — **benannte Grenze (K4-B5, Nachmessung U3-K4):** beginnt auch der bisherige Sensor in
-HA erst an dieser Zeile (das Feld hat davor keinen Wert), greift die Regel nicht (kein prüfbarer Vorlauf): die Vorschau sagt «Kein
-Tag muss neu gebildet werden …», die Korrektur legt eine Lücken-Zeile bis zur nächsten vollen Stunde an, November 1,2 statt 1,6 in
-allen Wegen (Rand-Thema U4). Gemessen (`handgriff_d`, «Falsch seit» 03.11. 23:00): Kanal-Stunde 23 Uhr 0,4 · Tag
-03.11. Kanal = Tagesansicht 14,2 · November 44,2 in Monatssicht, «Aus HA laden», Monatsabschluss und Kanal (U3-K3: Lücke 23–00 Uhr,
-0,0 · 13,8 · 43,8); die Vorschau nennt weder Lücke noch Handgriff D; `handgriff_d_0000`, `handgriff_d_2200`, `vorlauf`,
-`geschichte` unverändert. **U3-K4 (K3-B5):** führt später ein angesetzter Wechsel «bleiben» vom richtigen Sensor weiter, gilt der
-Nullpunkt-Abschnitt weiter (`nullpunkt.abschnitte`: die Entität ist die heutige oder ein angesetzter Wechsel führt von ihr weg;
-`monat._mit_nullpunkt` setzt ihren Abschnitt an G mit Anker 0) — gemessen `danach_bleiben_neu2`: November 3,8 in Monatssicht,
-«Aus HA laden» und Monatsabschluss (U3-K3: 3,8 · 3,4 · 3,4).
-**U3-K4 (K3-B7) Sätze:** `SATZ_STAENDE_AB` nennt, ab wann eedc neu liest («Ab … Uhr liest eedc die Zählerstände des richtigen
-Sensors neu und speichert sie.» — HA kann den Sensor eine Stunde früher führen, `SATZ_KANAL_AB` nennt das); die Vorschau teilt die
-Tage an Kanal-Tagen an der ersten Zeile, die HA für den richtigen Sensor führt (`erste_ha_zeile`, dieselbe Grenze wie die Auskunft
-im Kanal, `raender_der_verworfenen_zeit`; `erste_101`: 01.–02.11. ohne Wert, 03.11. Teil, wie die Auskunft); die Auskunft «Zeit
-verworfen» nennt die Zeit bis zur ersten zählenden Kanal-Zeile, wenn sie vor dem Ende der Zeit liegt (`verworfen.Lage.bis_anzeige`;
-`vorlauf_2344`: «bis 03.11.2026 23:00 Uhr» statt 04.11. 00:00 — nur der Satz, Zeit und Leser bleiben).
-Gemessen (Wechsel A → C am Ende, C in HA ab 12.06. 00:00): 10.06. 0,5 · 11.06. — · 12.06. 11,5 · 13.06. 12,0 · 14.06. 12,0 (bis
-4b-1-K2 12.–14.06. ohne Wert bzw. 2,0). Dieselbe Regel gilt am Stück (U1-K S3: führt Home Assistant die Quelle im Stück erst ab
-12.06., nennt die Vorschau die Lücke [10.06. 01:00, 12.06.) und den Tag der Menge — wie der Lauf, 12.06. 35,5).
-
-**Füllen nur auf geprüfter Höhe** (U1-K (d), Bauplan Nr. 141; `korrektur._hoehe_passt`, dieselbe Prüfung wie am Stück
-`stueck.ist_fuellbar`): auch die gewöhnliche Korrektur (Dialog, Nachtrag, Werkbank) liest die Stände nur neu, wenn jeder
-prüfbare Rand-Stand — der letzte gespeicherte vor `falsch_seit`, der erste ab `ab`, gespeichert aus der richtigen Quelle, und
-Home Assistant führt sie dort — HAs heutige Summe der richtigen Quelle ist (`SPIEGEL_TOLERANZ_KWH`; ein Fünf-Minuten-Stand gegen HAs
-Kurzzeitstatistik, so wie er geschrieben wurde — Lab-K W9: gegen die Stundenzeile lag er nie auf der Höhe, und die Korrektur füllte
-eine Zeit nicht, die Home Assistant führt; ohne Kurzzeitzeile ist der Rand nicht prüfbar — **am Stück** (`ist_fuellbar`, U3-K,
-Nachmessung Lab-K LK-B2) gilt dann der Stand der Reihe zur vollen Stunde davor bzw. am Rückgang ab ihm gegen HAs Stundenzeile
-(`stueck._pruefbarer_rand`): HAs Kurzzeitstatistik reicht nur Tage zurück, und an der Produktiv-Kopie machten 23 von 30 alten
-Unterstunden-Rändern ein Stück «nicht füllbar», das an 7311ad345 füllbar war; mit dem Rückgriff 27 von 30 füllbar, die 10
-Kontrollfälle zur vollen Stunde und der Korrektur-Weg unverändert). Passt einer nicht, bleibt die
-Zeit leer und folgt der Regel oben; die Vorschau sagt `SATZ_ZAEHLERLUECKE` bzw. `SATZ_LUECKE` («füllt nichts …»; liegt das Ende
-der Zeit noch vor uns — Dialog, `ab` = nächste volle Stunde —, «Vom … Uhr bis zum Ende der laufenden Stunde», Lab-K W5, U3-K3; kein
-`SATZ_KEIN_TAG`). Ein Rand aus einer anderen Quelle prüft die Höhe der richtigen nicht (Wechsel A → C). Gemessen (A → X → A,
-HAs Summe von A 1 906,5 über den Ständen): 0,5 · — · — · — · 59,5, 84,0, 336,0 statt 10.06. 1 918,5; dazu HA erst ab 12.06.: ebenso
-statt 12.06. 1 942,0; gleiche Höhe, HA ab 12.06.: 12.06. 35,5, 84,0, 336,0 (unverändert). Mit Kanal widersprechen sich Tagesansicht
-(Kanal, 12,0 je Tag) und Bereichs-Leser (Reihe, 59,5 am 14.06.) nur noch in der Verteilung, nicht um 1 906,5.
-
-**Stände speichern** (Nr. 111): füllt die Korrektur aus Home Assistant und verwirft sie dort Stände oder überdeckt sie eine ältere
-Lücke, liest der **Hintergrund-Lauf** der Korrektur (vor den Tagen; über Monate tausende Stunden-Abrufe, deshalb nicht in der
-Anfrage — `nach_dem_commit` füllt nur den Kanal und vermerkt `kanal_erledigt`) die Zählerstände der gefüllten Zeit neu und
-**speichert** sie (`korrektur.fuelle_staende`: der Schreiber der Stunde `snapshot/writer.snapshot_anlage`, nur dieser Schlüssel,
-mit der Zuordnung zum Zeitpunkt — in der Zeit gilt die richtige Quelle, gefüllt werden nur fehlende Zeilen; ein Tag je
-Transaktion). Die Zeit steht in der Vorschau (`staende_neu`) und im Auftrag des Nachlaufs (`fuellen.staende`) — Vorschau = Lauf;
-damit hat auch eine Korrektur ohne Kanal-Teil einen Lauf-Zustand. **Zwei Lagen** (U1 Punkt 2; dazu U1-K (b): ist Home Assistant
-beim Füllen **nicht mehr eingerichtet**, gilt die Lage «ohne Home Assistant» — Lücken-Zeile, der Auftrag endet, Regel der
-Zählerlücke, gemessen 0,5 · — · — · — · 59,5, Lauf `fertig`): ist Home Assistant vorher,
-mittendrin oder danach **nicht erreichbar**, bleibt der Auftrag offen — das Intervall ist gesperrt (oben), die Zeit zeigt nichts,
-kein Schreiber speichert eine Spitze (gemessen: der Tagesabschluss des End-Tags 2,0 statt 59,5), der Lauf holt es stündlich und
-nach dem Start nach — danach 12,0 an jedem Tag. Ist Home Assistant **erreichbar und führt für die Quelle in der Zeit nichts** (kein
-Stand gespeichert, etwa weil die Statistik zwischen Eintragen und Lauf gelöscht wurde), endet der Auftrag: die Zeit bekommt eine
-Lücken-Zeile (`korrektur._luecke_nach_dem_lesen`, mit dem Lauf der Korrektur) und es gilt die Regel der Zählerlücke oben (gemessen:
-der Lauf ist `fertig`, 14.06. 59,5 in Tagesansicht und Tagesabschluss); führt Home Assistant erst ab einem späteren Stand der Zeit,
-bleibt nur die Zeit davor leer. Die Fläche zeigt während des Laufs «Korrektur läuft …»; «Das Füllen aus Home Assistant steht noch
-aus …» erst nach einem gescheiterten Versuch (`korrektur_lauf.fuellen_offen`). Nach dem Nachlauf bleiben die Stände auch ohne Home
-Assistant (gemessen: Tagesansicht und Bereichs-Leser 12,0, Tagesabschluss 12,0).
-
-**Rand am Beginn wie am Ende** (U1 Punkt 4, Gegenprüfung Zeile 10): im Kanal beginnt das Intervall einer Korrektur mit
-Home-Assistant-Entität an der Zeile `falsch_seit − 1 h` (`korrektur._kanal_beginn`) — sie trägt den Stand um `falsch_seit`, den
-ersten falschen; dieselbe Regel wie am Ende (`kanal/korrektur._spaetere_richtige`: die Zeile `ab − 1 h` trägt den Stand um `ab`).
-Gemessen: am Tag des Sprungs 12,0 statt 12,05 (die Stunde des fremden Zählers vor `falsch_seit` ist weg). Der MQTT-Kanal bleibt, wie
-er ist (U3).
-
-**Benannte Grenzen:** (1) Die Stunde zwischen dem letzten Stand vor einer Lücke **mit Höhenwechsel** und ihrem Rand zählt nicht
-(wie an einer Fortsetzung). (2) Kein Kennzeichen am Feld (Entscheid Gernot 19.11.2026, Bauplan Nr. 136 (3)): ein Teilwert am Rand
-einer Lücke mit Höhenwechsel trägt keine Marke «ab …»; «bis …» am Tag, an dem eine Lücke beginnt, steht wie bisher in der
-Tagesansicht und wird nur am Block der Wärmepumpe angezeigt; eine Lücke innerhalb eines Tagesfensters trägt keine Abdeckung. Wo
-ein Wert mehr oder weniger als seinen Zeitraum trägt, zeigt es der Daten-Checker (Zielbild Punkt 6; eine dauerhafte Auskunft für
-eine verworfene, nicht nachgelieferte Zeit ist U3). (3) Eine Korrektur, die vor 4b-1-K2 über ein füllbares Stück eingetragen
-wurde, hat keine gespeicherten Stände und keine Lücken-Zeile; ist Home Assistant beim Lesen nicht erreichbar, bildet die
-Tagesansicht die Differenz über das Stück — dieselbe Quelle davor und danach, also die Regel der Zählerlücke (nie veröffentlicht,
-nur Lab- und Dev-Stände). Ebenso hat eine vor U1 ohne Home Assistant eingetragene Zählerlücke keine Lücken-Zeile: wird eedc
-danach mit Home Assistant verbunden, heilt «Zuordnung zum Zeitpunkt» dort aus der Quelle (nie veröffentlicht). (4) Eine Zählerlücke
-trägt die Menge an den Tag, an dem sie endet; die Tagesansicht nennt dort keine Abdeckung (der Rand vor der Zeit ist ein gemessener
-Stand). (5) «Dieselbe Quelle» heißt dieselbe Entität bzw. MQTT-Beschreibung; die Höhe prüft die Regel der Zählerlücke nicht. Ob gelesene
-Stände auf der Höhe der gespeicherten liegen, prüft das Füllen an den Rand-Ständen (oben). Ist **kein** Rand prüfbar (Home
-Assistant führt die Quelle weder am letzten Stand davor noch am ersten danach, etwa im Dialog «bis jetzt» ohne Stand danach) und
-beginnt das Gefüllte erst nach einer leeren Zeit derselben Quelle, ist die Höhe ungeprüft: die Lücken-Zeile trägt das Merkmal
-`ansatz = hoehe_ungeprueft` (Sensorwechsel U2 a1, Pflichtpunkt P-2; Halt H-1 der Korrekturrunde U1-K, Option A), und ihr Rand
-gilt als Höhenwechsel (`zeitpunkt.ohne_hoehenwechsel`) — keine Differenz über die leere Zeit. Gemessen mit HAs Summe 1 906,5
-höher und Geschichte erst ab 12.06.: 12.06. **11,5** (vorher 1 942,0); so zeigt es auch Home Assistant, dessen Statistik dort
-beginnt. Die Vorschau sagt es (`SATZ_LUECKE_HOEHE`; seit U2 Lauf b mit dem Grund «Home Assistant führt den richtigen Sensor
-erst ab dann» und, wo «Falsch seit» wählbar ist, dem Handgriff `SATZ_LUECKE_HOEHE_HANDGRIFF`: «Falsch seit» auf das Ende der
-leeren Zeit setzen, dann bleiben die bisherigen Werte davor), eine Lücke, die der Lauf erst beim Lesen findet, trägt das
-Merkmal ebenso; die Erkennung «Lücken-Zeile» (`nachher` leer) bleibt.
-
-#### Korrektur über ein abgeschlossenes Stück (Sitzung 4b-1, Bauplan «Zu §14» Nr. 93–98)
-
-Ein **Stück** `[S, R)` der Reihe trägt die Stände eines anderen Sensors; davor und danach gilt dieselbe Quelle **E** (der Befund
-`zaehler_versatz`, Sprung S und Rückgang R; der Weg am Rückkehr-Wechsel X → A, H-4, ist mit «Grund nachtragen» an einem
-Wechsel seit Sitzung B2 entfernt). «Grund nachtragen →
-Korrektur» am Befund ist ein Auftrag desselben Dienstes mit `falsch_seit` = S, `ab` = R, `vorher` = `nachher` = E und `stueck`
-(`zuordnung_wechsel/stueck.py`):
-
-```
-E                  die Quelle, deren Stände die Reihe am Rand führt: eine verzeichnete (quelle_am), sonst die Spiegel-Quelle des
-                   Kanals an der Zeile z − 1 h, sonst die heutige wirksame Quelle (stueck.quelle_am_rand); an beiden Rändern
-                   (letzter Stand vor S, Stand an R) dieselbe — sonst gesperrt (A → X → C)
-füllbar            HA erreichbar ∧ |Stand vor S − Rohsumme_E(Zeit)| ≤ 0,01 ∧ |Stand an R − Rohsumme_E(R)| ≤ 0,01 ∧ HA führt E
-                   an S (stueck.ist_fuellbar; Rohsumme = get_value_at wie das Heilen beim Lesen, bei Stand-Feldern state)
-                   ⇒ Stück verwerfen, der Nachlauf liest die Stände aus E neu und speichert sie (oben): Tagesansicht 12,0
-                   an jedem Tag, 9.–16.06. 84,0
-nicht füllbar      ohne Home Assistant, Stände passen nicht, HA führt E an S nicht ⇒ Stück verwerfen, Lücken-Zeile [S, R)
-                   (kein Heilen); E an beiden Rändern ⇒ ohne Höhenwechsel: wie jede Zählerlücke (oben), 0,5 · — · — · — · 59,5,
-                   9.–16.06. 84,0 — nie 1 918,5
-Kanal              wie jede Korrektur; eine Quelle, die E nach X fortsetzt, zählt ab R − 1 h zu den späteren richtigen
-                   (kanal/korrektur._spaetere_richtige: die Kanal-Zeile R − 1 h trägt den Stand um R) — sonst rückte eine
-                   spätere Quelle C nicht mit (gemessen 20.06. 17,65 statt 12,0)
-```
-
-Vorschau = Lauf (dieselbe Füllbarkeit, dieselbe Lücke); die Prüf-Route schreibt nichts; «Home Assistant eingerichtet, aber nicht
-erreichbar» startet nicht; ein offener Korrektur-Lauf des Felds sperrt. Die Routen am Befund (`…/zaehler-versatz/pruefen`,
-`…/zaehler-versatz`) prüfen Schlüssel, Sprung und Rückgang gegen die Erkennung (`stueck.finde_lauf`, nur Felder, die der Befund
-prüft — `versatz.in_tagesansicht`) — kein frei wählbares Stück. Das Stück geht auch, wenn es am laufenden Tag endet. Ersetzt am Befund «Tage neu aufbauen» (`reaggregate_range`): gemessen
-an der Produktiv-Kopie änderte jenes an 41 Tagen Wetter, Preis, Performance Ratio und `datenquelle` und einen Monat, die
-Korrektur über das Stück nur die Reihe des Stücks. Eine HA-Abfrage, die in der Prüfung scheitert, macht die Korrektur in diesem
-Augenblick nicht startbar (`korrektur.ha_abruf`: dieselbe Antwort wie «nicht erreichbar», die Route des Eintrags 422, Nr. 116
-E-K6). **Benannte Grenzen des Befunds** (Nr. 114, kein Bau): (a) liegt der Rückgang hinter einer Datenlücke über die Fenstergrenze
-(23 Uhr) und ist Home Assistant erreichbar, führt die Stunden der Datenlücke aber nicht, nennt der Befund den Nachbartag (er
-nimmt an, die Tagesansicht heile den Rand dazwischen) — beide Lagen verlangen eine Datenlücke genau am Rückgang über 23 Uhr;
-(b) findet die Erkennung an einer langen Datenlücke am Rückgang oder an beiden Rändern kein Paar aus Sprung und Rückgang, steht
-die OK-Zeile (Regel `core/berechnungen/zaehler_versatz` unverändert). Proben: `test_sensorwechsel_s4b1_stueck.py`,
-`test_sensorwechsel_s4b1k2_proben.py`, `test_daten_checker_zaehler_versatz.py`.
 
 ### Tageszusammenfassung (TagesZusammenfassung)
 

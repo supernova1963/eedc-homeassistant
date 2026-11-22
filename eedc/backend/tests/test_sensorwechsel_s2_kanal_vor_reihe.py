@@ -2,19 +2,17 @@
 
 **Regel:** je (Gerät, Feld, Innengerät-Kopie) gilt das Δ des eigenen Kanals über das Fenster, in dem die Reihe an diesem Tag
 gelesen würde (``tagesfenster_fuer`` mit denselben Argumenten), wenn der Kanal es voll trägt; sonst die Reihe. Gemischt je
-Gerät und Feld, die Summe des Ausgabe-Schlüssels danach. Dieselbe Feld-Auskunft trägt die Wirkungs-Prüfung des Befunds
-``zaehler_versatz``; «Kanal zuerst» gilt auch für die Speicher-Netzladung der Monats-Fakten (``netzladung_tage.py``).
+Gerät und Feld, die Summe des Ausgabe-Schlüssels danach. «Kanal zuerst» gilt auch für die Speicher-Netzladung der Monats-Fakten (``netzladung_tage.py``).
 
 Proben mit Sprengsatz im selben Test: zwei Geräte ⇒ Summe beider (Sprengsatz: die Ausgabe-Summe aus den Kanälen allein —
 ``detail_aus_kanaelen`` — verliert das Gerät ohne Kanal) · fremder Abschnitt der Reihe ⇒ Kanal (Sprengsatz: Feld-Auskunft
 leer ⇒ die Reihe) · Ladung 23–24 Uhr an einem Bestandstag ohne Bilanz-Kanal ⇒ bleibt beim Folgetag (Sprengsatz: Kalendertag) ·
-Kanal nicht voll ⇒ Reihe · Netzladung mit Naht ⇒ Kanal (Sprengsatz ohne ``kanal_zuerst``) · ``zaehler_versatz`` schweigt, wo
-der Kanal die Rand-Tage trägt (Sprengsatz: Feld-Auskunft leer ⇒ Befund). Zeiten im Juni (auch ``TZ=Pacific/Auckland``/``UTC``).
+Kanal nicht voll ⇒ Reihe · Netzladung mit Naht ⇒ Kanal (Sprengsatz ohne ``kanal_zuerst``). Zeiten im Juni (auch ``TZ=Pacific/Auckland``/``UTC``).
 Korrekturrunde (Bauplan §9 Nr. 24, K-3): die Abdeckungs-Marke folgt der Quelle des Werts (HA-Lücke über dem Fensterende, ein
-Stand je Tag; Sprengsatz «Marke nur aus Reihen-Feldern») · nur Mengen-Kanäle · Kanal erst nach der Zuordnungs-Prüfung · das
-Fenster der Versatz-Wirkung (Typ, Tageszeile rückwärts, Kanal-Tag) — je mit Gegenprobe.
+Stand je Tag; Sprengsatz «Marke nur aus Reihen-Feldern») · nur Mengen-Kanäle · Kanal erst nach der Zuordnungs-Prüfung — je
+mit Gegenprobe. Der Befund ``zaehler_versatz`` und seine Feld-Auskunft sind seit Weg B, Sitzung B3a, entfernt.
 
-Schwesterdateien: test_sensorwechsel_s2_naht.py (B-3, B-4), test_reihen_leser_waechter.py, test_daten_checker_zaehler_versatz.py.
+Schwesterdateien: test_sensorwechsel_s2_naht.py (B-3, B-4), test_reihen_leser_waechter.py.
 """
 
 from __future__ import annotations
@@ -27,8 +25,6 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.models.kanal import ART_SUM, FAMILIE_SPIEGEL, Kanal, KanalQuelle, KanalStatistik
 from backend.models.sensor_snapshot import SensorSnapshot
-from backend.tests.test_daten_checker_zaehler_versatz import JETZT, _pruefe, ha  # noqa: F401 — Fixture ``ha``
-from backend.tests.test_daten_checker_zaehler_versatz import _anlage as _versatz_anlage
 
 D = date(2026, 6, 10)
 TAG0 = datetime(2026, 6, 10, 0)
@@ -187,20 +183,6 @@ async def test_netzladung_monats_fakten_kanal_zuerst(db, monkeypatch):
         29 * 2.4 + 50.0 - 2.4)                                                   # 5.6. +50, 6.6. «zurückgesprungen» fehlt
 
 
-async def test_versatz_schweigt_wo_der_eigene_kanal_den_tag_traegt(db, ha, monkeypatch):  # noqa: F811
-    """Die Wirkungs-Prüfung des Befunds läuft auf dieselbe Feld-Auskunft: der Spiegel der Probe trägt die Rand-Tage ⇒ die
-    Tagesansicht zeigt dort den Kanal ⇒ kein Befund. Sprengsatz: ohne Feld-Auskunft der Befund wie vor B-5."""
-    import backend.services.energie_profil.kanal_stunden as ks
-
-    async def keine_gruppe(*_a):
-        return frozenset()                    # die E-Mob-Gruppe liest an den Rand-Tagen die Reihe (Gruppe «bestand»)
-    monkeypatch.setattr(ks, "kanal_schluessel_des_tages", keine_gruppe)
-    a, *_ = await _versatz_anlage(db)
-    assert await _pruefe(db, a) == []
-    _feld_leer(monkeypatch)
-    assert [e.code for e in await _pruefe(db, a)] == ["zaehler_versatz"]
-
-
 # ═══ Bauplan §9 Nr. 24: die Abdeckungs-Marke folgt der Quelle des Werts ═════════════════════════════════════════════
 
 async def _reihe_staende(db, aid: int, key: str, staende: dict[datetime, float]) -> None:
@@ -285,7 +267,7 @@ async def test_marke_gegenprobe_kanal_traegt_bis_zum_fensterende(db):
     assert (det.abdeckung_von, det.abdeckung_bis) == (None, None)
 
 
-# ═══ K-3, B-5: Kanal-Art, Zuordnung zuerst, das Fenster der Versatz-Wirkung ═══════════════════════════════════════
+# ═══ K-3, B-5: Kanal-Art, Zuordnung zuerst ═══════════════════════════════════════
 
 async def test_feld_auskunft_nur_mengen_kanaele(db):
     """Ein Stand-Kanal (Art ``stand``, HA-Spalte ``state``) ist keine Menge — die Feld-Auskunft antwortet nicht, der Leser
@@ -320,65 +302,6 @@ async def test_kanal_erst_nach_der_zuordnungs_pruefung(db):
     flag_modified(a, "sensor_mapping")
     det, _ = await _detail(db, a)
     assert det.werte["emob_ladung_pv_kwh"] == pytest.approx(24.0)
-
-
-async def _kanal_ab_mitternacht(db, typ: str):
-    """Kanal ab der Zeile 23:00 des Vortags (Stand 00:00): trägt den Kalendertag D, nicht das Rückwärtsfenster
-    [Vortag 23:00, 23:00) — die Probe unterscheidet die beiden Fenster."""
-    a = await _anlage(db, {2: typ}, feld="stromverbrauch_kwh" if typ == "waermepumpe" else "ladung_pv_kwh")
-    key = f"inv:2:{'stromverbrauch_kwh' if typ == 'waermepumpe' else 'ladung_pv_kwh'}"
-    await _kanal_staende(db, a.id, key, {t: _stand(t, 1.0) for t in _stunden(TAG0, BIS)})
-    return a, key
-
-
-def _bestandstag(monkeypatch):
-    import backend.services.kanal.bilanz_leser as bl
-
-    async def keine(*_a, **_k):
-        return {}
-    monkeypatch.setattr(bl, "kanal_tage", keine)
-
-
-async def test_versatz_fenster_typ_entscheidet(db, monkeypatch):
-    """Wallbox am Bestandstag: Fenster rückwärts ⇒ der Kanal (ab 00:00) trägt es nicht. Gegenprobe im selben Test: ohne Typ
-    (Kalendertag) trüge er es — ein Fenster ohne den Typ des Geräts gäbe die falsche Antwort."""
-    from backend.services.kanal.feld_leser import feld_aus_kanal_am_tag
-
-    _bestandstag(monkeypatch)
-    a, key = await _kanal_ab_mitternacht(db, "wallbox")
-    assert await feld_aus_kanal_am_tag(db, a, "wallbox", key, D) is False
-    assert await feld_aus_kanal_am_tag(db, a, None, key, D) is True
-
-
-async def test_versatz_fenster_tageszeile_rueckwaerts(db, monkeypatch):
-    """Wärmepumpe (Fenster «bedingt»): trägt die Tageszeile die Regelmarke, liest der Tag rückwärts ⇒ der Kanal ab 00:00 trägt
-    ihn nicht. Gegenprobe: ohne Tageszeile (Kalendertag) trägt er ihn."""
-    from backend.models.tages_energie_profil import TagesZusammenfassung
-    from backend.services.kanal.feld_leser import feld_aus_kanal_am_tag
-
-    _bestandstag(monkeypatch)
-    a, key = await _kanal_ab_mitternacht(db, "waermepumpe")
-    assert await feld_aus_kanal_am_tag(db, a, "waermepumpe", key, D) is True
-    db.add(TagesZusammenfassung(anlage_id=a.id, datum=D, verworfen={}))
-    await db.flush()
-    assert await feld_aus_kanal_am_tag(db, a, "waermepumpe", key, D) is False
-
-
-async def test_versatz_fenster_kanal_tag(db, monkeypatch):
-    """An einem Kanal-Tag der Bilanz liest jeder Typ den Kalendertag ⇒ der Kanal ab 00:00 trägt den Tag der Wallbox.
-    Gegenprobe: derselbe Tag als Bestandstag ⇒ rückwärts ⇒ nicht."""
-    import backend.services.kanal.bilanz_leser as bl
-    from backend.services.kanal.feld_leser import feld_aus_kanal_am_tag
-
-    a, key = await _kanal_ab_mitternacht(db, "wallbox")
-    with monkeypatch.context() as m:
-        _bestandstag(m)
-        assert await feld_aus_kanal_am_tag(db, a, "wallbox", key, D) is False
-
-    async def kanal_tag(_db, _aid, von, bis, **_k):
-        return {D: object()} if von <= D <= bis else {}
-    monkeypatch.setattr(bl, "kanal_tage", kanal_tag)
-    assert await feld_aus_kanal_am_tag(db, a, "wallbox", key, D) is True
 
 
 async def test_bereichs_leser_kanal_nur_bei_echter_deckung(db, monkeypatch):

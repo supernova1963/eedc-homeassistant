@@ -294,25 +294,6 @@ class _Kennzahlen:
         return {"anzahl": 0 if self.erste_ts is None else 5, "erste_ts": self.erste_ts}
 
 
-def _la(nachher, *, w0=None, zeilen=0, zaehlerstaende=0):
-    return SimpleNamespace(nicht_startbar=None, auftrag=SimpleNamespace(nachher=nachher),
-                           kanal=SimpleNamespace(w0=w0, zeilen=zeilen), zaehlerstaende=zaehlerstaende, rohstaende=0)
-
-
-async def test_kanal_saetze_ab_wann_home_assistant_die_geschichte_fuehrt():
-    """Nr. 48: führt HA die Geschichte des richtigen Sensors erst nach ``w0``, nennt der Satz ab wann; ohne Geschichte der
-    eigene Satz; beginnt sie bei ``w0``, kein Satz; MQTT holt nichts nach; ohne HA-Dienst kein Kanal-Satz."""
-    w0 = _ts(datetime(2026, 8, 1, 0))
-    spaeter = datetime(2026, 8, 5, 6)
-    assert await kr.kanal_saetze(_la(B, w0=w0, zeilen=9), _Kennzahlen(_ts(spaeter))) == [
-        kr.SATZ_KANAL_AB.format(zeit="05.08.2026 06:00")]
-    assert await kr.kanal_saetze(_la(B, w0=w0, zeilen=9), _Kennzahlen(None)) == [kr.SATZ_KANAL_OHNE_GESCHICHTE]
-    assert await kr.kanal_saetze(_la(B, w0=w0, zeilen=9), _Kennzahlen(w0)) == []
-    assert await kr.kanal_saetze(_la({"art": "mqtt", "mqtt_key": "x"}, zaehlerstaende=3), None) == [kr.SATZ_KANAL_MQTT]
-    assert await kr.kanal_saetze(_la({"art": "mqtt", "mqtt_key": "x"}), None) == []
-    assert await kr.kanal_saetze(_la(B, w0=w0, zeilen=9), None) == []
-
-
 # ═══ Preset (Mutanten P02, P03, P04, P05; Nr. 54 «Preset prüft den Grund») ═══════════════════════════════════════════════
 
 def _preset_mapping() -> dict:
@@ -459,18 +440,6 @@ async def test_laufende_laeufe_der_anlage_lese_route(db):
     assert e.value.status_code == 404
 
 
-async def test_gleiche_korrektur_mit_anderer_richtiger_quelle_ist_eine_neue(db):
-    """K06: dieselbe «falsch seit», aber eine andere richtige Quelle ⇒ eine zweite Korrektur-Zeile."""
-    a = await _anlage(db, _klassisch())
-    await db.commit()
-    auftrag = kr.Auftrag(anlage_id=a.id, sensor_key=NETZ_KEY, falsch_seit=datetime(2026, 8, 1), ab=datetime(2026, 10, 1),
-                         vorher=A, nachher=B)
-    await kr.fuehre_aus(db, auftrag, ha_svc=None, jetzt=datetime(2026, 10, 1, 0, 30))
-    await kr.fuehre_aus(db, kr.Auftrag(**{**auftrag.__dict__, "nachher": {"art": "ha", "entity_id": "sensor.c"}}),
-                        ha_svc=None, jetzt=datetime(2026, 10, 1, 0, 40))
-    assert len([w for w in await _zeilen(db, a.id) if w.grund == "korrektur" and w.nachher is not None]) == 2
-
-
 # ═══ Nr. 46 — stündlicher Anstoß, ein Fehler-Eintrag, Werkbank bei offenem Lauf ════════════════════════════════════════
 
 async def test_offene_laeufe_stuendlich_angestossen_nie_doppelt(datei, monkeypatch):
@@ -532,49 +501,3 @@ async def test_fuellen_fehler_je_lauf_einmal(datei, monkeypatch):
     assert z["fehler"] == [{"tag": "2026-04-02", "grund": "x"}, {"tag": None, "grund": "Füllen: RuntimeError: HA weg 2"}]
 
 
-async def test_werkbank_bei_offenem_lauf_nachholen_nichts_weiter_verwerfen(ha, datei, monkeypatch):
-    """Fall A → fälschlich B → zurück zu A (Nachmessung 3b, F3): das Füllen scheitert nach dem Commit; die Werkbank-Vorschau
-    sagt nur, dass es aussteht (keine Zeile zum Verwerfen), und «Operation ausführen» holt es nach — die 240 gültigen Stunden
-    des richtigen Sensors vor «falsch seit» bleiben. Mutant K18-Nachfolger: die Vorschau ohne den Nachhol-Satz."""
-    from backend.services import verwerfen_vor_quellbeginn as vq
-    from backend.services.kanal import korrektur as kk
-    from backend.services.kanal.nachfuellen import nachfuellen_spiegel
-    from backend.tests.test_werkbank_verwerfen_kommt_nicht_zurueck import _kanal as wk_kanal
-    from backend.tests.test_werkbank_verwerfen_kommt_nicht_zurueck import _stundenlauf, _vor_t, _zuordnung
-
-    svc, _r = ha
-    sitzungen, _p, aid, _g = datei
-    mid = ha_lts_helfer.sensor(svc, "sensor.falsch", "kWh")
-    for i in range(24 * 40):
-        ha_lts_helfer.zeile(svc, mid, ZEIT + timedelta(hours=i), state=9000.0 + i, sum_wert=9000.0 + i)
-    f = ZEIT + timedelta(days=10)
-    await nachfuellen_spiegel(sitzungen, aid, jetzt=f, ha_svc=svc)
-    await _zuordnung(sitzungen, aid, einspeisung="sensor.falsch")
-    await _stundenlauf(sitzungen, aid, svc, ZEIT + timedelta(days=20))
-    monkeypatch.setattr(kr, "ha_dienst", lambda _s=None: svc)
-    a = kr.Auftrag(anlage_id=aid, sensor_key="basis:einspeisung", falsch_seit=f, ab=ZEIT + timedelta(days=20),
-                   vorher={"art": "ha", "entity_id": "sensor.falsch"}, nachher={"art": "ha", "entity_id": "sensor.einsp"})
-
-    async def wirft(*_a, **_k):
-        raise RuntimeError("HA weg")
-    monkeypatch.setattr(kk, "fuelle_kanal", wirft)
-    async with sitzungen() as s:
-        erg = await kr.fuehre_aus(s, a, ha_svc=svc, jetzt=ZEIT + timedelta(days=20, hours=3))
-        await s.commit()
-    s1 = await kr.nach_dem_commit(erg, ha_svc=svc, sitzungen=sitzungen, starten=False)
-    assert s1["fuellen_offen"] is True
-    k = await wk_kanal(sitzungen, aid, "basis:einspeisung")
-    async with sitzungen() as s:
-        (eintrag,) = await vq.auswahl(s, aid)
-        params = {"kanal": "basis:einspeisung", "zeitpunkt": eintrag["vorbelegung"]}
-        t = _ts(datetime.fromisoformat(eintrag["vorbelegung"]))
-        geschaetzt, saetze, daten = await vq.plan_vorschau(s, aid, params, ha_svc=svc)
-    assert saetze == [vq.SATZ_FUELLEN_OFFEN] and set(geschaetzt.values()) == {0} and daten["korrektur"] is None
-    vorher = await _vor_t(sitzungen, k.id, t)
-    assert vorher >= 240
-    gestartet: list[str] = []
-    monkeypatch.setattr(kl, "starten", lambda lauf, **_k: gestartet.append(lauf))
-    async with sitzungen() as s:
-        aus = await vq.fuehre_aus(s, aid, params, ha_svc=svc)
-    assert (aus["kanalzeilen_geloescht"], aus["fuellen_nachgeholt"], gestartet) == (0, 1, [s1["lauf"]])
-    assert await _vor_t(sitzungen, k.id, t) == vorher

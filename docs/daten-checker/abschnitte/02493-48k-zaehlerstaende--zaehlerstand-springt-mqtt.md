@@ -24,6 +24,6 @@ Stunde trägt und mehr als zehnmal so groß ist wie die Schritte der 24 Stunden 
 ein Zähler mit weniger als 14 Tagen mit Zuwachs (Neubeginn); die erste gewöhnliche Stunde nach Wochen mit nur Standby (eine
 Wallbox vor dem ersten Auto, eine Wärmepumpe nach dem Sommer); ein Stand, der um weniger als ein Zehntel fällt und in der
 nächsten Stunde zurückkehrt; eine Stunde, an der ein Zählertausch schon eingetragen
-ist; Sprung und Rückgang eines versetzten Abschnitts ([§4.8f](#48f-zaehlerstaende--versetzter-abschnitt)).
+ist.
 
 ---

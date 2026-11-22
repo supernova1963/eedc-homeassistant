@@ -136,24 +136,16 @@ def ziel_komponente(inv_id: Optional[int] = None, feld: Optional[str] = None, ne
     return Ziel("komponenten", None, _ohne_none(bearbeiten=inv_id, feld=parameter or feld, neu=neu), anker=name)
 
 
-def ziel_datenquelle(feld: Optional[str] = None, geraet: Optional[int] = None, stueck: Optional[str] = None,
-                     getauscht: Optional[str] = None) -> Ziel:
-    """Datenquellen-Zuordnung, optional das Gerät aufgeklappt und das Feld markiert (gelesen seit E4); `stueck=
-    <schlüssel>~<sprung>~<rückgang>` öffnet dort den Dialog für ein versetztes Stück der Standreihe (Befund `zaehler_versatz`,
-    Sitzung 4b-1; «Grund nachtragen» an einem verzeichneten Wechsel, `nachtrag=<id>`, ist seit Weg B entfernt);
-    `getauscht=<Zeit>` (ISO auf die Minute, örtlich) öffnet am Feld den Dialog «Zähler
-    getauscht (gleiche Quelle)» mit vorbelegtem «Getauscht am» (Befund `mqtt_zaehlerstand_springt`, Sensorwechsel U3 b)."""
+def ziel_datenquelle(feld: Optional[str] = None, geraet: Optional[int] = None, getauscht: Optional[str] = None) -> Ziel:
+    """Datenquellen-Zuordnung, optional das Gerät aufgeklappt und das Feld markiert (gelesen seit E4); `getauscht=<Zeit>`
+    (ISO auf die Minute, örtlich) öffnet am Feld den Dialog «Zähler getauscht (gleiche Quelle)» mit vorbelegtem «Getauscht am»
+    (Befund `mqtt_zaehlerstand_springt`, Sensorwechsel U3 b). «Grund nachtragen» (`nachtrag=`) und der Dialog am versetzten
+    Abschnitt (`stueck=`) sind seit Weg B entfernt."""
     _monatsfeld(feld)
-    return Ziel("datenquellen", None, _ohne_none(geraet=geraet, feld=feld, stueck=stueck, getauscht=getauscht), anker=feld)
+    return Ziel("datenquellen", None, _ohne_none(geraet=geraet, feld=feld, getauscht=getauscht), anker=feld)
 
 
-def stueck_parameter(schluessel: str, sprung: str, rueckgang: str) -> str:
-    """Der Wert von `stueck=` (Befund `zaehler_versatz`): Schlüssel, Sprung und Rückgang (ISO auf die Minute), mit `~`
-    getrennt — die Routen am Befund lesen dieselben drei Angaben (`api/routes/sensorwechsel.py`)."""
-    return f"{schluessel}~{sprung}~{rueckgang}"
-
-
-def ziel_datenquelle_schluessel(schluessel: str, stueck: Optional[str] = None, getauscht: Optional[str] = None) -> Ziel:
+def ziel_datenquelle_schluessel(schluessel: str, getauscht: Optional[str] = None) -> Ziel:
     """Wie `ziel_datenquelle`, aus einem gespeicherten Sensor-Schlüssel `inv:<id>:<feld>` bzw. `<präfix>:<feld>`
     (Laufzeit-Rohwert, H-E2-1). Ein Basis-Zähler heißt im Mapping `pv_gesamt`/`einspeisung`/`netzbezug`, auf der
     Datenquellen-Fläche `pv_gesamt_kwh` … (`datenquellen_mapping_sync.BASIS_ENERGY_FELD`, E4: der Anker der Fläche).
@@ -165,9 +157,9 @@ def ziel_datenquelle_schluessel(schluessel: str, stueck: Optional[str] = None, g
     if geraet is None and feld is not None:
         feld = {basis: fid for fid, basis in BASIS_ENERGY_FELD.items()}.get(feld, feld)
     try:
-        return ziel_datenquelle(feld=feld, geraet=geraet, stueck=stueck, getauscht=getauscht)
+        return ziel_datenquelle(feld=feld, geraet=geraet, getauscht=getauscht)
     except ValueError:
-        return ziel_datenquelle(geraet=geraet, stueck=stueck, getauscht=getauscht)
+        return ziel_datenquelle(geraet=geraet, getauscht=getauscht)
 
 
 def ziel_tarif(id: Optional[int] = None, feld: Optional[str] = None, neu_art: Optional[str] = None,

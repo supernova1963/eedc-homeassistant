@@ -302,14 +302,13 @@ Das ist die unangenehmste Eigenschaft dieser Fläche und zugleich ihre wichtigst
 > [Fall B2](#b2--getrennte-zähler-für-heizung-und-warmwasser-betriebsmodus-sensor-kein-kühlzähler)
 > und erklärt in [§8](#8-häufige-missverständnisse).
 
-### Und vier Gründe, die nur der **Tag** kennt
+### Und drei Gründe, die nur der **Tag** kennt
 
 Sie beantworten die Frage „Warum ist der Tag leer, obwohl der Monat gefüllt ist?" (siehe [§2](#2-voraussetzungen--welcher-zähler-für-welche-anzeige)):
 
 - **Kein Zähler zugeordnet** — mit dem Weg dorthin.
 - **Zähler zugeordnet, aber für diesen Tag liegen keine Zählerstände vor — eedc bildet für diesen Tag deshalb keinen Tageswert.** ⭐ **Seit v4.0.45 nur noch, wenn im Tag wirklich kein einziger Stand liegt** — beginnt die Reihe mitten am Tag, zeigt eedc die Menge und schreibt *„gemessen ab hh:mm Uhr"* dazu (Kasten in [§2](#2-voraussetzungen--welcher-zähler-für-welche-anzeige)).
 - **Der Zähler ist an diesem Tag zurückgesprungen — für diesen Tag gibt es deshalb keine Aussage.**
-- **Für diesen Tag liegen keine Zählerstände vor: eine Korrektur hat die Zählerstände dieser Zeit verworfen.** Er steht an einem Tag in einer Zeit, deren Zählerstände eine Korrektur über einen falsch zugeordneten Sensor verworfen hat und die nichts (oder noch nichts) neu gefüllt hat (siehe [Einstellungen §7.7](HANDBUCH_EINSTELLUNGEN.md#77-eine-geänderte-zuordnung-gilt-ab-jetzt--nicht-rückwirkend)); dort gibt es nichts nachzurechnen.
 
 > ⛔ **Bis v4.0.28 stand an dieser Stelle unterschiedslos *„Sensor zuordnen"*** — auch bei jemandem, der zugeordnet hatte. Ein Tester hat daraufhin zu Recht gefragt, was die Anzeige ihm eigentlich sagen will. **Eine falsche Ursache ist schlimmer als keine:** Ohne Hinweis sucht man selbst, mit einem falschen sucht man an der falschen Stelle.
 

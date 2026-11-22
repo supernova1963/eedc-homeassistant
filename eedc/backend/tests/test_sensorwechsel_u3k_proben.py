@@ -507,69 +507,6 @@ async def test_b5_eintrag_traegt_seinen_zeitpunkt(db):
 
 # ═══ B6 — fehlende Proben ═════════════════════════════════════════════════════════════════════════════════════════════
 
-@pytest.mark.parametrize("sprengsatz", [None, "ohne_aufruf", "achsen_leer"])
-async def test_b6_stillstand_laesst_eine_verworfene_zeit_aus_ueber_den_checker(monkeypatch, sprengsatz):
-    """Verdrahtung (Mutanten N13/N25 der Nachmessung): Stillstand 20.06. 10–13 Uhr an Netzbezug, Einspeisung und PV; eine
-    verworfene Zeit an allen drei Zählern über diese Stunden erklärt die Stelle — der Befund nennt den Tag nicht (OK-Zeile).
-    Sprengsätze: der Aufruf in ``_check_erfassung_stillstand`` fehlt bzw. die Achsen-Abbildung liefert nichts ⇒ der Tag bleibt."""
-    from backend.services.daten_checker import DatenChecker
-    from backend.services.daten_checker import erfassung_stillstand as es
-    from backend.services.daten_checker.datenquelle import verworfen as vw
-    from backend.services.kanal import bilanz_leser, merken
-    from backend.tests import kanal_bilanz_gleichheit as kg
-    from backend.tests.test_n799_stillstand_lesestelle import _einfrieren, _fein
-
-    monkeypatch.setattr(bilanz_leser, "uhr", lambda: kg.JETZT_TS)
-    if sprengsatz == "ohne_aufruf":
-        async def durch(_db, _a, tage):
-            return tage
-        monkeypatch.setattr(es, "_ohne_verworfene_zeit", durch)
-    elif sprengsatz == "achsen_leer":
-        async def leer(_db, _a):
-            return []
-        monkeypatch.setattr(vw, "achsen_der_verworfenen_zeiten", leer)
-    merken.leeren()
-    async with kg.datenstand("achsen", "M07", "HA") as ds:
-        await _fein(ds)
-        await _einfrieren(ds, datetime(2026, 6, 20, 10), 3)
-        von, bis = datetime(2026, 6, 20, 10), datetime(2026, 6, 20, 13)
-        for key in ("basis:netzbezug", "basis:einspeisung", "basis:pv_gesamt"):
-            ds.db.add(ZuordnungWechsel(anlage_id=ds.aid, sensor_key=key, erklaert_ts=bis, ab_ts=bis, vorher=None, nachher=None,
-                                       grund="korrektur", falsch_seit_ts=von, herkunft="nachtrag"))
-        await ds.db.commit()
-        zw.vergiss(ds.db)
-        from sqlalchemy.orm import selectinload
-
-        from backend.models.anlage import Anlage
-
-        anlage = (await ds.db.execute(select(Anlage).options(selectinload(Anlage.investitionen))       # wie check_anlage
-                                      .where(Anlage.id == ds.aid))).scalar_one()
-        (e,) = await DatenChecker(ds.db)._check_erfassung_stillstand(anlage, heute=date(2026, 6, 30))
-    merken.leeren()
-    if sprengsatz:
-        assert e.schwere.value == "info" and "20.06.2026" in e.details
-    else:
-        assert e.schwere.value == "ok"
-
-
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_aeltester"])
-def test_b6_rest_schritt_nimmt_den_juengsten(monkeypatch, sprengsatz):
-    """Zwei passende Schritte in den 24 Stunden vor «Falsch seit» (+3 000 um 02:00 und um 07:00 dazwischen zurück): die
-    Vorgabe ist der jüngste (Mutant N12). Sprengsatz: der älteste."""
-    from backend.core.berechnungen import zaehler_versatz as zv
-    from backend.tests import test_daten_checker_zaehler_versatz as v
-
-    if sprengsatz:
-        monkeypatch.setattr(zv, "max", min, raising=False)
-    sprung = v.T0 + timedelta(hours=v.SPRUNG_H)
-    rueck = v.T0 + timedelta(hours=v.RUECK_H)
-    h_alt, h_alt_ende, h_jung = v.SPRUNG_H - 8, v.SPRUNG_H - 6, v.SPRUNG_H - 3
-    reihe = [(v.T0 + timedelta(hours=h), v._ha(h) + (3000.0 if (h_alt <= h < h_alt_ende or h_jung <= h < v.RUECK_H) else 0.0))
-             for h in range(29 * 24)]
-    s = zv.rest_schritt(reihe, sprung, rueck)
-    assert s is not None
-    assert s.bis == v.T0 + timedelta(hours=h_alt if sprengsatz else h_jung)
-
 
 @pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_rueckgang_am_stand"])
 async def test_b6_mqtt_stand_kanal_zaehlt_den_stand_ohne_rueckgang_arm(db, monkeypatch, sprengsatz):
@@ -628,88 +565,6 @@ LK_B1 = {
 
 def _w9_ep(t):
     return int(time.mktime(t.timetuple()))
-
-
-async def _w9_welt(db, monkeypatch, *, key="inv:1:pv_erzeugung_kwh", kurzzeit=None, versatz_sum=0.0):
-    """W9-Welt (Nachmessung Lab-K, ``test_nm_labk_w.py``): Reihe mit vollen Stunden-Ständen = HAs Stand und einem
-    Unterstunden-Stand um 23:55 vor «Falsch seit» 20.09. 00:00; HA führt Stundenzeilen und — ``kurzzeit`` = [(Zeitpunkt,
-    Abstand zum Stand um 23:55)] — Kurzzeitzeilen. ``versatz_sum``: ``sum`` liegt um diesen Betrag neben ``state`` (Stand-Feld)."""
-    import backend.services.ha_statistics_service as hss
-    import backend.services.zuordnung_wechsel.korrektur as kr
-    from backend.models.anlage import Anlage
-    from backend.models.sensor_snapshot import SensorSnapshot
-    from backend.tests import ha_lts_helfer as H
-
-    svc = H.mach_service(thread_sicher=True)
-    monkeypatch.setattr(hss, "_ha_statistics_service", svc)
-    monkeypatch.setattr(kr, "ha_eingerichtet", lambda: True)
-    mid = H.sensor(svc, "sensor.richtig", "kWh", has_sum=True)
-    t0, f = datetime(2026, 9, 18), datetime(2026, 9, 20)
-    s, zeilen, stand_um = 100.0, [], {}
-    for h in range(96):
-        t = t0 + timedelta(hours=h)
-        stand_um[t] = s
-        s = round(s + 0.5, 6)
-        zeilen.append({"m": mid, "t": _w9_ep(t), "st": s, "su": s + versatz_sum})
-    s2355 = round(stand_um[f - timedelta(hours=1)] + 0.5 * 11 / 12, 6)
-    with svc._engine.begin() as c:
-        c.execute(text("INSERT INTO statistics (metadata_id, start_ts, state, sum) VALUES (:m, :t, :st, :su)"), zeilen)
-        for zp, plus in kurzzeit or ():
-            st = s2355 + plus
-            c.execute(text("INSERT INTO statistics_short_term (metadata_id, start_ts, state, sum) VALUES (:m, :t, :st, :su)"),
-                      {"m": mid, "t": _w9_ep(zp - timedelta(minutes=5)), "st": st, "su": st + versatz_sum})
-    a = Anlage(anlagenname="W9", leistung_kwp=10.0, sensor_mapping={})
-    db.add(a)
-    await db.flush()
-    for t, v in stand_um.items():
-        if t >= t0 + timedelta(hours=1):
-            db.add(SensorSnapshot(anlage_id=a.id, sensor_key=key, zeitpunkt=t, wert_kwh=v, quelle="ha_statistics"))
-    db.add(SensorSnapshot(anlage_id=a.id, sensor_key=key, zeitpunkt=f - timedelta(minutes=5), wert_kwh=s2355, quelle="ha_statistics"))
-    await db.commit()
-    q = {"art": "ha", "entity_id": "sensor.richtig"}
-    au = kr.Auftrag(anlage_id=a.id, sensor_key=key, falsch_seit=f, ab=f + timedelta(days=1), vorher=q, nachher=q, stueck=True)
-    return au, svc, s2355
-
-
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_ohne_rueckgriff"])
-async def test_lk_b2_unterstunden_rand_ohne_kurzzeit_ist_fuellbar(db, monkeypatch, sprengsatz):
-    """LK-B2: der Rand-Stand 23:55 ist älter als HAs Kurzzeitstatistik ⇒ geprüft wird der Stand zur vollen Stunde davor gegen
-    HAs Stundenzeile — das Stück ist füllbar (wie an 7311ad345). Sprengsatz: ohne Rückgriff (Lab-K) ⇒ nicht füllbar."""
-    from backend.services.zuordnung_wechsel import stueck
-
-    if sprengsatz:
-        async def wie_labk(db_, a, rand, *_a):
-            return rand
-        monkeypatch.setattr(stueck, "_pruefbarer_rand", wie_labk)
-    au, svc, _ = await _w9_welt(db, monkeypatch)
-    assert await stueck.ist_fuellbar(db, au, svc) is not sprengsatz
-
-
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_toleranz_60"])
-async def test_lk_b6_n14_kurzzeit_nur_die_zeile_des_stands(db, monkeypatch, sprengsatz):
-    """N14: HA führt eine Kurzzeitzeile 15 Minuten neben dem Rand-Stand mit anderem Wert, die des Stands nicht — mit 3 Minuten
-    Toleranz ist der Stand nicht prüfbar (Rückgriff auf die volle Stunde: füllbar); mit 60 Minuten träfe die fremde Zeile."""
-    from backend.services.zuordnung_wechsel import stueck
-
-    au, svc, _ = await _w9_welt(db, monkeypatch, kurzzeit=[(datetime(2026, 9, 19, 23, 40), 7.0)])
-    if sprengsatz:
-        echt = svc.get_value_at
-        monkeypatch.setattr(svc, "get_value_at", lambda eid, z, tol=120, *a, **k: echt(eid, z, 60 if tol == 3 else tol, *a, **k))
-    assert await stueck.ist_fuellbar(db, au, svc) is not sprengsatz
-
-
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_als_menge"])
-async def test_lk_b6_n15_stand_feld_liest_den_stand(db, monkeypatch, sprengsatz):
-    """N15: ein Stand-Feld (Gas, ``zaehlerstand``) liest am Unterstunden-Rand ``state``, nicht ``sum`` (hier 50 daneben) — der
-    Rand passt. Sprengsatz: als Menge gelesen ⇒ passt nicht."""
-    import backend.services.snapshot.keys as keys
-    from backend.services.zuordnung_wechsel import stueck
-
-    au, svc, _ = await _w9_welt(db, monkeypatch, key="inv:9:zaehlerstand", versatz_sum=50.0,
-                                kurzzeit=[(datetime(2026, 9, 19, 23, 55), 0.0)])
-    if sprengsatz:
-        monkeypatch.setattr(keys, "ist_stand_sensor_key", lambda _k: False)
-    assert await stueck.ist_fuellbar(db, au, svc) is not sprengsatz
 
 
 async def _f5_welt(db, monkeypatch, vorige: dict):
@@ -845,20 +700,3 @@ async def test_lk_b6_n04_auftrag_des_ansetzens_traegt_abgeleitet_immer(db, monke
     assert mit and all(bool(f.get("abgeleitet_immer")) is not sprengsatz for f in mit)
 
 
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_ab_ts_statt_falsch_seit"])
-async def test_lk_b6_n11_untergrenze_einer_korrektur_ist_falsch_seit(db, monkeypatch, sprengsatz):
-    """N11: ist der vorige Wechsel eine Korrektur, beginnt der Bereich von «Der neue Sensor zählt ab» an ihrem «Falsch seit»
-    (19.11. 20:00), nicht an ihrem ``ab_ts`` (20.11. 00:00). Sprengsatz: die Untergrenze aus ``ab_ts``."""
-    from backend.services.zuordnung_wechsel import ansatz, bleiben
-    from backend.services.zuordnung_wechsel.zeitpunkt import ab_ts_aus
-
-    if sprengsatz:
-        monkeypatch.setattr(ansatz, "_vorige_grenze", lambda alle, row, erklaert: datetime(2026, 11, 20, 0))
-    a, svc = await _f5_welt(db, monkeypatch, dict(erklaert_ts=datetime(2026, 11, 19, 23, 24), ab_ts=datetime(2026, 11, 20, 0),
-                                                  grund="korrektur", ansatz="schnitt",
-                                                  falsch_seit_ts=datetime(2026, 11, 19, 20)))
-    jetzt = datetime(2026, 11, 20, 1, 27)
-    b = await bleiben.angaben(db, a.id, "inv:1:pv_erzeugung_kwh", {"art": "ha", "entity_id": "sensor.neu"},
-                              {"art": "ha", "entity_id": "sensor.fremd"}, ab_ts=ab_ts_aus(jetzt), erklaert_ts=jetzt, jetzt=jetzt,
-                              ha_svc=svc)
-    assert b["zaehlt_ab_frueheste"] == ("2026-11-20T00:00:00" if sprengsatz else "2026-11-19T20:00:00")

@@ -20,8 +20,8 @@ from datetime import datetime, timedelta
 import pytest
 
 from backend.tests.test_sensorwechsel_u3b_proben import Saat, _wechsel_zeilen, betrieb, kanal_stunde  # noqa: F401
-from backend.tests.test_sensorwechsel_u3k3_proben import EN, H0_B, QA_B, QC_B, R, ST, T, _anlage, _befund, _dialog, _drei, w
-from backend.tests.test_sensorwechsel_u3k4_proben import H10, KEIN, UNKLAR, _w
+from backend.tests.test_sensorwechsel_u3k3_proben import EN, R, ST, T, _anlage, _befund, _dialog, _drei, w
+from backend.tests.test_sensorwechsel_u3k4_proben import H10, KEIN, UNKLAR
 
 R1_ANFANG = "eedc trägt den Tausch am "
 
@@ -173,29 +173,6 @@ async def test_a3_r2_nennt_die_grenze_je_stunde(db, monkeypatch, sprengsatz):
 
 
 # ═══ A5 — Mutanten Q07, Q10 ═════════════════════════════════════════════════════════════════════════════════════════
-
-@pytest.mark.parametrize("ansatz", [None, "schnitt"])
-def test_a5_q07_korrektur_zeile_mit_ansatz_ist_kein_nullpunkt(ansatz):
-    """Q07: nur eine Korrektur-Zeile **ohne** ``ansatz`` trägt den Nullpunkt (P4); eine mit Rand-Ständen
-    (``korrektur._rand_an_falsch_seit``, ``ansatz = schnitt``) trägt in ``stand_neu_null`` einen Stand — sonst zählte der Monat
-    nach einer gewöhnlichen Korrektur mit Rand die ganze Summe."""
-    from backend.services.zuordnung_wechsel import nullpunkt
-
-    korr = _w(id=1, nachher=QC_B, falsch_seit_ts=H0_B, ab_ts=H0_B + timedelta(hours=2), stand_neu_null=0.0, ansatz=ansatz)
-    assert nullpunkt.abschnitte({"k": [korr]}) == ({"k": ("sensor.c", H0_B)} if ansatz is None else {})
-
-
-def test_a5_q10_nullpunkt_nur_im_abschnitt_der_entitaet():
-    """Q10: ``monat._mit_nullpunkt`` setzt Anker 0 nur im Abschnitt der Entität, in dem G liegt — ein Abschnitt derselben
-    Entität, der G nicht enthält (nach einem Umweg über einen anderen Sensor), bleibt, wie er ist (sonst Doppelzählung)."""
-    from backend.services.zuordnung_wechsel import monat
-
-    g = monat._unix(H0_B)
-    teile = [("sensor.c", g - 7200.0, g + 3600.0, False), ("sensor.a", g + 3600.0, g + 7200.0, False),
-             ("sensor.c", g + 7200.0, g + 10800.0, False)]
-    assert monat._mit_nullpunkt(teile, ("sensor.c", H0_B)) == [
-        ("sensor.c", g, g + 3600.0, True), ("sensor.a", g + 3600.0, g + 7200.0, False), ("sensor.c", g + 7200.0, g + 10800.0, False)]
-    assert QA_B["entity_id"] != "sensor.c"
 
 
 # ═══ Teil B ═══════════════════════════════════════════════════════════════════════════════════════════════════════════

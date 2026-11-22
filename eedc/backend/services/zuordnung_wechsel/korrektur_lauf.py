@@ -1,4 +1,6 @@
-"""Schritt 4 der Korrektur: die betroffenen Tage im Hintergrund neu bilden (Sensorwechsel mit Grund, Bauplan B-6 (4), §7 Nr. 10).
+"""Der Lauf nach einem Sensorwechsel: die betroffenen Tage im Hintergrund neu bilden (Sensorwechsel mit Grund, Bauplan B-6 (4),
+§7 Nr. 10) — seit Weg B für «Daten vor der Änderung löschen» (Art ``loeschen``) und das Ansetzen eines Wechsels «bleiben» (Art
+``ansetzen``).
 
 **Zustand** je Lauf in ``settings`` unter ``korrektur_lauf:<lauf>`` (kein neues Schema): ``{anlage_id, sensor_key, tage,
 erledigt, status, fehler, behalten, beginn, ende}`` — angelegt in derselben Transaktion wie die Wechsel-Zeile, fortgeschrieben
@@ -19,9 +21,9 @@ falschen Sensor Gerechnetes stehen (§10 Nr. 31).
 **Robustheit (Sitzung 3b, Bauplan §10 Nr. 40):** höchstens **eine** Aufgabe je Lauf — auch das Fortsetzen nach dem Start geht
 über ``starten`` (``_AUFGABEN``). Der **Nachlauf** der Korrektur (Kanal aus Home Assistant füllen, abhängige abgeleitete Kanäle
 neu schreiben, seit 4b-1-K2 die Zählerstände der gefüllten Zeit neu lesen und speichern — Bauplan «Zu §14» Nr. 111) steht als
-``fuellen`` im Zustand; solange er offen ist, gilt das Intervall der Korrektur für die Leser als Lücke (Nr. 106); scheitert er nach dem Commit, holt ihn der Lauf vor den Tagen nach — bis
-dahin bleibt der Lauf ``laeuft``. Angestoßen wird ein offener Lauf **stündlich** (``offene_anstossen`` aus dem Stundenlauf,
-Bauplan §11 Nr. 46), nach dem Start und wenn die Werkbank denselben Schlüssel noch einmal ausführt; der Fehler «Füllen: …»
+``fuellen`` im Zustand; scheitert er nach dem Commit, holt ihn der Lauf vor den Tagen nach — bis dahin bleibt der Lauf
+``laeuft``. Angestoßen wird ein offener Lauf **stündlich** (``offene_anstossen`` aus dem Stundenlauf, Bauplan §11 Nr. 46) und
+nach dem Start; der Fehler «Füllen: …»
 steht je Lauf einmal (der letzte Versuch).
 Fertige Läufe räumt ``aufraeumen`` nach ``AUFBEWAHREN`` weg (beim nächsten Lauf und nach dem Start). Das Diagnose-Paket führt
 die Zustände unter ``EINSTELLUNGEN_PRAEFIX`` (``diagnose_paket/register.py``).
@@ -55,8 +57,10 @@ STUNDE_ABRUF = ("temperatur_c", "globalstrahlung_wm2", "bewoelkung_prozent", "ni
 _AUFGABEN: dict[str, asyncio.Task] = {}
 #: Kopf des einen Fehler-Eintrags je Lauf, wenn der Nachlauf (Füllen) scheitert.
 FUELLEN_PRAEFIX = "Füllen: "
-#: Wer den Lauf angelegt hat (Zustand ``art``; Sensorwechsel U2 Lauf b, a2 E-2): fehlt das Feld, ist es eine Korrektur; das
-#: Ansetzen eines Wechsels «bleiben» (``ansatz.py``) trägt ``ansetzen`` — die Fläche nennt seinen Nachlauf nicht «Korrektur».
+#: Wer den Lauf angelegt hat (Zustand ``art``; Sensorwechsel U2 Lauf b, a2 E-2): fehlt das Feld, ist es ein Lauf der früheren
+#: Korrektur (seit Weg B, Sitzung B3a, legt ihn niemand mehr an — ein offener aus einer älteren Datenbank läuft mit dem Nachlauf
+#: unten zu Ende); das Ansetzen eines Wechsels «bleiben» (``ansatz.py``) trägt ``ansetzen`` — die Fläche nennt seinen Nachlauf
+#: nicht «Korrektur».
 ART_KORREKTUR, ART_ANSETZEN = "korrektur", "ansetzen"
 #: Weg B (Bauplan Sensorwechsel Nr. 180): der Lauf von «Daten vor der Änderung löschen» (``feld_loeschen``) — Nachfüllen aus
 #: Home Assistant, abgeleitete Kanäle, Tage neu bilden.
@@ -100,7 +104,7 @@ async def aufraeumen(db: AsyncSession, jetzt: Optional[datetime] = None) -> int:
 
 
 async def offener_lauf(db: AsyncSession, anlage_id: int, sensor_key: str) -> Optional[str]:
-    """Ein Lauf dieses Schlüssels, dessen Nachlauf (Füllen) noch aussteht — die Werkbank holt ihn beim nächsten Ausführen nach."""
+    """Ein Lauf dieses Schlüssels, dessen Nachlauf (Füllen) noch aussteht — solange setzt das Ansetzen «bleiben» nicht an."""
     from backend.models.settings import Settings
 
     for row in (await db.execute(select(Settings).where(Settings.key.like(PRAEFIX + "%")))).scalars().all():
@@ -109,20 +113,6 @@ async def offener_lauf(db: AsyncSession, anlage_id: int, sensor_key: str) -> Opt
                 and isinstance(z.get("fuellen"), dict) and not z["fuellen"].get("erledigt")):
             return row.key[len(PRAEFIX):]
     return None
-
-
-async def offene_fuell_laeufe(db: AsyncSession, anlage_id: int) -> frozenset[str]:
-    """Die Läufe der Anlage, deren Nachlauf (Füllen) noch aussteht — dieselbe Bedingung wie ``offener_lauf``. Solange gilt das
-    Intervall ihrer Korrektur-Zeile für die Leser als Lücke (Bauplan «Zu §14» Nr. 106, ``zeitpunkt.gesperrte_stuecke``)."""
-    from backend.models.settings import Settings
-
-    aus = set()
-    for row in (await db.execute(select(Settings).where(Settings.key.like(PRAEFIX + "%")))).scalars().all():
-        z = row.value if isinstance(row.value, dict) else {}
-        if (z.get("status") == LAEUFT and z.get("anlage_id") == anlage_id and isinstance(z.get("fuellen"), dict)
-                and not z["fuellen"].get("erledigt")):
-            aus.add(row.key[len(PRAEFIX):])
-    return frozenset(aus)
 
 
 def fuellen_offen(z: dict) -> bool:
@@ -242,7 +232,7 @@ def _ist_fuellen_fehler(f: Any) -> bool:
 
 async def _nachlauf(sitzungen, lauf: str, z: dict) -> tuple[dict, bool]:
     """Der offene Nachlauf (Füllen, abhängige abgeleitete Kanäle) vor den Tagen. Returns: ``(Zustand, weiter?)`` —
-    scheitert er, steht der Grund unter ``fehler`` und der Lauf bleibt ``laeuft`` (nächster Start, Werkbank)."""
+    scheitert er, steht der Grund unter ``fehler`` und der Lauf bleibt ``laeuft`` (stündlicher Anstoß, nächster Start)."""
     from backend.services.zuordnung_wechsel.korrektur import nachlauf_aus_auftrag
 
     from backend.services import feld_loeschen

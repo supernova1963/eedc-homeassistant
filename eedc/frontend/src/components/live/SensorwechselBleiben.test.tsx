@@ -28,7 +28,7 @@ const UEBERLAPPUNG: BleibenAngaben = {
 }
 const FRAGE: QuellePruefung = {
   grund_erforderlich: true, erster_wert: '2025-11-01T02:00:00', tage: 649, stand_alt: null, stand_neu: null,
-  sensor_key: 'inv:2:ladung_kwh', label: 'Wallbox – Ladung', verzeichnet: true, korrektur: null,
+  sensor_key: 'inv:2:ladung_kwh', label: 'Wallbox – Ladung', verzeichnet: true,
   bleiben: BLEIBEN,
 }
 
@@ -42,7 +42,7 @@ const radio = (wert: 'fortsetzung' | 'korrektur' | 'loeschen') =>
 function dialog(f: QuellePruefung, extra: Partial<Parameters<typeof SensorwechselDialog>[0]> = {}) {
   const onBestaetigen = vi.fn()
   const onBleibenVorschau = vi.fn(() => Promise.resolve({ ...UEBERLAPPUNG, saetze: ['Vorschau an 07:00.'] }))
-  render(<SensorwechselDialog isOpen fragen={[f]} onVorschau={vi.fn(() => Promise.resolve(null))}
+  render(<SensorwechselDialog isOpen fragen={[f]}
     onBleibenVorschau={onBleibenVorschau} onBestaetigen={onBestaetigen} onAbbrechen={vi.fn()} {...extra} />)
   return { onBestaetigen, onBleibenVorschau }
 }

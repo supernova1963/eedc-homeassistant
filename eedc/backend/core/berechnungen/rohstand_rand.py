@@ -50,10 +50,6 @@ der **letzte Stand vor dem ersten** und der **erste Stand nach dem letzten** Hö
 der zwei Zähler und zählen nicht. Ein einzelnes Paar am größten Schritt (U3 b) nahm in diesen Lagen einen fremden Stand als
 Rand und schrieb eine negative Stunde (−5 016,708).
 
-**Brücke über eine verworfene Zeit ohne Höhenwechsel** (G7 «verwerfen», ``bruecke``): dieselbe Quelle davor und danach, kein
-Zählertausch dazwischen — dann ist ``Stand(danach) − Stand(davor)`` die Menge der Zeit (wie an jeder Zählerlücke, Grundsatz
-«Zählerlücken wie HA»), und sie steht in der ersten Stunde danach.
-
 Rein (ADR-001): Zeitpunkte und Stände rein, Zahlen raus. Das Laden steht in ``services/zuordnung_wechsel/rohstand.py``.
 """
 
@@ -216,13 +212,7 @@ def verschiebung_der_naht(menge: float, wert_naht: float, wert_davor: float) -> 
     return menge - (wert_naht - wert_davor)
 
 
-def bruecke(kanalwert_davor: float, stand_davor: float, stand_danach: float, wert_danach: float) -> float:
-    """Der Versatz der ersten Quellzeile nach einer verworfenen Zeit ohne Höhenwechsel: die erste Zeile danach (Rohwert
-    ``wert_danach``) trägt den Kanalwert davor plus die Menge der Zeit ``stand_danach − stand_davor``."""
-    return kanalwert_davor + (stand_danach - stand_davor) - wert_danach
-
-
 __all__ = ["BEZUG", "EINZELSCHRITT_ANTEIL", "RUECKGANG_MIN", "SPRUNG_FAKTOR", "SPRUNG_MIN", "abgehoben",
-           "abgehobener_schritt_der_stunde", "bruecke", "hebt_sich_ab", "hoehenwechsel", "hoehenwechsel_der_stunde", "leistung",
+           "abgehobener_schritt_der_stunde", "hebt_sich_ab", "hoehenwechsel", "hoehenwechsel_der_stunde", "leistung",
            "menge_der_naht", "menge_des_schritts", "seit_dem_letzten_anderen", "sprung_der_stunde",
            "verschiebung_der_naht"]

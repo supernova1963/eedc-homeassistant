@@ -253,7 +253,7 @@ def _satz_art(la, gewaehlt: bool) -> str:
 def _saetze(la, alt: str, neu: str, umfang: dict[str, Any], monate: list[tuple[int, int]], *,
             gewaehlt: bool = False) -> list[str]:
     from backend.core.zahlenformat import fmt_anzahl
-    from backend.services.zuordnung_wechsel.korrektur import _monate
+    from backend.services.verwerfen_vor_quellbeginn import _monate_text as _monate
 
     s = [SATZ_SEIT.format(neu=neu, seit=_uhr(la.t1))]
     s.append(_satz_art(la, gewaehlt).format(alt=alt, neu=neu, g=_uhr(la.g)))

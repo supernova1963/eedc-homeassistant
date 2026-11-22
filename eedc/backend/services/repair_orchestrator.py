@@ -1517,7 +1517,8 @@ async def _plan_verwerfen_vor_quellbeginn(
 
     if req.anlage_id is None:
         raise ValueError("VERWERFEN_VOR_QUELLBEGINN benötigt anlage_id")
-    return await vq.plan_vorschau(db, req.anlage_id, req.params)
+    la = await vq.lage(db, req.anlage_id, req.params)
+    return vq.geschaetzt(la), vq.klartext(la), vq.vorschau_daten(la)
 
 
 async def _execute_verwerfen_vor_quellbeginn(

@@ -2,13 +2,12 @@
 
 Lesend: erste Stunde, Zahl der Tage, letzter **Zählerstand** (Spalte ``state`` — der Stand, den der bisherige Sensor zuletzt
 zeigte, wie ihn Home Assistant und die Wert-Spalte der Fläche zeigen; nicht HAs Statistik-Summe, Bauplan §11 Nr. 47), der
-Zählerstand der neuen HA-Entität jetzt, Beginn der jüngsten nicht verworfenen Quelle, die Quelle zu einer Stunde, die erste
-schon geschriebene Stunde ab einem Zeitpunkt und der bisherige Zuwachs einer Stunde (über ``lesen.stunden`` — der eine
-Kanal-Leser, keine eigene Rechnung). Aufrufer: ``services/zuordnung_wechsel/abfrage.py`` (Dialog: erster Wert, Tage, Stände,
-Vorgabe «falsch seit») und ``zaehler_getauscht.py`` (welcher Weg zur Stunde des Tauschs gilt, welche Stunde der Nachtrag einer
+Zählerstand der neuen HA-Entität jetzt, die Quelle zu einer Stunde, die erste schon geschriebene Stunde ab einem Zeitpunkt und
+der bisherige Zuwachs einer Stunde (über ``lesen.stunden`` — der eine Kanal-Leser, keine eigene Rechnung). Aufrufer:
+``services/zuordnung_wechsel/abfrage.py`` (Dialog: erster Wert, Tage, Stände) und ``zaehler_getauscht.py`` (welcher Weg zur Stunde des Tauschs gilt, welche Stunde der Nachtrag einer
 Fortsetzung trägt und was sie bisher zählt).
 
-Schwesterdateien: ``korrektur.py`` (Kanal-Schicht der Korrektur), ``naht.py`` (Fortsetzung bei MQTT).
+Schwesterdateien: ``korrektur.py`` (Kanal-Bausteine des Nachlaufs), ``naht.py`` (Fortsetzung bei MQTT).
 """
 
 from __future__ import annotations

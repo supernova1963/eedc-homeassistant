@@ -57,17 +57,8 @@ class CheckKategorie(str, Enum):
     # weiter und zählt den Sprung des Zählerstands (nach oben, oder ein Neubeginn nicht bei 0) als Menge der Stunde. eedc rechnet
     # wie HA und berichtigt nichts; Erzeuger `datenquelle/standsprung.py`, Regel `core/berechnungen/zaehlerstand_sprung.py`.
     HA_ZAEHLERSTAND_SPRINGT = "ha_zaehlerstand_springt"
-    # Verdacht N-803 (Go Gernot 16.11.2026): in eedcs eigener Standreihe (`sensor_snapshots`) liegt ein Abschnitt um +X
-    # versetzt — Sprung, Weiterlauf auf anderer Höhe, Rückgang um ≈ −X (die Stände eines anderen Sensors, etwa nach einem
-    # Wechsel der Zuordnung). Die Tageswerte an den Rändern sind falsch, wo der Tag über die Standreihe rechnet. Erzeuger
-    # `datenquelle/versatz.py`, Regel `core/berechnungen/zaehler_versatz.py`.
-    ZAEHLER_VERSATZ = "zaehler_versatz"
-    # Sensorwechsel U3 a (Rechenweg G1): eine Korrektur hat die Zählerstände einer Zeit verworfen, und nichts füllt sie wieder
-    # (Lücke, `zeitpunkt.ist_luecke`) — Auskunft je Lücke: Zeit, Tag der Menge bzw. «keine Differenz», betroffene Monate.
-    # Erzeuger `datenquelle/verworfen.py`.
-    ZAEHLER_ZEIT_VERWORFEN = "zaehler_zeit_verworfen"
-    # Sensorwechsel U3 a (Rechenweg G2): ein gespeicherter Monatswert eines Monats, den ein Wechsel bzw. eine Korrektur
-    # berührt, weicht um mindestens 1 kWh von dem ab, was die Quelle heute für den Monat ergibt. Erzeuger
+    # Sensorwechsel U3 a (Rechenweg G2): ein gespeicherter Monatswert eines Monats, den ein Wechsel berührt,
+    # weicht um mindestens 1 kWh von dem ab, was die Quelle heute für den Monat ergibt. Erzeuger
     # `datenquelle/monatswert.py`, Vergleich `core/berechnungen/monatswert_vergleich.py`.
     MONATSWERT_UEBERHOLT = "monatswert_ueberholt"
     # Sensorwechsel U3 b (Rechenweg G4): der Zählerstand einer MQTT-Reihe springt (Sprung, Neubeginn nicht bei 0, Rückgang) —
@@ -324,8 +315,8 @@ class Ziel:
 
     `bereich` = Einstellungs-Kategorie (`einstellungenKatalog.tsx`) bzw. `komponenten-hub`; `block` = Block-Id im Bereich;
     `params` = Deep-Link-Parameter (Schema Konzept §3.3: `erfassen`, `bearbeiten`, `neu`, `tarif`, `art`, `ab`, `geraet`,
-    `feld`, `karte`, `plan`, `wizard`, seit N-799 S2 `befund` — der Sprung auf einen Befund des Checkers, seit Sensorwechsel 4b-1
-    `stueck` — der Dialog am versetzten Abschnitt, seit U3 b `getauscht` — «Zähler getauscht»; seit E4 liest jede Zielseite jeden davon — Wächter W-5 `src/test/sprungziele.test.ts`);
+    `feld`, `karte`, `plan`, `wizard`, seit N-799 S2 `befund` — der Sprung auf einen Befund des Checkers, seit Sensorwechsel U3 b
+    `getauscht` — «Zähler getauscht»; seit E4 liest jede Zielseite jeden davon — Wächter W-5 `src/test/sprungziele.test.ts`);
     `anker` = das Element, auf dem der Sprung landen soll (Formular-Name, Feld-Schlüssel oder `data-karte`).
     """
     bereich: str
@@ -348,7 +339,7 @@ class Aktion:
 #: liest jeden Parameter, den ein Ziel-Bauer für sie erzeugt (W-5: `frontend/src/test/sprungziele.test.ts` liest
 #: `tests/fixtures/sprungziele.json`, erzeugt aus den Ziel-Bauern).
 ZIEL_PARAMETER = ("erfassen", "bearbeiten", "neu", "tarif", "art", "ab", "geraet", "feld", "karte", "plan", "wizard",
-                  "befund", "stueck", "getauscht")
+                  "befund", "getauscht")
 
 
 def link_aus_ziel(ziel: Optional[Ziel]) -> Optional[str]:

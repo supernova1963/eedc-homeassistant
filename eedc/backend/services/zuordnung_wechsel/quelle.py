@@ -21,7 +21,6 @@ Werten?» (Sitzung 1: zum Verzeichnen; seit Sitzung 3b fragt ``abfrage.pruefe`` 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Optional
 
@@ -123,21 +122,17 @@ async def lade_wirksame_quellen(db, anlage, mapping: Optional[dict] = None) -> d
     return wirksame_quellen(anlage.sensor_mapping if mapping is None else mapping, zeilen)
 
 
-async def hat_eigene_werte(db, anlage_id: int, sensor_key: str, vor: Optional[datetime] = None) -> bool:
-    """Hat der Schlüssel eigene Werte — Zählerstände der Reihe oder Kanalzeilen (vor ``vor``, örtlich ohne Zone)?"""
+async def hat_eigene_werte(db, anlage_id: int, sensor_key: str) -> bool:
+    """Hat der Schlüssel eigene Werte — Zählerstände der Reihe oder Kanalzeilen?"""
     from backend.models.kanal import Kanal, KanalStatistik
     from backend.models.sensor_snapshot import SensorSnapshot
 
     q = select(SensorSnapshot.id).where(
         SensorSnapshot.anlage_id == anlage_id, SensorSnapshot.sensor_key == sensor_key)
-    if vor is not None:
-        q = q.where(SensorSnapshot.zeitpunkt < vor)
     if (await db.execute(q.limit(1))).scalar_one_or_none() is not None:
         return True
     k = select(KanalStatistik.start_ts).join(Kanal, Kanal.id == KanalStatistik.kanal_id).where(
         Kanal.anlage_id == anlage_id, Kanal.key == sensor_key)
-    if vor is not None:
-        k = k.where(KanalStatistik.start_ts < int(vor.astimezone(timezone.utc).timestamp()))
     return (await db.execute(k.limit(1))).scalar_one_or_none() is not None
 
 

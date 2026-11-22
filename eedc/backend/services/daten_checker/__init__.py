@@ -161,13 +161,10 @@ class DatenChecker(
         ergebnisse.extend(await self._check_ha_zaehlerstand_springt(anlage))
         # Sensorwechsel U3 b (G4): der Zählerstand einer MQTT-Reihe springt — Stunde, Menge und «Zähler getauscht».
         ergebnisse.extend(await self._check_mqtt_zaehlerstand_springt(anlage))
-        # Verdacht N-803: ein versetzter Abschnitt in eedcs Standreihe (Stände eines anderen Sensors) — Tageswerte an den Rändern.
-        ergebnisse.extend(await self._check_zaehler_versatz(anlage))
-        # Sensorwechsel U3 a (G1/G2): verworfene, nicht wieder gefüllte Zeit je Lücke — Auskunft; gespeicherter Monatswert eines
-        # vom Wechsel berührten Monats, der nicht mehr zur Quelle passt — «Monat öffnen».
-        ergebnisse.extend(await self._check_zaehler_zeit_verworfen(anlage))
         # Sensorwechsel Weg B: «Daten vor der Änderung löschen» — Auskunft je Feld (gelöscht vor …, HA führt den Sensor seit …).
         ergebnisse.extend(await self._check_daten_vor_aenderung_geloescht(anlage))
+        # Sensorwechsel U3 a (G2): gespeicherter Monatswert eines vom Wechsel berührten Monats, der nicht mehr zur Quelle passt
+        # — «Monat öffnen».
         ergebnisse.extend(await self._check_monatswert_ueberholt(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_lts(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_einheit(anlage))

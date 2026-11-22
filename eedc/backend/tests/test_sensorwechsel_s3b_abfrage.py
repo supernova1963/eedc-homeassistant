@@ -291,74 +291,6 @@ async def test_fortsetzen_nach_dem_start_neben_einer_laufenden_aufgabe(datei, mo
     kl._AUFGABEN.clear()
 
 
-async def test_fuellen_nach_dem_commit_scheitert_und_wird_nachgeholt(ha, datei, monkeypatch):
-    """Füllen wirft nach dem Commit ⇒ der Zustand trägt den offenen Nachlauf, der Lauf bleibt ``laeuft`` und holt ihn nach;
-    die Werkbank sagt dann nicht «nichts zu tun», sondern startet ihn."""
-    from backend.services.kanal import korrektur as kk
-    from backend.services.kanal.nachfuellen import nachfuellen_spiegel
-    from backend.tests.test_werkbank_verwerfen_kommt_nicht_zurueck import _stundenlauf, _zuordnung
-
-    svc, _r = ha
-    sitzungen, _p, aid, _g = datei
-    mid = ha_lts_helfer.sensor(svc, "sensor.falsch", "kWh")
-    for i in range(24 * 40):
-        ha_lts_helfer.zeile(svc, mid, ZEIT + timedelta(hours=i), state=9000.0 + i, sum_wert=9000.0 + i)
-    f = ZEIT + timedelta(days=10)
-    await nachfuellen_spiegel(sitzungen, aid, jetzt=f, ha_svc=svc)
-    await _zuordnung(sitzungen, aid, einspeisung="sensor.falsch")
-    await _stundenlauf(sitzungen, aid, svc, ZEIT + timedelta(days=20))
-    monkeypatch.setattr(kr, "ha_dienst", lambda _s=None: svc)
-    jetzt = ZEIT + timedelta(days=20, hours=3)
-    a = kr.Auftrag(anlage_id=aid, sensor_key="basis:einspeisung", falsch_seit=f, ab=ZEIT + timedelta(days=20),
-                   vorher={"art": "ha", "entity_id": "sensor.falsch"}, nachher={"art": "ha", "entity_id": "sensor.einsp"})
-
-    async def wirft(*_a, **_k):
-        raise RuntimeError("HA weg")
-    echt = kk.fuelle_kanal
-    monkeypatch.setattr(kk, "fuelle_kanal", wirft)
-    async with sitzungen() as s:
-        erg = await kr.fuehre_aus(s, a, ha_svc=svc, jetzt=jetzt)
-        await s.commit()
-    s1 = await kr.nach_dem_commit(erg, ha_svc=svc, sitzungen=sitzungen, starten=False)
-    assert s1["fuellen_offen"] is True
-    async with sitzungen() as s:
-        z = await kl.stand(s, s1["lauf"])
-        assert z["status"] == kl.LAEUFT and z["fuellen"]["erledigt"] is False
-        assert await kl.offener_lauf(s, aid, "basis:einspeisung") == s1["lauf"]
-    # Die Werkbank («nichts mehr zu verwerfen») startet den offenen Lauf, statt still nichts zu tun.
-    from backend.services import verwerfen_vor_quellbeginn as vq
-    gestartet: list[str] = []
-    monkeypatch.setattr(kl, "starten", lambda lauf, **_k: gestartet.append(lauf))
-    async with sitzungen() as s:
-        aus = await vq._nachholen(s, aid, "basis:einspeisung", {"kanalzeilen_geloescht": 0})
-    assert (aus["lauf"], aus["fuellen_nachgeholt"], gestartet) == (s1["lauf"], 1, [s1["lauf"]])
-    # Der Lauf versucht es noch einmal — scheitert, bleibt offen; dann gelingt es.
-    z = await kl.tage_neu_bilden(sitzungen, s1["lauf"])
-    assert z["status"] == kl.LAEUFT and "Füllen" in z["fehler"][-1]["grund"]
-    monkeypatch.setattr(kk, "fuelle_kanal", echt)
-    monkeypatch.setattr(kl, "_ein_tag", lambda *_a: asyncio.sleep(0, 0))
-    z = await kl.tage_neu_bilden(sitzungen, s1["lauf"])
-    assert z["status"] == kl.FERTIG and z["fuellen"]["erledigt"] is True and z["fuellen"]["kanal_neu_gespiegelt"] > 0
-    async with sitzungen() as s:
-        assert await kl.offener_lauf(s, aid, "basis:einspeisung") is None
-
-
-async def test_gleiche_korrektur_zweimal_eine_zeile(db):
-    a = await _anlage(db, {"basis": {"netzbezug": {"strategie": "sensor", "sensor_id": "sensor.b"}}})
-    aid = a.id
-    await db.commit()
-    auftrag = kr.Auftrag(anlage_id=aid, sensor_key=NETZ_KEY, falsch_seit=datetime(2026, 8, 1), ab=datetime(2026, 10, 1),
-                         vorher={"art": "ha", "entity_id": "sensor.a"}, nachher={"art": "ha", "entity_id": "sensor.b"})
-    eins = await kr.fuehre_aus(db, auftrag, ha_svc=None, jetzt=datetime(2026, 10, 1, 0, 30))
-    zwei = await kr.fuehre_aus(db, auftrag, ha_svc=None, jetzt=datetime(2026, 10, 1, 0, 40))
-    zeilen = [w for w in await _zeilen(db, aid) if w.grund == "korrektur" and w.nachher is not None]
-    assert len(zeilen) == 1 and zeilen[0].lauf == zwei["summary"]["lauf"] != eins["summary"]["lauf"]
-    # Gegenprobe: eine frühere «falsch seit» ist eine andere Korrektur
-    await kr.fuehre_aus(db, kr.Auftrag(**{**auftrag.__dict__, "falsch_seit": datetime(2026, 7, 1)}), ha_svc=None,
-                        jetzt=datetime(2026, 10, 1, 0, 50))
-    assert len([w for w in await _zeilen(db, aid) if w.grund == "korrektur" and w.nachher is not None]) == 2
-
-
 async def test_aufraeumen_und_diagnose_paket_und_fortschritt(db):
     from backend.api.routes.sensorwechsel import korrektur_lauf_stand
     from backend.services.diagnose_paket.lage import LageErgebnis, einstellungen
@@ -468,6 +400,5 @@ async def test_zaehler_getauscht_ohne_werte_und_zukunft(db):
     e = await _ablehnung(pruefe_zaehler_getauscht(aid, NETZ, ZaehlerGetauschtRequest(
         getauscht_am=datetime(2099, 1, 1)), db))   # fest in der Zukunft
     assert e.status_code == 400
-
 
 

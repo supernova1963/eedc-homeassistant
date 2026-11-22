@@ -26,9 +26,7 @@
    8c. [Zählerstände – Rückgang in Home Assistant](#48c-zaehlerstaende--rueckgang-in-home-assistant)
    8d. [PV – Messpunkt (Anlagenzähler und Strings)](#48d-pv--messpunkt)
    8e. [PV – Zähler steht](#48e-pv--zaehler-steht)
-   8f. [Zählerstände – versetzter Abschnitt](#48f-zaehlerstaende--versetzter-abschnitt)
    8h. [Zählerstände – Zählerstand springt](#48h-zaehlerstaende--zaehlerstand-springt)
-   8i. [Zählerstände – Zeit verworfen](#48i-zaehlerstaende--zeit-verworfen)
    8j. [Zählerstände – Gespeicherter Monatswert passt nicht mehr](#48j-zaehlerstaende--gespeicherter-monatswert-passt-nicht-mehr)
    8k. [Zählerstände – Zählerstand springt (MQTT)](#48k-zaehlerstaende--zaehlerstand-springt-mqtt)
    8l. [Zählerstände – Daten vor der Änderung gelöscht](#48l-zaehlerstaende--daten-vor-der-aenderung-geloescht)
@@ -200,7 +198,7 @@ Einzelne Befunde haben über Releases hinweg ihre Stufe gewechselt. Beispiele:
 ### 3.1 Alle Befunde <a name="alle-befunde"></a>
 
 <!-- erzeugt: scripts/daten-checker-handbuch.py §3 Anfang — nicht von Hand ändern -->
-eedc prüft **44 Kategorien** mit **189 Befunden** (gezählt an `CheckKategorie` und am Katalog der Handgriffe). Jeder Befund trägt genau einen Handgriff: eine **Aktion** mit Vorschau, einen **Sprung** an die Stelle, wo du ihn behebst, oder die **Auskunft** «Was gilt»; bestandene Prüfungen stehen gefaltet im Kopf ihrer Kategorie.
+eedc prüft **42 Kategorien** mit **187 Befunden** (gezählt an `CheckKategorie` und am Katalog der Handgriffe). Jeder Befund trägt genau einen Handgriff: eine **Aktion** mit Vorschau, einen **Sprung** an die Stelle, wo du ihn behebst, oder die **Auskunft** «Was gilt»; bestandene Prüfungen stehen gefaltet im Kopf ihrer Kategorie.
 
 | Befund | Abschnitt | Klasse | Knopf |
 | --- | --- | --- | --- |
@@ -230,8 +228,6 @@ eedc prüft **44 Kategorien** mit **189 Befunden** (gezählt an `CheckKategorie`
 | [Abweichung zu Home Assistant an einem Tag (PV)](#drift_tag) `drift_tag` | §4.17 | Aktion | Aus Home Assistant neu übernehmen |
 | [Ein Gerät weicht an Tagen von Home Assistant ab](#drift_komponente) `drift_komponente` | §4.17 | Aktion | Aus Home Assistant neu übernehmen |
 | [Zählerstand springt zwischendurch zurück](#zaehler_ruecksprung) `zaehler_ruecksprung` | §4.8a | Sprung | Sensor wechseln |
-| [Zählerstände liegen für einen Abschnitt versetzt](#zaehler_versatz) `zaehler_versatz` | §4.8f | Sprung | Grund nachtragen |
-| [Zählerstände einer Zeit verworfen](#zaehler_zeit_verworfen) `zaehler_zeit_verworfen` | §4.8i | Auskunft | Was gilt |
 | [Gespeicherter Monatswert passt nicht mehr zur Quelle](#monatswert_ueberholt) `monatswert_ueberholt` | §4.8j | Sprung | Monat öffnen |
 | [Zählerstand springt in einer MQTT-Reihe](#mqtt_zaehlerstand_springt) `mqtt_zaehlerstand_springt` | §4.8k | Sprung | Zähler getauscht |
 | [Daten vor der Änderung gelöscht](#daten_vor_aenderung_geloescht) `daten_vor_aenderung_geloescht` | §4.8l | Auskunft | Was gilt |
@@ -416,7 +412,6 @@ Die meisten Kategorien greifen in jeder Installation identisch; **vierzehn** hä
 | 9c | **Zählerstände – Rückgang in Home Assistant** (§4.8c) | greift | **wird übersprungen** (keine HA-Statistik) |
 | 9d | **PV – Messpunkt** (§4.8d) | greift, sobald die PV-Zähler Kanäle haben (Spiegel der HA-Statistik); der Hinweis zu „PV gesamt“ neben einem Balkonkraftwerk greift aus der Zuordnung | greift mit MQTT-Zählern (eigene Summe); ohne Zähler-Kanäle **wird übersprungen** (außer dem Zuordnungs-Hinweis) |
 | 9e | **PV – Zähler steht** (§4.8e) | greift, sobald die PV-Zähler Kanäle haben (Spiegel der HA-Statistik) | greift mit MQTT-Zählern (eigene Summe); ohne Zähler-Kanäle **wird übersprungen** |
-| 9f | **Zählerstände – versetzter Abschnitt** (§4.8f) | greift für die Zählerstände, die eedc aus der HA-Statistik gespeichert hat; ist Home Assistant gerade nicht erreichbar, trägt der Befund statt «Grund nachtragen» den Knopf «Was gilt», bis eedc die Langzeitstatistik wieder lesen kann | **wird übersprungen** (keine Stände aus HA); Stände aus einer früheren Add-on-Zeit werden geprüft — «Grund nachtragen» verwirft sie dann ohne Neulesen, eedc rechnet über den leeren Abschnitt wie über jede Zählerlücke |
 | 10 | **Datenquellen – HA-Statistics** (§4.9) | greift | **wird übersprungen** (keine HA-LTS verfügbar) |
 | 11 | Energieprofil – fehlende Tageswerte (§4.10) | greift | greift |
 | 12 | Geräte-Connector ohne Monatswert (§4.11) | greift | greift |
@@ -2881,8 +2876,6 @@ Was eedc nicht erkennt oder nicht kennzeichnet:
   eedc bewertet die Menge mit dem Preis dieser einen Stunde.
 - Ein Ausfall, der länger als 90 Tage dauert, wird nur in seinen letzten 90 Tagen erkannt.
 - Im Diagnose-Paket steht die Kennzeichnung nicht; sie entsteht beim Lesen und lässt sich aus den Daten nachrechnen.
-- Eine Zeit, deren Zählerstände eine Korrektur verworfen hat und die nichts wieder füllt, nennt dieser Befund nicht; sie
-  steht unter «Zählerstände – Zeit verworfen».
 
 #### Keine unmöglichen Stundenwerte <a name="counter_spikes_ok"></a>
 
@@ -3070,8 +3063,7 @@ den fortlaufenden Stand schicken.
 
 **Ein Befund je Ursache** (seit Sensorwechsel U3): wechselt der Stand dauerhaft die Höhe — er beginnt neu, aber nicht bei 0,
 oder fällt um weniger als ein Zehntel und bleibt dort —, nennt [§4.8k](#48k-zaehlerstaende--zaehlerstand-springt-mqtt) die
-Stunde mit dem Weg «Zähler getauscht»; den Rückgang eines versetzten Abschnitts nennt
-[§4.8f](#48f-zaehlerstaende--versetzter-abschnitt). Diese Prüfung lässt solche Rückgänge aus. Ein Zähler, der täglich oder
+Stunde mit dem Weg «Zähler getauscht». Diese Prüfung lässt solche Rückgänge aus. Ein Zähler, der täglich oder
 monatlich auf null geht, und ein Stand, der kurz fällt und gleich wieder auf der alten Höhe ist, bleiben hier.
 
 ---
@@ -3410,121 +3402,6 @@ eedc rechnet an diesen Tagen mit „keine Erzeugung“ und biegt nichts zurecht;
 deshalb unplausible Werte, etwa eine negative Autarkie. Nulleinspeisung, autarke Tage, Schnee auf den Modulen oder ein
 einzelner stehender String lösen diese Meldung nicht aus.
 
-### 4.8f Zählerstände – versetzter Abschnitt <a name="48f-zaehlerstaende--versetzter-abschnitt"></a>
-
-eedc merkt sich je Stunde den Stand jedes zugeordneten Zählers und bildet einen Tageswert aus zwei solchen Ständen — dem
-am Tagesbeginn und dem am Tagesende. Gespeichert wird immer der Stand des Sensors, der **in dem Moment** zugeordnet ist.
-Waren eine Zeit lang die Stände eines anderen Sensors in der Reihe (etwa nach einem Wechsel der Zuordnung), liegt ein
-Abschnitt um einen festen Betrag versetzt: am Anfang springt der Stand nach oben, am Ende fällt er um etwa denselben
-Betrag zurück. An diesen Rändern stimmt der Tageswert nicht — am Sprung ist er zu hoch, am Rückgang fehlt er
-(„Zähler zurückgesprungen“). Geprüft wird die ganze gespeicherte Reihe jedes Zählers, dessen Stände aus Home Assistant
-kommen.
-
-**Gemeldet wird nur, was sich auswirkt.** Geprüft werden die Felder, deren Tageswert die Tagesansicht aus diesen
-gespeicherten Ständen bildet: PV- und Netz-Ladung von Wallbox und E-Auto, die Netzladung des Speichers, die Zähler der
-Wärmepumpe und der Netzbezug zum eigenen Tarif. Die übrigen Felder (etwa die Gesamt-Ladung der Wallbox oder die Zähler von
-PV, Netz und Speicher) zeigt eedc aus der gespeicherten Tageszeile oder der Statistik von Home Assistant — dort wirkt ein
-solcher Abschnitt nicht. Rechnet eedc die Rand-Tage eines Felds ohnehin aus der Statistik von Home Assistant (an einem Tag,
-an dem alle Zähler seiner Gruppe dort lückenlos vorliegen), schweigt die Prüfung ebenfalls.
-
-**Was kein Befund ist:** ein Zähler, der auf null oder fast null zurückgesetzt wird (das meldet
-[§4.8a](#48a-zaehlerstaende--ruecksprung) für MQTT); ein einzelner Rückgang ohne vorangehenden Sprung ähnlicher Größe;
-ein großer Zuwachs ohne späteren Rückgang — ein langer Ladevorgang, eine Datenlücke von Tagen oder ein Sensorwechsel,
-nach dem der neue Sensor einfach weiterläuft.
-
-**Ein Handgriff: «Grund nachtragen».** Er öffnet in den Datenquellen denselben Dialog wie beim Wechsel einer Quelle — nur
-mit „Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet“ und mit der festen Zeit des Abschnitts. eedc verwirft die Zählerstände des
-Abschnitts. Stimmen die Stände davor und danach mit dem überein, was Home Assistant für die Quelle davor und danach führt,
-liest eedc den Abschnitt aus Home Assistant neu — auf derselben Höhe — und speichert ihn; die Tageswerte stimmen dann an jedem
-Tag (bis das Neulesen gelungen ist, zeigen die Rand-Tage nur ihren Teil; eedc holt es jede Stunde und nach jedem Start nach).
-Ohne Home Assistant, oder führt Home Assistant die Quelle auf einer anderen Höhe oder für diese Zeit nichts, bleibt der
-Abschnitt leer, und eedc rechnet über ihn wie über jede Zählerlücke — davor und danach gilt dieselbe Quelle: die Menge des
-Abschnitts steht an dem Tag, an dem er endet, die Tage davor zeigen für diese Zeit keinen Wert. Ist zwischen den Ständen
-davor und danach ein Zählertausch eingetragen, bildet eedc über den Abschnitt keine Differenz: die Tage darin zeigen keinen
-Wert, die Tage an seinem Rand nur ihren Teil — der Befund sagt es. Das geht auch, wenn der
-Abschnitt heute endet. Gelten vor und nach dem Abschnitt verschiedene Quellen,
-oder ist Home Assistant eingerichtet, aber gerade nicht erreichbar, trägt der Befund statt «Grund nachtragen» den Knopf
-«Was gilt». Der Befund nennt nur die Tage, deren Wert eedc wirklich aus diesen Ständen bildet — liegt ein
-Rückgang im Fenster eines Tages, fehlt dessen Wert, auch wenn im selben Fenster ein Sprung liegt.
-
-**In einer MQTT-Reihe:** führt eedc für ein Feld eine eigene Summe aus den Zählerständen, die der
-Publisher sendet, prüft es auch diese Stände. Dort zählt eedc den Sprung und den Rückgang als Menge der Stunde — die
-Tageswerte an beiden Tagen sind falsch. «Grund nachtragen» bietet dann beide Antworten: „Bisherige Werte bleiben“ trägt am
-Sprung und am Rückgang je einen Zählertausch ein (die Werte des Abschnitts zählen, die zwei Sprünge nicht); „Bisherige Werte
-verwerfen“ verwirft die Zählerstände des Abschnitts, und eedc rechnet über die leere Zeit wie über jede Zählerlücke. Sprung
-und Rückgang eines solchen Abschnitts nennen §4.8k und §4.8a nicht noch einmal.
-
----
-
-#### Zählerstände liegen für einen Abschnitt versetzt <a name="zaehler_versatz"></a>
-
-**Was eedc sieht**
-In den gespeicherten Zählerständen eines Felds springt der Stand an einem Tag um einen festen Betrag nach oben, läuft
-auf dieser Höhe weiter und fällt später um etwa denselben Betrag zurück — so sieht es aus, wenn eine Zeit lang die
-Stände eines anderen Sensors gespeichert wurden, etwa nach einem Wechsel der Zuordnung. eedc bildet einen Tageswert aus
-zwei Zählerständen; an den Rändern des Abschnitts ist er deshalb falsch: am Sprung zu hoch, am Rückgang fehlt er
-(„Zähler zurückgesprungen“) — auch an einem Tag, an dem im selben Tagesfenster ein Sprung liegt. Die Meldung nennt Gerät
-und Feld, den Abschnitt von bis und die Höhe des Versatzes; die Details nennen die Tage, deren Wert zu hoch ist oder
-fehlt — nur die Tage, die eedc wirklich aus diesen Zählerständen bildet. Gespeicherte Monatswerte ändert das nicht.
-
-**Lösungsweg**
-1. Am Befund **«Grund nachtragen»** klicken — die Datenquellen-Zuordnung öffnet sich beim Feld mit der Frage
-   **„Warum wechselte die Quelle?"**; oben stehen der Abschnitt mit Beginn und Ende und die Quelle, die davor und danach
-   gilt.
-2. **„Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet"** wählen. Die Zeit der Korrektur steht fest: genau der
-   Abschnitt.
-3. Die Vorschau unter **„Was danach geschieht"** lesen. eedc verwirft die Zählerstände des Abschnitts. Passen die Stände
-   davor und danach zu dem, was Home Assistant für diese Quelle führt, liest eedc die Zählerstände des Abschnitts danach aus
-   Home Assistant neu und speichert sie — die Tageswerte stimmen dann an jedem Tag; bis das gelungen ist (etwa weil Home
-   Assistant zwischendurch nicht erreichbar ist), zeigen die Tage am Rand des Abschnitts nur ihren Teil, und eedc holt das
-   Lesen jede Stunde und nach jedem Start nach. Ohne Verbindung zu Home Assistant, oder führt Home Assistant die Quelle auf
-   einer anderen Höhe oder für diese Zeit nichts, bleibt der Abschnitt leer, und eedc rechnet über ihn wie über jede
-   Zählerlücke (davor und danach gilt dieselbe Quelle): die Menge des Abschnitts steht an dem Tag, an dem er endet, die Tage
-   davor zeigen für diese Zeit keinen Wert; ist zwischen den Ständen davor und danach ein Zählertausch eingetragen, bildet
-   eedc über den Abschnitt keine Differenz — die Tage darin zeigen keinen Wert, die Tage an seinem Rand nur ihren Teil (der
-   Befund sagt es). Führt Home Assistant die Quelle erst ab einer Zeit im Abschnitt, liest eedc ab dort neu; für die Zeit
-   davor gilt dasselbe wie für einen leeren Abschnitt — Befund und Vorschau nennen die Zeit. Die Vorschau nennt die Tage.
-4. **„Übernehmen"** klicken. Die Korrektur lässt sich in eedc nicht rückgängig machen.
-5. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Befund steht danach unter den bestandenen Prüfungen
-   («Kein versetzter Abschnitt in den gespeicherten Zählerständen»).
-
-**Bei einem Zähler über MQTT** (der Abschnitt liegt in den Zählerständen, die der Publisher gesendet hat — etwa, weil eine
-Zeit lang ein anderes Gerät auf demselben Topic gesendet hat): eedc zählt den Sprung und den Rückgang als Menge der Stunde,
-die Tageswerte an beiden Tagen sind falsch. Der Dialog bietet in Schritt 2 beide Antworten:
-- **„Bisherige Werte bleiben — der neue Sensor setzt fort (Zähler oder Gerät getauscht, anderer Sensor für dasselbe
-  Gerät)"** — eedc trägt am Sprung und am Rückgang je einen Zählertausch ein; die Werte des Abschnitts zählen, die zwei
-  Sprünge nicht. Das passt, wenn die Stände des Abschnitts echte Werte desselben Zählers sind (getauscht und zurückgetauscht).
-- **„Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet"** — eedc verwirft die Zählerstände des Abschnitts
-  und rechnet über die leere Zeit wie über jede Zählerlücke: die Menge des Abschnitts steht an dem Tag, an dem er endet; im
-  Monat fehlt nichts.
-
-Ist der Abschnitt der **Rest einer früheren Korrektur** — die Stände des anderen Sensors begannen schon einige Stunden vor
-dem «Falsch seit» jener Korrektur, und ihr Ende liegt am Ende der damals verworfenen Zeit —, nennt der Befund diese Zeit.
-«Grund nachtragen» verwirft dann auch den Rest; die Vorschau sagt, was danach gilt.
-
-In zwei Lagen trägt der Befund statt «Grund nachtragen» den Knopf «Was gilt»: Gelten vor und nach dem Abschnitt
-verschiedene Quellen, nennt er beide — eedc weiß dann nicht, welche die richtige ist, und korrigiert den Abschnitt nicht. Ist Home Assistant
-eingerichtet, aber gerade nicht erreichbar, sagt er es; sobald eedc die Langzeitstatistik wieder lesen kann, steht beim
-nächsten **«Aktualisieren»** wieder **«Grund nachtragen»** am Befund.
-
-Bleibt der Befund nach dem Klick stehen: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das
-Diagnose-Paket: im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Herunterladen»** und die Datei an die Adresse
-aus unserer Antwort schicken.
-
-**Was ohne Handlung gilt**
-Die Tageswerte an den genannten Tagen bleiben falsch: am Sprung zu hoch, am Rückgang ohne Wert. eedc stellt sie nicht
-von selbst richtig. Tage, die eedc aus der Statistik von Home Assistant rechnet, und gespeicherte Monatswerte sind nicht
-betroffen.
-
-Was dieser Befund nicht erkennt oder nicht abdeckt:
-- Ein einzelner alter Wechsel, nach dem die Stände nicht wieder zurückgehen, wird nicht erkannt — der Befund braucht den
-  Sprung und den Rückgang um etwa denselben Betrag.
-- Die Netzladung des Speichers liest eedc für jeden Monat, für den keine Monatswerte des Speichers gespeichert sind, aus
-  den gespeicherten Zählerständen; ein versetzter Abschnitt geht dort ungekürzt in den Monatswert ein.
-- Ohne Stundenwerte aus Home Assistant (eedc ohne Home Assistant, Werte über MQTT) rechnet eedc jeden Tag aus den
-  gespeicherten Zählerständen — dort sind an beiden Rändern des Abschnitts die Tageswerte dieses Felds falsch. Geprüft wird
-  eine MQTT-Reihe, wenn eedc für das Feld eine eigene Summe aus den MQTT-Ständen führt.
-
 ### 4.8h Zählerstände – Zählerstand springt <a name="48h-zaehlerstaende--zaehlerstand-springt"></a>
 
 Wird das Gerät hinter einem Zähler getauscht und Home Assistant führt **denselben Sensor** weiter, springt sein Stand: Zeigt
@@ -3592,63 +3469,17 @@ an die Adresse aus unserer Antwort schicken.
 Der Sprung bleibt in Tag, Monat und Jahr stehen — in eedc wie im Energie-Dashboard von Home Assistant. eedc schneidet ihn
 nicht selbst ab: die Quelle ist die Statistik in Home Assistant.
 
-### 4.8i Zählerstände – Zeit verworfen <a name="48i-zaehlerstaende--zeit-verworfen"></a>
-
-Hat eine Korrektur (die Korrektur über einen versetzten Abschnitt, die Werkbank «Werte vor dem Sensorbeginn verwerfen» oder
-früher «Grund nachtragen» mit der Antwort «Bisherige Werte verwerfen») die Zählerstände einer Zeit verworfen und füllt nichts sie wieder auf — ohne
-Verbindung zu Home Assistant, bei einer MQTT-Quelle, oder weil Home Assistant für diese Zeit keine Geschichte des richtigen
-Sensors führt —, bleibt diese Zeit endgültig leer. Diese Kategorie nennt je solcher Zeit eine Auskunft: Feld, Beginn und Ende,
-und was dafür gilt — dieselbe Angabe, die die Vorschau beim Eintragen gemacht hat.
-
-**Zwei Lagen.** Gilt davor, in dieser Zeit und danach dieselbe Quelle und ist dazwischen kein Zählertausch eingetragen, rechnet
-eedc über die Zeit wie über jede Zählerlücke: die Menge der ganzen Zeit steht am Tag des ersten Zählerstands danach. Sonst
-bildet eedc über die Zeit keine Differenz: die Tage darin zeigen für dieses Feld keinen Wert, die Tage an ihrem Rand nur ihren
-Teil, und die Menge fehlt in Tag, Monat und Jahr. Dazu nennt die Auskunft die betroffenen Monate, für die ein Monatswert
-gespeichert ist — er bleibt, wie er ist.
-
-Eine solche Zeit nennt die Kategorie «Stunden ohne Stundenwerte» ([§4.7](#47-energieprofil--plausibilitaet)) nicht noch
-einmal. Die Zeile verschwindet erst, wenn eine spätere Korrektur die ganze Zeit aus Home Assistant füllt.
-
----
-
-#### Zählerstände einer Zeit verworfen <a name="zaehler_zeit_verworfen"></a>
-
-**Was eedc sieht**
-Eine Korrektur hat für dieses Feld die Zählerstände einer Zeit verworfen, und nichts füllt sie wieder auf: Home Assistant war
-nicht verbunden, die Quelle ist MQTT (sie hat keine Geschichte, die eedc nachholen könnte), oder Home Assistant führt für diese
-Zeit keine Werte des richtigen Sensors. Das bleibt so — eedc liest diese Zeit auch später nicht noch einmal aus Home Assistant.
-Die Meldung nennt das Feld, Beginn und Ende der Zeit. Die Details sagen, was dafür gilt: Gilt davor, in dieser Zeit und danach
-dieselbe Quelle und ist dazwischen kein Zählertausch eingetragen, steht die Menge der ganzen Zeit am Tag des ersten
-Zählerstands danach (wie bei jeder Zählerlücke). Sonst bildet eedc über diese Zeit keine Differenz — die Tage darin zeigen für
-dieses Feld keinen Wert, die Tage an ihrem Rand nur ihren Teil, und die Menge fehlt in Tag, Monat und Jahr. Beginnt danach ein
-neuer Sensor, dessen erste Stunde Home Assistant ab 0 zählt, und hat das Feld davor Werte, zählen die Stundenwerte diese erste
-Stunde wie Home Assistant; die Details sagen es. Dazu nennen die Details die Monate mit gespeichertem Monatswert, die die Zeit
-berührt.
-
-**Lösungsweg**
-1. Die Angabe lesen. Stimmt sie, ist nichts zu tun: die Auskunft beschreibt, was die Korrektur festgelegt hat.
-2. Soll ein gespeicherter Monatswert eines genannten Monats geändert werden: unter
-   [«Monatsdaten»](eedc:/einstellungen/daten?block=monatsdaten) den Monat öffnen, den Wert des Felds eintragen und
-   **«Speichern & abschließen»** klicken.
-3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt, solange die Zeit verworfen ist.
-
-**Was ohne Handlung gilt**
-Die verworfene Zeit bleibt leer. eedc schätzt, verteilt und überbrückt nichts: Steht die Menge an einem Tag danach, ist es die
-Differenz der Zählerstände, die die Quelle geliefert hat; sonst fehlt sie. Gespeicherte Monatswerte bleiben, wie sie sind.
-Die Kategorie «Stunden ohne Stundenwerte» nennt diese Zeit nicht noch einmal. Die Zeile verschwindet, wenn eine spätere
-Korrektur dieselbe Zeit ganz aus Home Assistant füllt.
-
 ### 4.8j Zählerstände – Gespeicherter Monatswert passt nicht mehr <a name="48j-zaehlerstaende--gespeicherter-monatswert-passt-nicht-mehr"></a>
 
-Ein Wechsel der Quelle mit «Bisherige Werte bleiben», ein eingetragener Zählertausch oder eine Korrektur ändert, was eedc für
-einen Monat aus der Quelle bildet. Ein Monatswert, den du vorher gespeichert hast (Monatsabschluss, «Aus HA laden», Import),
+Ein Wechsel der Quelle mit «Bisherige Werte bleiben» oder ein eingetragener Zählertausch ändert, was eedc für einen Monat
+aus der Quelle bildet. Ein Monatswert, den du vorher gespeichert hast (Monatsabschluss, «Aus HA laden», Import),
 bleibt dabei, wie er ist — und alles, was eedc für diesen Monat zeigt, rechnet mit ihm. Diese Kategorie nennt einen solchen
 Monat, wenn der gespeicherte Wert und der Wert, den die Quelle heute für den ganzen Monat ergibt, um mindestens 1 kWh
 auseinanderliegen (dieselbe Schwelle wie die Vorschau von «Monatsdaten aus HA-Statistik laden»).
 
 **Was kein Befund ist.** Ein Monat, den kein Wechsel berührt; ein Monat nach dem Monat, in dem der Wechsel eingetragen wurde
 (diesen Wert hast du schon mit dem Wechsel gespeichert); ein Monat ohne gespeicherten Wert; ein Monat, für den eedc heute
-keinen vollen Wert hat (etwa über eine verworfene Zeit, [§4.8i](#48i-zaehlerstaende--zeit-verworfen)); der laufende Monat; ein
+keinen vollen Wert hat; der laufende Monat; ein
 Wert, den du im Monatsabschluss mit «gespeicherten behalten» bewusst behalten hast. Nicht geprüft werden der
 Anlagen-PV-Zähler (sein Monatswert ist die Summe je Modul) und Felder, deren Werte eedc nicht stündlich mitschreibt.
 
@@ -3657,8 +3488,8 @@ Anlagen-PV-Zähler (sein Monatswert ist die Summe je Modul) und Felder, deren We
 #### Gespeicherter Monatswert passt nicht mehr zur Quelle <a name="monatswert_ueberholt"></a>
 
 **Was eedc sieht**
-Für diesen Monat ist ein Monatswert gespeichert, und ein Wechsel der Quelle («Bisherige Werte bleiben»), ein eingetragener
-Zählertausch oder eine Korrektur hat seither geändert, was die Quelle für diesen Monat ergibt — um mindestens 1 kWh. eedc prüft
+Für diesen Monat ist ein Monatswert gespeichert, und ein Wechsel der Quelle («Bisherige Werte bleiben») oder ein eingetragener
+Zählertausch hat seither geändert, was die Quelle für diesen Monat ergibt — um mindestens 1 kWh. eedc prüft
 nur Monate bis zu dem Monat, in dem der Wechsel eingetragen wurde; einen späteren Monat hast du schon mit dem Wechsel gespeichert. Die
 Meldung nennt Feld und Monat, die Details den gespeicherten Wert, den Wert der Quelle und seit wann er gilt. Alles, was eedc für
 diesen Monat zeigt, rechnet mit dem gespeicherten Wert.
@@ -3703,7 +3534,7 @@ Stunde trägt und mehr als zehnmal so groß ist wie die Schritte der 24 Stunden 
 ein Zähler mit weniger als 14 Tagen mit Zuwachs (Neubeginn); die erste gewöhnliche Stunde nach Wochen mit nur Standby (eine
 Wallbox vor dem ersten Auto, eine Wärmepumpe nach dem Sommer); ein Stand, der um weniger als ein Zehntel fällt und in der
 nächsten Stunde zurückkehrt; eine Stunde, an der ein Zählertausch schon eingetragen
-ist; Sprung und Rückgang eines versetzten Abschnitts ([§4.8f](#48f-zaehlerstaende--versetzter-abschnitt)).
+ist.
 
 ---
 

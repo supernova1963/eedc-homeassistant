@@ -6,13 +6,11 @@ Alt-Vermerke ``historie_hinweis`` sind entfernt (Entscheid Gernot 21.11.2026); i
 * **Kanal:** ``kanal/naht.nachtrag_fortsetzung`` (der Weg von «Zähler getauscht») verwirft nur die abhängigen abgeleiteten
   Kanäle (§10 Nr. 34); im Stände-Nachbau teilt eine Fortsetzung den Lauf (``nachfuellen._laeufe``).
 * **Rücksprung** an einer Fortsetzungs-Naht ist keiner (``reader.finde_zaehler_ruecksprunge``).
-* **Probe füllbare Lage** des Befunds ``zaehler_versatz`` nach «Kanal vor Reihe»: wirkt noch, wo der eigene Kanal am Rand-Tag
-  eine Lücke hat.
 
 Die Helfer ``A``, ``B``, ``KEINE``, ``T``, ``_mit_b``, ``_wechsel``, ``_abgelehnt`` nutzen die Schwesterdateien.
 
-Schwesterdateien: test_sensorwechsel_s3b_abfrage.py (Abfrage, Einstieg), test_sensorwechsel_s3_korrektur.py (Dienst der
-Korrektur), test_sensorwechsel_s2_naht.py (Naht und Nachtrag bei MQTT), test_daten_checker_zaehler_versatz.py.
+Schwesterdateien: test_sensorwechsel_s3b_abfrage.py (Abfrage, Einstieg), test_sensorwechsel_s2_naht.py (Naht und Nachtrag bei
+MQTT).
 """
 
 from __future__ import annotations
@@ -27,8 +25,6 @@ from backend.models.activity_log import ActivityLog
 from backend.models.kanal import Kanal, KanalQuelle, KanalStatistik
 from backend.models.sensor_snapshot import SensorSnapshot
 from backend.models.zuordnung_wechsel import ZuordnungWechsel
-from backend.tests.test_daten_checker_zaehler_versatz import JETZT, _pruefe as _versatz_pruefe, ha  # noqa: F401 — Fixture
-from backend.tests.test_daten_checker_zaehler_versatz import _anlage as _versatz_anlage
 from backend.tests.test_sensorwechsel_s1_verzeichnen import NETZ, NETZ_KEY, _anlage, _zeilen
 
 A = {"art": "ha", "entity_id": "sensor.a"}
@@ -170,34 +166,3 @@ async def test_befund_ruecksprung_schweigt_an_einer_verzeichneten_fortsetzung(db
     from backend.services.zuordnung_wechsel.zeitpunkt import vergiss
     vergiss(db)
     assert await DatenChecker(db)._check_zaehler_ruecksprung(a, jetzt=jetzt) == []
-
-
-# ═══ Probe: füllbare Lage des Befunds zaehler_versatz nach «Kanal vor Reihe» (B-7; seit 4b-1 «fuellbar») ════════════════
-
-async def test_fuellbare_lage_wirkt_nur_bei_einer_luecke_im_eigenen_kanal(db, ha, monkeypatch):  # noqa: F811
-    """Mit der echten Feld-Auskunft (B-5): trägt der eigene Spiegel die Rand-Tage, schweigt der Befund (die Tagesansicht zeigt
-    dort den Kanal) — auch mit einer einzelnen fehlenden Stunde (``voll`` ist eine Auflösungsregel). Reicht eine Lücke im
-    Spiegel von mehr als einem Tag über den Rand des Tagesfensters (hier vom 14.06. 19:00 bis 16.06.), liest die
-    Tagesansicht den Rand-Tag aus der Reihe — dann steht der Befund mit «Grund nachtragen» (sichtbare Wirkung; bis 4b-1 die
-    heilbare Lage mit «Tage neu aufbauen»)."""
-    import backend.services.energie_profil.kanal_stunden as ks
-    from backend.services.kanal import merken
-
-    async def keine_gruppe(*_a):
-        return frozenset()
-    monkeypatch.setattr(ks, "kanal_schluessel_des_tages", keine_gruppe)
-    a, _wb, key = await _versatz_anlage(db)
-    assert await _versatz_pruefe(db, a) == []
-    k = (await db.execute(select(Kanal).where(Kanal.key == key))).scalar_one()
-
-    async def loesche(von: datetime, bis: datetime) -> None:
-        await db.execute(KanalStatistik.__table__.delete().where(and_(
-            KanalStatistik.kanal_id == k.id, KanalStatistik.start_ts >= _ts(von), KanalStatistik.start_ts < _ts(bis))))
-        await db.commit()
-        merken.invalidiere(a.id)
-
-    await loesche(datetime(2026, 6, 10, 12), datetime(2026, 6, 10, 13))
-    assert await _versatz_pruefe(db, a) == []
-    await loesche(datetime(2026, 6, 14, 19), datetime(2026, 6, 16, 0))
-    (e,) = await _versatz_pruefe(db, a)
-    assert (e.code, e.werte["lage"], e.knopf) == ("zaehler_versatz", "fuellbar", "Grund nachtragen")

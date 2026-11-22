@@ -609,25 +609,21 @@ async def test_b4_nachtrag_nur_fuer_die_eigene_summe(db):
 # ═══ K-3, B-3: welche Wechsel eine Naht sind; Stundenform; Daten-Checker ═══════════════════════════════════════════
 
 @pytest.mark.parametrize("grund,aufgehoben,naht", [
-    ("fortsetzung", None, True), ("fortsetzung", 999, False), ("korrektur", None, False), (None, None, False),
-], ids=["fortsetzung", "aufgehoben", "korrektur", "ohne_grund"])
+    ("fortsetzung", None, True), ("fortsetzung", 999, False), (None, None, False),
+], ids=["fortsetzung", "aufgehoben", "ohne_grund"])
 async def test_b3_nur_eine_nicht_aufgehobene_fortsetzung_ist_naht(db, grund, aufgehoben, naht):
     """Die Ladestelle der Reihen-Leser (``fortsetzungs_naehte``): nur ``grund = fortsetzung`` ohne ``aufgehoben_durch`` ist eine
-    Naht — die Korrektur verwirft und füllt (Sitzung 3), eine aufgehobene Erklärung gilt nicht. Je Fall die Wirkung am
-    Tageswert (Gegenprobe im selben Test: der Fall «fortsetzung» liest 23, jeder andere den Sprung)."""
+    Naht, eine aufgehobene Erklärung gilt nicht (der Fall «korrektur» ist mit der Korrektur entfernt, Weg B, Sitzung B3a). Je
+    Fall die Wirkung am Tageswert (Gegenprobe im selben Test: der Fall «fortsetzung» liest 23, jeder andere den Sprung)."""
     a = await _anlage(db, ["ladung_pv_kwh"])
     await _reihe(db, a.id, "inv:2:ladung_pv_kwh", {t: _stand(t) for t in FENSTER})
     db.add(ZuordnungWechsel(anlage_id=a.id, sensor_key="inv:2:ladung_pv_kwh", erklaert_ts=ERKLAERT, ab_ts=NAHT,
                             vorher={"art": "ha", "entity_id": "sensor.alt"}, nachher={"art": "ha", "entity_id": "sensor.neu"},
-                            grund=grund, herkunft="wechsel", aufgehoben_durch=aufgehoben,
-                            falsch_seit_ts=TAG0 if grund == "korrektur" else None))
+                            grund=grund, herkunft="wechsel", aufgehoben_durch=aufgehoben))
     await db.flush()
     zw.vergiss(db)
-    # U2 a1 (P-1): eine Korrektur, die für ihre Zeit eine andere HA-Entität als richtig erklärt als die davor geltende, macht
-    # «Falsch seit» zur Naht ohne Rand-Stände (keine Differenz zweier Sensoren); ihr ``ab_ts`` bleibt keine Naht.
-    falsch_seit = [TAG0] if grund == "korrektur" else []
-    assert (await zw.fortsetzungs_naehte(db, a.id, "inv:2:ladung_pv_kwh")) == ([NAHT] if naht else falsch_seit)
-    assert await _tagesdetail(db, a) == pytest.approx(TAGESWERT if naht else TAGESWERT + 1.0 + SPRUNG - len(falsch_seit))
+    assert (await zw.fortsetzungs_naehte(db, a.id, "inv:2:ladung_pv_kwh")) == ([NAHT] if naht else [])
+    assert await _tagesdetail(db, a) == pytest.approx(TAGESWERT if naht else TAGESWERT + 1.0 + SPRUNG)
 
 
 async def test_b3_stundenform_keine_gerade_ueber_die_naht(db, monkeypatch):

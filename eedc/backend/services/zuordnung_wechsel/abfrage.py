@@ -13,8 +13,8 @@ der ``quellen``-Eintrag). Gefragt wird, wenn
 bleiben»: die Wechsel-Zeile trägt den Grund, die Leser überbrücken die Naht (Sitzung 2); ``loeschen`` — «Daten vor der Änderung
 löschen»: die Daten dieses Felds vor der Änderung gehen weg (``services/feld_loeschen.py``), das Feld verhält sich danach, als
 wäre der neue Sensor von Anfang an zugeordnet; gespeicherte Monatswerte bleiben, die Prüf-Antwort nennt sie (``loeschen``).
-Die frühere Wahl «verwerfen» mit «Falsch seit» und «Grund nachtragen» an einem verzeichneten Wechsel sind entfernt (Weg B,
-Sitzung B2); der Korrektur-Dienst dahinter trägt bis zu seinem Rückbau noch die Werkbank und die Korrektur am versetzten Abschnitt.
+Die frühere Wahl «verwerfen» mit «Falsch seit», «Grund nachtragen» an einem verzeichneten Wechsel (Weg B, Sitzung B2) und der
+Korrektur-Dienst dahinter samt der Korrektur am versetzten Abschnitt (Sitzung B3a) sind entfernt.
 
 **Ablauf in einer Schreib-Route** (Feld-Route, Preset): vor der Änderung ``verzeichnen.momentaufnahme``, danach die Änderung,
 dann ``vollziehe`` — fehlt für eine fragepflichtige Änderung der Grund, wirft sie ``GrundFehlt`` (die Route antwortet 422, der
@@ -33,7 +33,7 @@ from sqlalchemy import and_, distinct, func, select
 
 from backend.models.zuordnung_wechsel import GRUND_FORTSETZUNG
 from backend.services.zuordnung_wechsel.quelle import ART_HA, ART_KEINE, aenderungen, lade_wirksame_quellen
-from backend.services.zuordnung_wechsel.zeitpunkt import ab_ts_aus, ist_luecken_zeile, lade_wechsel
+from backend.services.zuordnung_wechsel.zeitpunkt import ab_ts_aus, lade_wechsel
 
 logger = logging.getLogger(__name__)
 
@@ -80,12 +80,11 @@ def _gleich(a: Optional[dict], b: Optional[dict]) -> bool:
 
 async def letzte_quelle_mit_werten(db, anlage_id: int, sensor_key: str, aktuell: Optional[dict]) -> Optional[dict]:
     """Die Quelle, gegen die verglichen wird: die heutige, wenn sie Werte liefern kann, sonst die letzte verzeichnete mit
-    Werten (A → «Keine» → B fragt bei B). ``None`` = unbekannt (dann wird gefragt). Eine Lücken-Zeile ist kein Wechsel
-    (``zeitpunkt.ist_luecken_zeile``, Bauplan «Zu §14» Nr. 105)."""
+    Werten (A → «Keine» → B fragt bei B). ``None`` = unbekannt (dann wird gefragt)."""
     if kann_werte_liefern(aktuell):
         return aktuell
     zeilen = sorted((w for w in (await lade_wechsel(db, anlage_id)).get(sensor_key, ())
-                     if w.aufgehoben_durch is None and not ist_luecken_zeile(w)),
+                     if w.aufgehoben_durch is None),
                     key=lambda w: (w.ab_ts, w.id or 0), reverse=True)
     for w in zeilen:
         for q in (w.nachher, w.vorher):
@@ -237,38 +236,6 @@ def antwort(f: Optional[Frage], label: Optional[str] = None) -> dict[str, Any]:
             "verzeichnet": True, "bleiben": f.bleiben, "loeschen": f.loeschen,
             # U3 b (G5, E5): was «bleiben» bei MQTT bzw. zwischen Home Assistant und MQTT tut.
             "bleiben_satz": None if f.bleiben else bleiben_satz(f.vorher, f.nachher, f.sensor_key)}
-
-
-# ── Vorschau des Korrektur-Dienstes (versetzter Abschnitt) ─────────────────────────────────────────────────────────────────
-
-
-def volle_stunde(dt: datetime) -> datetime:
-    """Örtliche volle Stunde ohne Zone (wie ``zuordnung_wechsel.ab_ts``); eine Angabe mit Zone wird erst örtlich."""
-    if dt.tzinfo is not None:
-        dt = dt.astimezone().replace(tzinfo=None)
-    return dt.replace(minute=0, second=0, microsecond=0)
-
-
-async def vorschau_des_auftrags(db, auftrag, *, nachtrag: bool = False) -> dict[str, Any]:
-    """Vorschau = Lauf für einen Auftrag des Korrektur-Dienstes (nur noch die Korrektur am versetzten Abschnitt, Routen
-    ``…/zaehler-versatz``; ``nachtrag``: das Intervall endet am Rückgang, Bauplan §13 Nr. 69)."""
-    from backend.services.zuordnung_wechsel import korrektur as kr
-
-    nicht = None
-    try:
-        svc = kr.ha_dienst(None)
-    except kr.KorrekturNichtStartbar as e:
-        svc, nicht = None, str(e)
-    try:
-        la = await kr.lage(db, auftrag, ha_svc=svc)
-    except kr.KorrekturNichtStartbar as e:      # ein Abruf aus Home Assistant scheitert (Bauplan «Zu §14» Nr. 116 E-K6)
-        svc, nicht = None, str(e)
-        la = await kr.lage(db, auftrag, ha_svc=None)
-    la.nicht_startbar = nicht
-    saetze = kr.saetze(la)
-    if nicht is None:            # der Kanal (§11 Nr. 48) vor dem Satz zum Rückweg
-        saetze[-1:-1] = await kr.kanal_saetze(la, svc, bis_zum_wechsel=nachtrag)
-    return {"saetze": saetze, **kr.vorschau_daten(la)}
 
 
 @dataclass

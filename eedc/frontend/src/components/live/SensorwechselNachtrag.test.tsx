@@ -6,17 +6,18 @@
  * kein «verwerfen»; (2) der Einstieg «Zähler getauscht» sagt vor dem Eintragen, dass sich ein Eintrag nicht zurücknehmen lässt
  * (Bauplan §12 Nr. 62).
  *
- * Schwesterdateien: SensorwechselDialog.test.tsx (Abfrage beim Wechsel, Fortschritt, Einstieg), SensorwechselStueck.test.tsx.
+ * Schwesterdateien: SensorwechselDialog.test.tsx (Abfrage beim Wechsel, Fortschritt, Einstieg). Die Korrektur am versetzten
+ * Abschnitt (SensorwechselStueck.test.tsx) ist seit Weg B, Sitzung B3a, entfernt.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import SensorwechselDialog, { GRUND_FORTSETZUNG_FOLGE, GRUND_KORREKTUR, GRUND_LOESCHEN_FOLGE } from './SensorwechselDialog'
+import SensorwechselDialog, { GRUND_FORTSETZUNG_FOLGE, GRUND_LOESCHEN_FOLGE } from './SensorwechselDialog'
 import ZaehlerGetauschtDialog, { ZG_ENDGUELTIG } from './ZaehlerGetauschtDialog'
 import { datenquellenApi, type QuellePruefung } from '../../api/datenquellen'
 
 const FRAGE: QuellePruefung = {
   grund_erforderlich: true, erster_wert: '2024-11-01T03:00:00', tage: 681, stand_alt: null, stand_neu: null,
-  sensor_key: 'inv:2:ladung_kwh', label: 'SMA eCharger 22 – Ladung gesamt (kWh)', verzeichnet: true, korrektur: null,
+  sensor_key: 'inv:2:ladung_kwh', label: 'SMA eCharger 22 – Ladung gesamt (kWh)', verzeichnet: true,
 }
 
 vi.mock('../../api/datenquellen', () => ({
@@ -33,7 +34,7 @@ describe('Sensorwechsel — Texte beim Wechsel (Weg B)', () => {
   it('beim Wechsel «bleiben» und «löschen», kein «verwerfen»', () => {
     render(<SensorwechselDialog isOpen fragen={[FRAGE]} onBestaetigen={vi.fn()} onAbbrechen={vi.fn()} />)
     expect(screen.getByText(GRUND_LOESCHEN_FOLGE)).toBeInTheDocument()
-    expect(document.body.textContent).not.toContain(GRUND_KORREKTUR)
+    expect(document.body.textContent).not.toContain('Bisherige Werte verwerfen')
     expect(screen.getByText(GRUND_FORTSETZUNG_FOLGE)).toBeInTheDocument()
   })
 })

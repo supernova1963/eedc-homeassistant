@@ -280,9 +280,9 @@ async def snapshot_anlage(
             Pfad (`resnap_anlage_range`) aktiv — der reguläre :05-hourly-
             Job behält das alte Verhalten (skip), damit ein temporäres
             HA-Hänger keinen frisch geschriebenen Slot wegnimmt.
-        nur_schluessel: Nur diese Zählerschlüssel (``None`` = alle). Der Korrektur-Lauf liest damit die Stände eines
-            verworfenen Intervalls neu (Sensorwechsel 4b-1-K2, ``zuordnung_wechsel.korrektur.fuelle_staende``) — die
-            übrigen Schlüssel der Stunde bleiben unberührt.
+        nur_schluessel: Nur diese Zählerschlüssel (``None`` = alle). Der Lauf nach dem Ansetzen eines Wechsels «bleiben»
+            liest damit die Stände der gefüllten Zeit neu (Sensorwechsel 4b-1-K2, ``zuordnung_wechsel.korrektur.
+            fuelle_staende``) — die übrigen Schlüssel der Stunde bleiben unberührt.
         ha_svc: Der HA-Dienst des Laufs (``None`` = der des Prozesses).
 
     Returns:
@@ -309,7 +309,7 @@ async def snapshot_anlage(
     # erzeugen und Slot h+1 = 2-Stunden-Delta als Spike (Forum-Beobachtung
     # Rainer #146, gleicher Mechanismus wie #145 nur in der Job-Schicht).
     # B-0 (Sensorwechsel mit Grund, Bauplan §8 Nr. 16): die Quelle UM `zeitpunkt` — vor jedem Schreiben, ein Upsert überschreibt
-    # immer. Gilt dort NICHT die heutige Quelle (vor einem verzeichneten Wechsel, im Korrektur-Intervall), füllt der Lauf nur
+    # immer. Gilt dort NICHT die heutige Quelle (vor einem verzeichneten Wechsel), füllt der Lauf nur
     # eine FEHLENDE Zeile aus der Quelle zum Zeitpunkt; eine vorhandene wird weder überschrieben noch gelöscht (sie kann auf
     # einem anderen HA-Summenstand derselben Entität stehen oder ein fremder Abschnitt sein, §7 Nr. 5). Gelöscht (force_resnap,
     # HA None, Spike-Regel #184) wird nur, wo die heutige Quelle gilt (§7 Nr. 3).

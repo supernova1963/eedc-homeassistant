@@ -162,7 +162,7 @@ class ZaehlerstandSpringtChecks:
             teile.append(SATZ_STAND.format(namen=_aufzaehlung(staende, namen)))
         return [CheckErgebnis(
             kategorie=CheckKategorie.HA_ZAEHLERSTAND_SPRINGT.value,
-            # Ohne Mengen-Fund wirkt kein Handgriff in eedc: Auskunft mit Info (W-6), wie `zaehler_versatz` ohne Heilweg.
+            # Ohne Mengen-Fund wirkt kein Handgriff in eedc: Auskunft mit Info (W-6).
             schwere=CheckSeverity.WARNING if mengen else CheckSeverity.INFO,
             meldung=(f"{len(funde)} Stunde(n), in denen ein Zählerstand in Home Assistant springt — Tag, Monat und Jahr "
                      "zählen den Sprung mit"),

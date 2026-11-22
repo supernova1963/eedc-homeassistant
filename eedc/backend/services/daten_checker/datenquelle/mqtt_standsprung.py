@@ -10,8 +10,9 @@ Menge. Bisher nannte das kein Befund (``zaehler_ruecksprung`` riet bei einem Fal
 dritten Arm «Rückgang» je **Quell-Abschnitt** eines MQTT-Kanals (Familie Mitschrift, ``statistic_id`` = MQTT-Schlüssel — nicht
 der Nachbau aus gespeicherten HA-Ständen); ein Zeilenpaar über eine Quellgrenze ist nie ein Sprung — nach dem Eintrag «Zähler
 getauscht» beginnt an der Stunde eine Quellzeile und der Befund verschwindet. Fenster: der ganze Kanal (E2; der Handgriff wirkt
-für jede Zeit). Ausgenommen: die Rückkehr-Stunden «kurz 0 und zurück» (``ha_sprung.rueckkehr_stunden``) und die Schritte eines
-versetzten Abschnitts, den ``zaehler_versatz`` nennt (G7: Sprung und Rückgang gehören dort zusammen).
+für jede Zeit). Ausgenommen: die Rückkehr-Stunden «kurz 0 und zurück» (``ha_sprung.rueckkehr_stunden``). Die frühere Ausnahme
+der Schritte eines versetzten Abschnitts (G7, Befund ``zaehler_versatz``) entfällt seit Weg B, Sitzung B3a (Bauplan Nr. 183/2):
+ohne die Korrektur am Stück nennt dieser Befund jeden Sprung, mit dem Knopf «Zähler getauscht».
 
 **Korrekturrunde U3-K (Nachmessung B2–B4):** der Arm «Sprung» meldet nur bei reifem Bezug oder über der Grenze «mehr, als eine
 Anlage in einer Stunde leisten kann» (``standsprung.grenze_der_einheit``, nur kWh) — die erste Ladung einer Wallbox nach Wochen
@@ -34,7 +35,7 @@ Datenquellen (``ziel_datenquelle_schluessel(…, getauscht=<Zeit>)``): der Dialo
 Rohstände der Beginn der Stunde).
 
 Schwesterdateien: ``standsprung.py`` (dieselbe Frage an der HA-Statistik), ``ruecksprung.py`` (lässt einen Rückgang aus, den diese
-Prüfung nennt), ``versatz.py`` (versetzter Abschnitt).
+Prüfung nennt).
 """
 
 from __future__ import annotations
@@ -220,15 +221,14 @@ def _zeile(name: str, f: Fund, zeit: datetime, details: str) -> CheckErgebnis:
 
 
 async def mqtt_spruenge(db, anlage_id: int) -> list[Fund]:
-    """Die Funde der Anlage (eine Abfrage über alle MQTT-Abschnitte), ohne die Schritte versetzter Abschnitte (G7) — auch
-    für ``zaehler_ruecksprung`` (ein Rückgang, den diese Prüfung nennt, steht dort nicht noch einmal)."""
-    from backend.services.daten_checker.datenquelle.versatz_mqtt import mqtt_versatz_stunden
+    """Die Funde der Anlage (eine Abfrage über alle MQTT-Abschnitte) — auch für ``zaehler_ruecksprung`` (ein Rückgang, den
+    diese Prüfung nennt, steht dort nicht noch einmal)."""
     from backend.services.snapshot.plausibility import schwelle_der_anlage_stunde_kwh
 
     zeilen = (await db.execute(text(_SQL), {"a": anlage_id})).all()
     if not zeilen:
         return []
-    funde = finde(zeilen, await mqtt_versatz_stunden(db, anlage_id), await schwelle_der_anlage_stunde_kwh(db, anlage_id))
+    funde = finde(zeilen, None, await schwelle_der_anlage_stunde_kwh(db, anlage_id))
     return [f for f in funde if await _bestaetigt(db, anlage_id, f)]
 
 
@@ -261,11 +261,8 @@ async def _bestaetigt(db, anlage_id: int, f: Fund) -> bool:
 
 async def benannte_stunden(db, anlage_id: int) -> dict[str, set[int]]:
     """Die Kanal-Stunden je Schlüssel, deren Rückgang ein Befund dieses Laufs nennt: «Zählerstand springt» mit fallendem Stand
-    (Arme «Neubeginn» und «Rückgang») und die Schritte eines versetzten Abschnitts (``versatz.mqtt_versatz_stunden``) — für
-    ``zaehler_ruecksprung`` (ein Befund je Ursache)."""
-    from backend.services.daten_checker.datenquelle.versatz_mqtt import mqtt_versatz_stunden
-
-    aus = {k: set(v) for k, v in (await mqtt_versatz_stunden(db, anlage_id)).items()}
+    (Arme «Neubeginn» und «Rückgang») — für ``zaehler_ruecksprung`` (ein Befund je Ursache)."""
+    aus: dict[str, set[int]] = {}
     for f in await mqtt_spruenge(db, anlage_id):
         if f.sprung.art in (NEUBEGINN, RUECKGANG):
             aus.setdefault(f.key, set()).add(f.sprung.start_ts)

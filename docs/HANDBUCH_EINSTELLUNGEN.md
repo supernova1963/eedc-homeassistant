@@ -618,7 +618,7 @@ Diese Kachel enthält **nur die Pflege-Funktionen** des Energieprofils; die **An
 - **„Wetterreihe nachziehen":** holt Globalstrahlung, Sonnenstunden und Ø Temperatur aller **abgeschlossenen** Monate von der an der Anlage eingestellten [Wetterquelle](#21-anlage). **Die einzige Pflege-Operation, die absichtlich ersetzt** — dafür nennt die Vorschau vorher, wie viele Monate betroffen sind und wie viele davon überschrieben werden. Gedacht für Reihen, die aus zwei Quellen zusammengewachsen sind (siehe [Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)); reine **Lücken** füllt eedc einmal täglich von allein.
 - **Energieprofil-Daten löschen:** anlage-spezifisch (Monatsdaten bleiben erhalten). Der Scheduler holt die **Messwerte** aus der HA-Langzeitstatistik nach — aber nur so weit, wie sie zurückreicht. Die **aufgezeichneten PV-Prognosen** (Grundlage des Genauigkeits-Vergleichs) lassen sich nicht neu berechnen und sind endgültig weg — ebenso die **Betriebsart** einer Wärmepumpe oder Klimaanlage für Tage, die Home Assistant nicht mehr im Verlauf hat.
 - **Einen Monat löschen:** nimmt den Monat **ganz** — die Zählerwerte und die Messwerte aller Komponenten desselben Monats. Der Dialog nennt vorher, welche Komponenten betroffen sind. ⚠ **Bis v4.0.13 war das teilbar** und die Voreinstellung schonte die Gerätewerte; gemeint war eine Vorsicht, herausgekommen ist ein Monat, der in keiner Liste mehr auftauchte und trotzdem jeden erneuten Import abwies. Einspeisung und Netzbezug sind Pflichtfelder eines Monats — eine Hälfte allein zu löschen ergibt keinen Zustand, den eine Auswertung darstellen könnte.
-- **Reparatur-Werkbank:** die gezielten Neuberechnungs-Operationen — **„Tag neu aggregieren"** (mit Alt/Neu-Vorschau), **„Mehrere Tage neu aggregieren"** (Datumsbereich, max. 31 Tage, Tag für Tag festgeschrieben) — der punktuelle Reparatur-Pfad, der fehlende Snapshots nachholt. Dazu **„HA-Spiegel jetzt abgleichen"**: übernimmt eine Korrektur in Home Assistant sofort statt beim nächtlichen Abgleich (02:45) in die Tages- und Monats-Kennzahlen ([Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)). Und **„Werte vor dem Sensorbeginn verwerfen"**: nach einem Sensortausch die Werte des alten Sensors für **genau ein Feld** verwerfen — im HA-Spiegel, in den Stunden- und Tageswerten und in den Zählerständen; mit Home Assistant übernimmt eedc danach die Geschichte des neuen Sensors und bildet die betroffenen Tage neu (Wetter und Börsenpreis bleiben), gespeicherte Monatswerte bleiben; mit Vorschau und ohne Rückweg in eedc ([Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)). Bewusst **kein** globaler „Heiler-Knopf". Was Home Assistant für einen Tag nicht mehr kennt — die Betriebsart, sowie Ladestand und Strompreis von Sensoren ohne Langzeitstatistik —, lässt das Neu-Aggregieren stehen; hat HA für einen Tag gar keinen Leistungswert mehr, holt die Werkbank die Kurve aus der Langzeitstatistik, statt die gespeicherten Gerätewerte zu überschreiben ([Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)).
+- **Reparatur-Werkbank:** die gezielten Neuberechnungs-Operationen — **„Tag neu aggregieren"** (mit Alt/Neu-Vorschau), **„Mehrere Tage neu aggregieren"** (Datumsbereich, max. 31 Tage, Tag für Tag festgeschrieben) — der punktuelle Reparatur-Pfad, der fehlende Snapshots nachholt. Dazu **„HA-Spiegel jetzt abgleichen"**: übernimmt eine Korrektur in Home Assistant sofort statt beim nächtlichen Abgleich (02:45) in die Tages- und Monats-Kennzahlen ([Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)). Und **„Werte vor dem Sensorbeginn verwerfen"**: nach einem Sensortausch die Werte des alten Sensors für **genau ein Feld** verwerfen — im HA-Spiegel und in den Stunden- und Tageswerten, Monate mit Abschluss unberührt, mit Vorschau und ohne Rückweg ([Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)). Bewusst **kein** globaler „Heiler-Knopf". Was Home Assistant für einen Tag nicht mehr kennt — die Betriebsart, sowie Ladestand und Strompreis von Sensoren ohne Langzeitstatistik —, lässt das Neu-Aggregieren stehen; hat HA für einen Tag gar keinen Leistungswert mehr, holt die Werkbank die Kurve aus der Langzeitstatistik, statt die gespeicherten Gerätewerte zu überschreiben ([Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)).
 
 > **Tipp:** Steht im CHANGELOG eines Updates „Empfohlene Aktion: betroffene Tage neu aggregieren", nutze dafür **„Mehrere Tage neu aggregieren"** über den betroffenen Zeitraum (in Schüben zu je max. 31 Tagen). Das Nachfüllen aus HA-LTS überschreibt bestehende Tage nicht — es füllt nur echte Lücken.
 
@@ -994,40 +994,16 @@ eigenen Werten nicht, sondern nennen es; seine Quelle wechselst du hier am Feld.
   auf **demselben** Topic (etwa ein neues Gerät mit eigenem Zählerstand), nennt der Daten-Checker den Sprung
   (§4.8k) — dieses Symbol ist dann der Weg.
 - **Vor dem ersten eigenen Wert** des Felds gibt es keinen Sprung zu überbrücken — eedc nennt den ersten Wert und trägt
-  nichts ein; ebenso in einer Zeit, deren Werte eine Korrektur verworfen hat.
-
-**Ein versetzter Abschnitt in den gespeicherten Zählerständen.** Hat eedc eine Zeit lang die Stände eines anderen Sensors
-gespeichert, ohne dass ein Wechsel verzeichnet ist, meldet der Daten-Checker den Abschnitt (Befund „Zählerstände liegen für
-einen Abschnitt versetzt", [Daten-Checker §4.8f](HANDBUCH_DATEN_CHECKER.md#48f-zaehlerstaende--versetzter-abschnitt)). Sein
-Knopf **„Grund nachtragen"** öffnet hier am Feld denselben Dialog — nur mit **„Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet"**
-und mit der festen Zeit des Abschnitts. eedc verwirft die Zählerstände des Abschnitts; passen die Stände davor und danach zu
-dem, was Home Assistant für die Quelle davor und danach führt, liest eedc den Abschnitt aus Home Assistant neu und speichert
-ihn. Sonst — ohne Home Assistant, oder Home Assistant führt die Quelle auf einer anderen Höhe oder für diese Zeit nichts —
-bleibt der Abschnitt leer, und eedc rechnet über ihn wie über jede Zählerlücke (davor und danach gilt dieselbe Quelle; wie
-oben); ist zwischen den Ständen davor und danach ein Zählertausch eingetragen, bildet eedc über ihn keine Differenz (wie
-oben). Gelten davor und
-danach verschiedene Quellen, trägt der Befund statt „Grund nachtragen" den Knopf „Was gilt" und nennt beide Quellen; ebenso,
-solange Home Assistant eingerichtet, aber gerade nicht erreichbar ist.
-
-**Ein versetzter Abschnitt in einer MQTT-Reihe.** Hat eine Zeit lang ein anderes Gerät auf demselben Topic gesendet (oder wurde
-ein Zähler getauscht und später zurückgetauscht), springt der Stand und fällt später um etwa denselben Betrag zurück; eedc zählt
-beide Schritte als Menge, die Tageswerte an beiden Tagen sind falsch. Der Daten-Checker meldet den Abschnitt (§4.8f), sein Knopf
-**„Grund nachtragen"** öffnet den Dialog mit beiden Antworten: **„Bisherige Werte bleiben"** trägt am Sprung und am Rückgang je
-einen Zählertausch ein (wie oben) — die Werte des Abschnitts zählen, die zwei Sprünge nicht; **„Bisherige Werte verwerfen"**
-verwirft die Zählerstände des Abschnitts — da davor und danach dieselbe Quelle gilt, rechnet eedc über die leere Zeit wie über
-jede Zählerlücke: die Menge des Abschnitts steht an dem Tag, an dem er endet, die Tage darin zeigen keinen Wert; im Monat fehlt
-nichts.
+  nichts ein; ebenso in einer Zeit, deren Werte verworfen sind („Daten vor der Änderung löschen“, Reparatur-Werkbank).
 
 **„Bisherige Werte bleiben" gewählt, aber der bisherige Sensor war doch der falsche?** Bei einem Feld aus Home Assistant ist der Weg die
 Operation **„Werte vor dem Sensorbeginn verwerfen"** in der Reparatur-Werkbank ([§5.2](#52-energieprofil-pflege)) mit
-**„Operation ausführen"**: sie verwirft die Werte dieses Felds vor dem Beginn des neuen Sensors — alles davor, ein „Falsch
-seit" gibt es dort nicht — und hebt das eingetragene „Bisherige Werte bleiben" auf. Bei einem Feld über MQTT verwirft die
-Operation die Werte vor dem Beginn des neuen Sensors ebenso; das eingetragene „Bisherige Werte bleiben" bleibt dort stehen — sie sorgt dafür, dass der
-letzte Stand des bisherigen Sensors und der erste des neuen keine Menge ergeben.
+**„Operation ausführen"**: sie verwirft die Werte dieses Felds vor dem Beginn des neuen Sensors — alles davor; was genau sie
+verwirft und was bleibt, steht in [§5.2](#52-energieprofil-pflege).
 
 Davon zu unterscheiden ist eine Korrektur **in Home Assistant** (Einstellungen → Werkzeuge → Statistik → „Summe anpassen"; in älteren Home-Assistant-Versionen unter Entwicklerwerkzeuge → Statistik): Sie übernimmt eedc in den HA-Spiegel, aus dem die Tages- und Monats-Kennzahlen kommen, beim nächtlichen Abgleich um 02:45 — oder sofort über **„HA-Spiegel jetzt abgleichen"** in der Reparatur-Werkbank.
 
-> **Ohne Antwort im Dialog passiert nichts von allein.** eedc rechnet die Historie nicht selbsttätig neu — nur „Daten vor der Änderung löschen“, „Bisherige Werte bleiben" zwischen zwei Sensoren aus Home Assistant und die Korrektur am versetzten Abschnitt bilden die betroffenen Tage neu.
+> **Ohne Antwort im Dialog passiert nichts von allein.** eedc rechnet die Historie nicht selbsttätig neu — nur „Daten vor der Änderung löschen“ und „Bisherige Werte bleiben" zwischen zwei Sensoren aus Home Assistant bilden die betroffenen Tage neu.
 
 > ⚑ **Eine Ausnahme, und die ist gewollt: der laufende Tag.** Er wird alle 15 Minuten vollständig neu gerechnet — eine Zuordnung, die du um 22 Uhr anlegst, wirkt dort also binnen einer Viertelstunde für **den ganzen Tag** zurück, nicht erst ab 22 Uhr. Das ist der Grund, warum dieser Abschnitt „nicht rückwirkend" heißt und für heute trotzdem etwas anderes gilt.
 

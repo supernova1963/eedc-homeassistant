@@ -4,7 +4,7 @@ Daten-Checker — Provenance-Konflikte, Datenquelle-Status & -Drift
 
 Reiner Move aus dem früheren Modul `daten_checker.py` (Tier-4 Achse C).
 
-Seit 18.09.2026 ein Unterpaket (Vorlage 9 des Refactorings grosser Dateien, reiner Umzug): ``quellen`` · ``tage`` · ``speicher`` · ``klima`` · ``connector`` · ``zeitzone`` · ``ruecksprung`` · ``ha_sprung`` · ``ha_rueckgang`` · ``messpunkt`` · ``zaehler_steht`` (N-662) · ``versatz`` (Verdacht N-803) · ``standsprung`` (Sensorwechsel U2 Lauf c) · ``verworfen`` · ``monatswert`` (Sensorwechsel U3 a) · ``mqtt_standsprung`` (U3 b) · ``geloescht`` (Weg B) — je Prüf-Familie eine Mixin-Klasse. Diese Fassade trägt ``DatenquelleChecks`` als Verbund weiter; ``DatenChecker`` (``daten_checker/__init__.py``)
+Seit 18.09.2026 ein Unterpaket (Vorlage 9 des Refactorings grosser Dateien, reiner Umzug): ``quellen`` · ``tage`` · ``speicher`` · ``klima`` · ``connector`` · ``zeitzone`` · ``ruecksprung`` · ``ha_sprung`` · ``ha_rueckgang`` · ``messpunkt`` · ``zaehler_steht`` (N-662) · ``standsprung`` (Sensorwechsel U2 Lauf c) · ``monatswert`` (Sensorwechsel U3 a) · ``mqtt_standsprung`` (U3 b) · ``geloescht`` (Weg B) — je Prüf-Familie eine Mixin-Klasse. Diese Fassade trägt ``DatenquelleChecks`` als Verbund weiter; ``DatenChecker`` (``daten_checker/__init__.py``)
 komponiert wie bisher. Die Helfer und Konstanten liegen bei ihren Prüfungen (Patch-Ziel der Tests ist das jeweilige Modul).
 """
 
@@ -19,9 +19,7 @@ from .ha_sprung import HaZaehlersprungChecks
 from .ha_rueckgang import HaRueckgangChecks
 from .messpunkt import MesspunktChecks
 from .zaehler_steht import ZaehlerStehtChecks
-from .versatz import ZaehlerVersatzChecks
 from .standsprung import ZaehlerstandSpringtChecks
-from .verworfen import ZaehlerZeitVerworfenChecks
 from .monatswert import MonatswertUeberholtChecks
 from .mqtt_standsprung import MqttZaehlerstandSpringtChecks
 from .geloescht import DatenGeloeschtChecks
@@ -39,9 +37,7 @@ class DatenquelleChecks(
     HaRueckgangChecks,
     MesspunktChecks,
     ZaehlerStehtChecks,
-    ZaehlerVersatzChecks,
     ZaehlerstandSpringtChecks,
-    ZaehlerZeitVerworfenChecks,
     DatenGeloeschtChecks,
     MonatswertUeberholtChecks,
     MqttZaehlerstandSpringtChecks,

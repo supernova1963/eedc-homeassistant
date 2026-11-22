@@ -26,11 +26,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Assistant („Summe anpassen“) und trägt nichts ein. Bei MQTT entscheidest du, ob an einer Zeit ein Tausch eingetragen wird:
   eedc zeigt die Zählerstände vor und nach der gewählten Zeit und die Menge, die danach nicht zählt, und sagt, ob es dort einen
   Sprung sieht; eingetragen wird erst, wenn der neue Zähler einen Stand gemeldet hat. Je Stunde und Feld geht ein Eintrag.
-- **Neue Daten-Checker-Befunde** zur Herkunft der Zählerstände: „Zählerstände – versetzter Abschnitt“ (Knopf „Grund
-  nachtragen“), „Zählerstände – Zählerstand springt“ (Knopf „Aus Home
-  Assistant neu übernehmen“), „Zählerstände – Zählerstand springt (MQTT)“ (Knopf „Zähler getauscht“), „Zählerstände – Zeit
-  verworfen“ und „Zählerstände – Daten vor der Änderung gelöscht“ (Auskunft „Was gilt“) und „Zählerstände – Gespeicherter
-  Monatswert passt nicht mehr“ (Knopf „Monat öffnen“).
+- **Neue Daten-Checker-Befunde** zur Herkunft der Zählerstände: „Zählerstände – Zählerstand springt“ (Knopf „Aus Home
+  Assistant neu übernehmen“), „Zählerstände – Zählerstand springt (MQTT)“ (Knopf „Zähler getauscht“), „Zählerstände – Daten
+  vor der Änderung gelöscht“ (Auskunft „Was gilt“) und „Zählerstände – Gespeicherter Monatswert passt nicht mehr“ (Knopf
+  „Monat öffnen“).
 - **Menüwege von Home Assistant 2026.11** in Befunden, Lösungswegen, Handbüchern und Dialogen: „Einstellungen → Werkzeuge →
   Statistik (in älteren Home-Assistant-Versionen: Entwicklerwerkzeuge → Statistik)“, „Summe anpassen“, „Zeitpunkt auswählen“,
   „Neuer Wert“, „Anpassen“.
@@ -117,10 +116,6 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Home Assistant: nach dem Abschalten der Remote-Verbindung fragt eedc Home Assistant nicht weiter ab.** Wurde die
   Verbindung zu einem entfernten Home Assistant abgeschaltet, behielt eedc Adresse und Zugang bis zum nächsten Neustart und
   galt weiter als verbunden. Jetzt kehrt eedc sofort zur Verbindung beim Start zurück.
-- **Daten-Checker „Zählerstände – versetzter Abschnitt“: drei Grenzen benannt.** Der Lösungsweg sagt jetzt, was der
-  Befund nicht erkennt: einen einzelnen alten Wechsel ohne Rückgang; die Netzladung des Speichers in Monaten ohne
-  gespeicherte Monatswerte des Speichers, die eedc aus den gespeicherten Zählerständen liest; und dass ohne Stundenwerte
-  aus Home Assistant jeder Tag aus diesen Ständen rechnet.
 - **Handbuch: „Gesamt“ in *Cockpit → Jahr* ist nicht geplant.** Das Handbuch sagte, eine Selektor-Stellung für die ganze
   Laufzeit stehe auf der Roadmap; sie ist seit dem 3.11.2026 verworfen. Die volle Laufzeit zeigen Komponenten-Hub,
   Jahresbericht („Gesamtzeitraum“), Auswertungen („Alle Jahre“) und die Kachel „CO₂ kumuliert“.

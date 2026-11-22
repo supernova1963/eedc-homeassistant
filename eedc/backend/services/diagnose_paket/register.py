@@ -93,7 +93,7 @@ EINSTELLUNGEN = {
 }
 
 #: ``settings`` mit Schlüssel-Präfix (``<präfix><kennung>``) → was in ``lage.einstellungen`` darf; nur Zustände der Anlage des
-#: Pakets (``anlage_id``), Listen als Anzahl. ``korrektur_lauf:`` — Hintergrund-Lauf einer Korrektur (Sensorwechsel S3a/S3b,
+#: Pakets (``anlage_id``), Listen als Anzahl. ``korrektur_lauf:`` — Hintergrund-Lauf nach einem Sensorwechsel («löschen», «bleiben»;
 #: ``services/zuordnung_wechsel/korrektur_lauf.py``).
 EINSTELLUNGEN_PRAEFIX = {
     "korrektur_lauf:": ("sensor_key", "status", "erledigt", "tage", "fehler", "beginn", "ende", "fuellen"),
@@ -285,7 +285,7 @@ REGISTER: dict[str, Tabelle] = {
     # Sensorwechsel mit Grund (B-1): `vorher`/`nachher` sind wirksame Quellen — dieselbe Klasse wie `anlagen.sensor_mapping`
     # (Entität und MQTT-Topic als Text, keine Zugangsdaten; Form `services/zuordnung_wechsel/quelle.py`).
     "zuordnung_wechsel": _tab(
-        "anlage", "id anlage_id sensor_key erklaert_ts ab_ts vorher nachher grund falsch_seit_ts herkunft aufgehoben_durch lauf "
+        "anlage", "id anlage_id sensor_key erklaert_ts ab_ts vorher nachher grund herkunft aufgehoben_durch "
         "ansatz stand_alt_ende stand_neu_null eingetragen_ts",
         vorher=_ZUORDNUNG, nachher=_ZUORDNUNG),
 }

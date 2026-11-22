@@ -212,12 +212,11 @@ async def test_f9_zaehlt_ab_ohne_ueberlappung_abgelehnt(db, monkeypatch):
 async def test_wartegrund_und_lauf_des_ansetzens(db, monkeypatch, sprengsatz):
     """Umstellung 06:40, bevor HA eine Zeile des neuen führt: die Route nennt den Wartegrund als Satz, die Lese-Route
     ``wartende-wechsel`` ebenso (auch nach dem Neuladen). Nach dem Ansetzen trägt der Lauf ``art = ansetzen`` (Fortschritt-Route,
-    laufende Läufe); ein offener Lauf des Ansetzens sperrt eine Korrektur mit eigenem Satz (keine «frühere Korrektur»).
-    Sprengsatz: der Lauf wird ohne Art angelegt ⇒ «korrektur»."""
+    laufende Läufe). Der Satz, mit dem ein offener Lauf eine Korrektur sperrte, ist mit der Korrektur entfernt (Weg B, Sitzung
+    B3a). Sprengsatz: der Lauf wird ohne Art angelegt ⇒ «korrektur»."""
     from backend.api.routes.sensorwechsel import korrektur_lauf_stand, korrektur_laeufe, wartende_wechsel
     from backend.services.zuordnung_wechsel import bleiben as bl
     from backend.services.zuordnung_wechsel import korrektur_lauf
-    from backend.services.zuordnung_wechsel import nachtrag as nt
     from backend.services.zuordnung_wechsel.ansatz import setze_an
 
     if sprengsatz:
@@ -245,7 +244,6 @@ async def test_wartegrund_und_lauf_des_ansetzens(db, monkeypatch, sprengsatz):
     erwartet = "korrektur" if sprengsatz else "ansetzen"
     assert stand["art"] == erwartet and [x["art"] for x in laufend] == [erwartet]
     await korrektur_lauf._schreibe(w.sitzungen, e["lauf"], fuellen={"erledigt": False})
-    assert await nt.satz_lauf_offen(db, w.a.id, KEY) == (nt.SATZ_LAUF_OFFEN if sprengsatz else nt.SATZ_LAUF_OFFEN_ANSETZEN)
     assert [x for x in await wartende_wechsel(w.a.id, db) if x["sensor_key"] == KEY] == []
 
 
@@ -343,57 +341,6 @@ def test_tagesmenge_aus_abschnitten():
 
 
 # ═══ Texte aus den Vorläufen (Punkt 5) ══════════════════════════════════════════════════════════════════════════════════
-
-def test_satz_hoehe_ungeprueft_mit_handgriff_nur_wo_falsch_seit_waehlbar_ist():
-    """``SATZ_LUECKE_HOEHE`` nennt den Grund (HA führt den richtigen Sensor erst ab dem Ende der Zeit); der Handgriff «Falsch
-    seit auf … setzen» steht nur, wo «Falsch seit» wählbar ist (Dialog, Nachtrag) — nicht an der Werkbank (von Beginn an) und
-    nicht am Stück (feste Zeit)."""
-    from types import SimpleNamespace
-
-    from backend.services.zuordnung_wechsel import korrektur as kr
-
-    def la(**auftrag):
-        return SimpleNamespace(luecke=(datetime(2026, 6, 10, 1), datetime(2026, 6, 12)), zaehlerluecke=False,
-                               hoehe_ungeprueft=True, luecke_tage=[], luecke_rand=[], zaehlerluecke_tag=None, staende_neu=None,
-                               auftrag=SimpleNamespace(**auftrag))
-    hand = kr.SATZ_LUECKE_HOEHE_HANDGRIFF.format(bis="12.06.2026 00:00")
-    s = kr.saetze_luecke(la(falsch_seit=datetime(2026, 6, 10, 1), stueck=False))
-    assert s[:2] == [kr.SATZ_LUECKE_HOEHE.format(von="10.06.2026 01:00", bis="12.06.2026 00:00"), hand]
-    assert "erst ab dann" in s[0]
-    assert hand not in kr.saetze_luecke(la(falsch_seit=None, stueck=False))
-    assert hand not in kr.saetze_luecke(la(falsch_seit=datetime(2026, 6, 10, 1), stueck=True))
-
-
-@pytest.mark.parametrize("sprengsatz", [False, True])
-async def test_befund_fuellbar_nennt_die_spaeter_beginnende_geschichte(db, monkeypatch, sprengsatz):
-    """Befund «Zählerstände liegen versetzt», Lage ``fuellbar``, Home Assistant führt die Quelle im Abschnitt erst ab 12.06.
-    00:00: der Satz nennt diese Zeit — dieselbe wie die Vorschau des Dialogs (``SATZ_STAENDE_AB``) — und dass über die Zeit
-    davor wie über jede Zählerlücke gerechnet wird. Sprengsatz: ohne die Vorschau ⇒ der gewöhnliche Satz «… auf derselben
-    Höhe wie davor und danach» ohne Zeit."""
-    import backend.services.daten_checker.datenquelle.versatz as vs
-    from backend.api.routes import sensorwechsel as sw
-    from backend.services.zuordnung_wechsel import korrektur as kr
-    from backend.tests import test_daten_checker_zaehler_versatz as v
-    from backend.tests.test_sensorwechsel_s4b1_stueck import _body
-    from backend.tests.test_sensorwechsel_u1k_proben import _ha_mit
-
-    monkeypatch.setattr(kr, "ha_eingerichtet", lambda: True)
-    _ha_mit(monkeypatch, loch=range(v.SPRUNG_H, 11 * 24))
-    v._kanal_tage(monkeypatch, {})
-    if sprengsatz:
-        async def keine(*_a, **_k):
-            return None
-        monkeypatch.setattr(vs.ZaehlerVersatzChecks, "_versatz_fuellbar_ab", keine)
-    a, _wb, key = await v._anlage(db, spiegel=False)
-    (e,) = await v._pruefe(db, a)
-    assert e.werte["lage"] == vs.LAGE_FUELLBAR
-    k = (await sw.pruefe_stueck(a.id, _body(key), db))["korrektur"]
-    assert kr.SATZ_STAENDE_AB.format(zeit="12.06.2026 00:00") in k["saetze"]
-    if sprengsatz:
-        assert "auf derselben Höhe wie davor und danach." in e.details and "12.06.2026 00:00" not in e.details
-        return
-    assert "aber erst ab 12.06.2026 00:00 Uhr — von dort an liest eedc sie neu" in e.details
-    assert e.details.endswith(vs._SATZ_FUELLBAR_AB_LUECKE)
 
 
 def test_f8_live_schnitt_der_alte_zaehlt_nur_bis_g():

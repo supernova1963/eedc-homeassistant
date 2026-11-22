@@ -1,7 +1,8 @@
 """Die Daten EINES Felds vor einem Zeitpunkt löschen — der eine Baustein für «Daten vor der Änderung löschen» beim
 Sensorwechsel (Weg B, Entscheid Gernot 21.11.2026, Bauplan Sensorwechsel Nr. 174–180) und die Werkbank-Operation «Werte vor
-dem Sensorbeginn verwerfen» (Parameter ``auch_abschluss``, ``zum_platzhalter``; die Werkbank läuft bis zum Rückbau des
-Korrektur-Kerns noch über ``zuordnung_wechsel/korrektur.fuehre_aus`` und teilt hier das Löschen der Zählerstände).
+dem Sensorbeginn verwerfen» teilt die Bausteine der Kanal- und Bestandsschicht (``kanal/verwerfen``,
+``verwerfen_vor_quellbeginn.leere_bestand``), läuft aber seit dem Rückbau des Korrektur-Kerns (Weg B, Sitzung B3a) wieder auf
+ihrem eigenen Weg wie in v4.3.1 (sie löscht keine Zählerstände, füllt nichts nach und bildet keine Tage neu).
 
 **Was weg ist** (nur dieses Feld, nur vor ``t``):
 
@@ -12,7 +13,8 @@ Korrektur-Kerns noch über ``zuordnung_wechsel/korrektur.fuehre_aus`` und teilt 
   — das Feld verhält sich, als wäre der neue Sensor von Anfang an zugeordnet. Ohne: die Quellen bekommen die Marke «verworfen
   am» (Werkbank-Form, ein Halt fürs Nachfüllen).
 * **Zählerstände** (``sensor_snapshots``) und **MQTT-Rohstände** des Schlüssels vor ``t`` (``verwerfe_staende``).
-* **Wechsel-Zeilen** des Schlüssels (nur mit ``zum_platzhalter``): ohne sie gilt für jede Zeit die heutige Zuordnung.
+* **Wechsel-Zeilen** des Schlüssels (nur mit ``zum_platzhalter``; ``loesche_wechsel``): ohne sie gilt für jede Zeit die heutige
+  Zuordnung. Die Werkbank löscht über denselben Baustein die Wechsel bis zum Ende der ersten Stunde ab ihrem Zeitpunkt.
 * **Bestand:** der Feld-Schlüssel in Stunden- und Tageszeilen bis zum Bestandstag von ``t``
   (``verwerfen_vor_quellbeginn.leere_bestand``) — mit ``auch_abschluss`` in **allen** Monaten, sonst ohne Monate mit
   Abschluss.
@@ -68,7 +70,7 @@ class Geloescht:
 async def verwerfe_staende(db: AsyncSession, anlage_id: int, key: str, bis: datetime,
                            von: Optional[datetime] = None) -> tuple[int, int]:
     """Zählerstände (``sensor_snapshots``) und MQTT-Rohstände des Schlüssels in ``[von, bis)`` löschen (``von`` ``None`` =
-    von Beginn an). Returns: ``(Zählerstände, Rohstände)``. Auch der Korrektur-Dienst verwirft hierüber."""
+    von Beginn an). Returns: ``(Zählerstände, Rohstände)``."""
     from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
     from backend.models.sensor_snapshot import SensorSnapshot
     from backend.services.snapshot.keys import _sensor_key_to_mqtt_key
@@ -119,14 +121,27 @@ async def _kanal(db: AsyncSession, g: Geloescht, anlage_id: int, t_ts: int, jetz
                                                    nur=lambda key: gehoert_zu(g.abgeleitet_familien, key))
 
 
+async def loesche_wechsel(db: AsyncSession, anlage_id: int, key: str, *, bis: Optional[datetime] = None) -> int:
+    """Die verzeichneten Wechsel des Schlüssels löschen — alle («löschen»), mit ``bis`` die mit ``ab_ts ≤ bis`` (Werkbank «Werte
+    vor dem Sensorbeginn verwerfen», Bauplan Sensorwechsel Nr. 184/2); ohne sie gilt dort die heutige Zuordnung (B-0). In der
+    Sitzung des Aufrufers, ohne Commit. Returns: Zahl der gelöschten Zeilen."""
+    from backend.models.zuordnung_wechsel import ZuordnungWechsel
+    from backend.services.zuordnung_wechsel.zeitpunkt import vergiss
+
+    bed = [ZuordnungWechsel.anlage_id == anlage_id, ZuordnungWechsel.sensor_key == key]
+    if bis is not None:
+        bed.append(ZuordnungWechsel.ab_ts <= bis)
+    n = int((await db.execute(delete(ZuordnungWechsel).where(and_(*bed)))).rowcount or 0)
+    vergiss(db, anlage_id)
+    return n
+
+
 async def loesche_vor(db: AsyncSession, anlage, key: str, t: datetime, *, auch_abschluss: bool, zum_platzhalter: bool,
                       jetzt: Optional[datetime] = None) -> Geloescht:
     """Die Daten des Felds ``key`` vor ``t`` löschen (Modul-Docstring), in der Sitzung des Aufrufers, ohne Commit."""
-    from backend.models.zuordnung_wechsel import ZuordnungWechsel
     from backend.services import verwerfen_vor_quellbeginn as vq
     from backend.services.kanal import merken
     from backend.services.kanal.abgeleitet import tag_der_stunde
-    from backend.services.zuordnung_wechsel.zeitpunkt import vergiss
 
     jetzt = (jetzt or datetime.now()).replace(microsecond=0)
     t_ts = int(t.timestamp())
@@ -137,9 +152,7 @@ async def loesche_vor(db: AsyncSession, anlage, key: str, t: datetime, *, auch_a
     await _kanal(db, g, anlage.id, t_ts, int(jetzt.timestamp()), zum_platzhalter)
     g.staende, g.rohstaende = await verwerfe_staende(db, anlage.id, key, t)
     if zum_platzhalter:
-        g.wechsel = int((await db.execute(delete(ZuordnungWechsel).where(and_(
-            ZuordnungWechsel.anlage_id == anlage.id, ZuordnungWechsel.sensor_key == key)))).rowcount or 0)
-        vergiss(db, anlage.id)
+        g.wechsel = await loesche_wechsel(db, anlage.id, key)
     abschluss = frozenset() if auch_abschluss else await vq.abschluss_monate(db, anlage.id)
     g.bestand = await vq.leere_bestand(db, anlage.id, ziele, bis_tag, abschluss)
     merken.invalidiere(anlage.id, db=db)

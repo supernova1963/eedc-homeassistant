@@ -15,8 +15,9 @@ danach 0,5 kWh/h. Soll nach HAs Regel: Σ der Zeilen-Zuwächse beider Statistike
 Die Zeiten sind Epoch-Stunden (Sommerzeit-Tage haben 23/25 Zeilen); jede Probe rechnet ihr Soll aus denselben Zeilen und
 fährt in Berlin, ``Pacific/Auckland`` und ``UTC``. Keine Probe liest die Uhr.
 
-Schwesterdateien: test_sensorwechsel_s2_naht.py (die Formen der Naht ohne Rand-Stände), test_sensorwechsel_u1k_proben.py (die
-Korrektur, an der P-2 sitzt), test_reihen_leser_waechter.py (Einstufung der Leser).
+Schwesterdateien: test_sensorwechsel_s2_naht.py (die Formen der Naht ohne Rand-Stände), test_reihen_leser_waechter.py
+(Einstufung der Leser). Die Proben P-1 («Falsch seit» als Naht) und P-2 (Höhe ungeprüft) sind mit der Korrektur entfernt (Weg B,
+Sitzung B3a).
 """
 
 from __future__ import annotations
@@ -51,7 +52,7 @@ def test_naht_mit_rand_hebt_und_teilt_nicht():
     assert zn.stand_differenz(f, [naht]) == pytest.approx(3.5)
     assert zn.stand_differenz(f, [t[2]]) == pytest.approx(1.0 + 1.5)                  # Sprengsatz: ohne Rand teilt sie (B-3)
     assert zn.zaehlwerk_menge(f, [naht]) == pytest.approx(3.5)
-    assert zn.traegt_messung(f, [naht]) and zn.trennende([naht, t[1]]) == [t[1]]
+    assert zn.trennende([naht, t[1]]) == [t[1]]
     assert zn.hebung_am(t[4], [naht, zn.Naht(t[3], 2.0)]) == pytest.approx(12.5)     # zwei Nähte: die Versätze summieren
     assert zn.gehoben(f, [t[2]]) is f and zn.gehobene_staende({0: 1.0}, lambda i: t[i], [t[2]]) == {0: 1.0}   # bitgleich
     assert naht == t[2] and hash(naht) == hash(t[2]) and sorted([t[3], naht]) == [naht, t[3]]
@@ -507,101 +508,6 @@ async def test_monat_nur_mit_dem_alten_sensor_zeigt_dessen_wert(db, monkeypatch)
 
 # ═══ P-1 — Korrektur zwischen zwei Sensoren: «Falsch seit» ist eine Wechselstelle ═══════════════════════════════════════
 
-@pytest.mark.parametrize("vorher,erwartet", [
-    (QA, True),                                          # A davor, C richtig ⇒ Naht
-    ({"art": "ha", "entity_id": "sensor.c"}, False),     # dieselbe Entität ⇒ keine
-    ({"art": "mqtt", "mqtt_key": "x"}, False),           # MQTT → HA: nicht in a1 (liest wie am HEAD)
-    (None, False),                                       # unbekannt: wie am HEAD
-])
-def test_p1_falsch_seit_zwischen_zwei_sensoren_ist_eine_naht(vorher, erwartet):
-    s, r = datetime(2026, 6, 10, 1), datetime(2026, 6, 14, 19)
-    qc = {"art": "ha", "entity_id": "sensor.c"}
-    zeilen = [zw.Wechsel("k", r, vorher, qc, None, aufgehoben_durch=2, id=1),
-              zw.Wechsel("k", r, vorher, qc, "korrektur", falsch_seit_ts=s, id=2)]
-    assert (s in zw.naehte_der_fortsetzung(zeilen)) is erwartet
-
-
-@pytest.mark.parametrize("sprengsatz", [False, True])
-async def test_p1_tag_von_falsch_seit_bildet_keine_differenz_zweier_sensoren(db, monkeypatch, sprengsatz):
-    """Reihe: A bis «Falsch seit» (10.06. 01:00), danach aus C gefüllt (C = A + 500), Korrektur A → C. Tagesansicht und
-    Bereichs-Leser zeigen am 10.06. nur die Teile beider Sensoren (11,5 — die Naht-Stunde ohne Rand-Stände zählt in a1 nicht),
-    nie 512,0. Sprengsatz: «Falsch seit» keine Naht (HEAD) ⇒ 512,0."""
-    from backend.services.snapshot.aggregator import TAGESDETAIL_AUSGABE
-    from backend.services.snapshot.bereichs_leser import lade_tageswerte_je_feld
-
-    if sprengsatz:
-        monkeypatch.setattr(zw, "_falsch_seit_zwischen_zwei_sensoren", lambda w: set())
-    a = await s2._anlage(db, ["ladung_pv_kwh"])
-    key = "inv:2:ladung_pv_kwh"
-    s, r = datetime(2026, 6, 10, 1), datetime(2026, 6, 14, 19)
-    t0 = datetime(2026, 6, 1)
-    await s2._reihe(db, a.id, key, {t0 + timedelta(hours=h): 100.0 + 0.5 * h + (500.0 if t0 + timedelta(hours=h) >= s else 0.0)
-                                    for h in range(20 * 24)})
-    qc = {"art": "ha", "entity_id": "sensor.c"}
-    db.add(ZuordnungWechsel(id=1, anlage_id=a.id, sensor_key=key, erklaert_ts=r, ab_ts=r, vorher=QA, nachher=qc, grund=None,
-                            herkunft="altbestand", aufgehoben_durch=2))
-    db.add(ZuordnungWechsel(id=2, anlage_id=a.id, sensor_key=key, erklaert_ts=r, ab_ts=r, vorher=QA, nachher=qc,
-                            grund="korrektur", falsch_seit_ts=s, herkunft="nachtrag"))
-    await db.flush()
-    zw.vergiss(db)
-    invs = {"2": await db.get(Investition, 2)}
-    tag = date(2026, 6, 10)
-    felder = {("wallbox", "ladung_pv_kwh"): TAGESDETAIL_AUSGABE[("wallbox", "ladung_pv_kwh")]}
-    from backend.services.snapshot.aggregator import get_tagesdetail_kwh
-    td = (await get_tagesdetail_kwh(db, a, invs, tag)).werte.get("emob_ladung_pv_kwh")
-    bl = (await lade_tageswerte_je_feld(db, a, invs, tag, tag, felder, kanal_zuerst=False))[tag]["emob_ladung_pv_kwh"]
-    if sprengsatz:
-        assert (td, bl) == (pytest.approx(512.0), pytest.approx(512.0))
-        return
-    assert (td, bl) == (pytest.approx(11.5), pytest.approx(11.5))
-
 
 # ═══ P-2 — Merkmal «Höhe ungeprüft» (Halt H-1 aus U1-K, Option A) ═══════════════════════════════════════════════════════
 
-@pytest.mark.parametrize("sprengsatz", [False, True])
-async def test_p2_gefuelltes_nach_leerer_zeit_ohne_pruefbaren_rand_ist_ein_hoehenwechsel(db, monkeypatch, sprengsatz):
-    """Fall aus dem U1-K-Bericht (``u1-k/mess.py halt_kein_rand``): A → X am Sprung (ohne Grund), Korrektur «richtig A» über
-    [Sprung, Rückgang) im Dialog «bis jetzt» (kein Stand danach); Home Assistant führt A erst ab 12.06. und 1 906,5 höher —
-    kein Rand-Stand ist prüfbar. Die Lücke [Sprung, 12.06.) trägt das Merkmal, ihr Rand zum Gefüllten ist ein Höhenwechsel:
-    12.06. zeigt 11,5 (das zeigt auch HA, dessen Statistik dort beginnt), nie 1 942,0. Vorschau = Lauf (Merkmal und Satz).
-    Sprengsatz: ohne Merkmal (U1-K) ⇒ 1 942,0."""
-    from backend.services.snapshot.writer import snapshot_anlage
-    from backend.services.zuordnung_wechsel import korrektur as kr
-    from backend.tests import test_daten_checker_zaehler_versatz as v
-    from backend.tests.test_sensorwechsel_s4b1_stueck import QA as QV, RUECK, SPRUNG, _tagesansicht
-    from backend.tests.test_sensorwechsel_u1k_proben import _ha_mit, _lauf
-
-    monkeypatch.setattr(kr, "ha_eingerichtet", lambda: True)
-    svc = _ha_mit(monkeypatch, plus=1906.5, ab_h=11 * 24)
-    v._kanal_tage(monkeypatch, {})
-    if sprengsatz:
-        async def nie(*_a, **_k):
-            return False
-        monkeypatch.setattr(kr, "_hoehe_ungeprueft", nie)
-    qx = {"art": "ha", "entity_id": "sensor.x"}
-    a, wb, key = await v._anlage(db, staende=v._reihe(stunden=v.RUECK_H), spiegel=False)
-    db.add(ZuordnungWechsel(anlage_id=a.id, sensor_key=key, erklaert_ts=SPRUNG, ab_ts=SPRUNG, vorher=QV, nachher=qx,
-                            grund=None, herkunft="altbestand"))
-    await db.commit()
-    au = kr.Auftrag(anlage_id=a.id, sensor_key=key, falsch_seit=SPRUNG, ab=RUECK, vorher=qx, nachher=QV)
-    la = await kr.lage(db, au, ha_svc=svc)
-    from backend.core.database import get_session
-    erg = await kr.fuehre_aus(db, au, ha_svc=svc, jetzt=RUECK - timedelta(minutes=20))
-    await db.commit()
-    s = await kr.nach_dem_commit(erg, ha_svc=svc, sitzungen=kr.sitzungen_wie(db, get_session), starten=False)
-    await _lauf(db, s)
-    a_ = (await db.execute(select(Anlage).where(Anlage.id == a.id))).scalar_one()
-    for h in range(v.RUECK_H, v.RUECK_H + 30):                          # der Stundenlauf danach (Stände ab dem Rückgang)
-        await snapshot_anlage(db, a_, zeitpunkt=v.T0 + timedelta(hours=h))
-    await db.commit()
-    sicht = await _tagesansicht(db, a, wb.id)
-    if sprengsatz:
-        assert sicht[12] == pytest.approx(1942.0)
-        return
-    zwoelf = datetime(2026, 6, 12)
-    assert la.luecke == (SPRUNG, zwoelf) and la.hoehe_ungeprueft and not la.zaehlerluecke
-    assert kr.SATZ_LUECKE_HOEHE.format(von="10.06.2026 01:00", bis="12.06.2026 00:00") in kr.saetze(la)
-    marke = [(w.falsch_seit_ts, w.ab_ts, w.ansatz) for w in (await db.execute(select(ZuordnungWechsel))).scalars().all()
-             if zw.ist_luecken_zeile(w)]
-    assert marke == [(SPRUNG, zwoelf, "hoehe_ungeprueft")]               # Vorschau = Lauf; ``nachher`` bleibt leer
-    assert sicht[12] == pytest.approx(11.5) and sicht[10] == pytest.approx(0.5) and sicht[11] is None

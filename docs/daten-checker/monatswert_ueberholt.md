@@ -1,8 +1,8 @@
 # Gespeicherter Monatswert passt nicht mehr zur Quelle
 
 ## Was eedc sieht
-Für diesen Monat ist ein Monatswert gespeichert, und ein Wechsel der Quelle («Bisherige Werte bleiben»), ein eingetragener
-Zählertausch oder eine Korrektur hat seither geändert, was die Quelle für diesen Monat ergibt — um mindestens 1 kWh. eedc prüft
+Für diesen Monat ist ein Monatswert gespeichert, und ein Wechsel der Quelle («Bisherige Werte bleiben») oder ein eingetragener
+Zählertausch hat seither geändert, was die Quelle für diesen Monat ergibt — um mindestens 1 kWh. eedc prüft
 nur Monate bis zu dem Monat, in dem der Wechsel eingetragen wurde; einen späteren Monat hast du schon mit dem Wechsel gespeichert. Die
 Meldung nennt Feld und Monat, die Details den gespeicherten Wert, den Wert der Quelle und seit wann er gilt. Alles, was eedc für
 diesen Monat zeigt, rechnet mit dem gespeicherten Wert.

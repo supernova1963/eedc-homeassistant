@@ -16,7 +16,7 @@ angesetzt ist (``zuordnung_wechsel.ansatz`` ``beide``/``schnitt``), trägt den l
 ab ``ab_ts`` um ``versatz = stand_alt_ende − stand_neu_null`` (mehrere Nähte: die Summe ihrer Versätze bis zum Stand). Dann
 ist ``Stand(bis) − Stand(von)`` über die Naht die Summe der Zuwächse beider Sensoren in ihrer Geltungszeit — die Regel
 «Menge = Summe der Zuwächse jeder Quelle in ihrer Geltungszeit»; zwischen zwei Sensoren entsteht nie eine Differenz, und
-keine Stunde fällt weg. Eine Naht **ohne** Rand-Stände (MQTT, Altbestand, Lücken-Ränder, eine noch offene Zeile) teilt wie
+keine Stunde fällt weg. Eine Naht **ohne** Rand-Stände (MQTT, Altbestand, eine noch offene Zeile) teilt wie
 oben. Eine Naht mit Rand-Ständen ist eine :class:`Naht` (ein Zeitpunkt, der den Versatz trägt) — die Leser behalten ihre
 Aufrufe: ``abschnitte`` hebt und teilt; die Slot-Leser, die Paare über ``ueber_naht`` prüfen, heben beim Laden
 (``gehoben``) und fragen danach nur die teilenden Nähte (``trennende``).
@@ -179,48 +179,18 @@ def stand_differenz(folge: Sequence[tuple[T, float]], naehte: Iterable[T]) -> fl
     return sum(teil[-1][1] - teil[0][1] for teil in abschnitte(folge, naehte))
 
 
-# ── Rand eines Fensters an einem gesperrten Stück (Sensorwechsel 4b-1-K/-K2, Bauplan «Zu §14» Nr. 102, Nr. 112) ──────────
-#
-# Ein **gesperrtes Stück** ``[S, R)`` (eine Lücke mit Höhenwechsel — verworfene, nicht gefüllte Stände, davor und danach nicht
-# dieselbe Zählerhöhe —, oder eine Korrektur, deren Füllen aussteht; ``zuordnung_wechsel.zeitpunkt.gesperrte_stuecke``) hat
-# Nähte an beiden Rändern. Eine Lücke ohne Höhenwechsel ist keins (U1): über sie rechnen die Leser wie über jede Zählerlücke. Für ein Fenster gilt dann **eine**
-# Regel, die die Tagesansicht (``snapshot/aggregator._tagesdetail_boundary_diff_mit_grund``) und der Bereichs-Leser
-# (``snapshot/bereichs_leser._randstaende``) teilen — das Laden der Stände liegt beim Leser, die Regel hier:
-#
-# * **linker Rand:** fehlt der Stand am Fensterbeginn und läge der letzte Stand davor vor einem gesperrten Stück, rückt der
-#   Rand nicht über das Stück — er beginnt frühestens an dessen Ende (``ende_der_luecke_davor``);
-# * **rechter Rand:** fehlt der Stand am Fensterende, weil es in einem gesperrten Stück liegt, rückt der Rand auf den letzten
-#   Stand im Fenster (``endet_in_luecke``) — der Tag, an dem die Lücke beginnt, zeigt seinen Teil;
-# * **kein Wert statt 0,0:** trägt die Folge keinen Abschnitt aus zwei Ständen (``traegt_messung``), ist außerhalb der
-#   gesperrten Stücke nichts gemessen — der Tag hat keinen Wert.
-
-
-def ende_der_luecke_davor(anker: Optional[T], fensterbeginn: T, luecken: Iterable[tuple[T, T]]) -> Optional[T]:
-    """Liegt zwischen dem letzten Stand vor dem Fenster (``anker``) und dem Fensterbeginn ein gesperrtes Stück ``[S, R)``
-    (``S ≤ fensterbeginn``, ``R > anker``)? Dann sein spätestes Ende ``R`` — dort beginnt der linke Rand frühestens —, sonst
-    ``None``."""
-    if anker is None:
-        return None
-    enden = [r for s, r in luecken if s <= fensterbeginn and r > anker]
-    return max(enden) if enden else None
-
-
-def endet_in_luecke(fensterende: T, luecken: Iterable[tuple[T, T]]) -> bool:
-    """Liegt das Fensterende in einem gesperrten Stück (``S ≤ ende < R``)? Dann fehlt sein Stand, weil er verworfen ist —
-    der rechte Rand rückt auf den letzten Stand im Fenster."""
-    return any(s <= fensterende < r for s, r in luecken)
-
-
-def traegt_messung(folge: Sequence[tuple[T, float]], naehte: Iterable[T]) -> bool:
-    """Trägt die Folge (mit ihren Rändern) einen Abschnitt aus mindestens zwei Ständen ohne Naht dazwischen? Sonst ist im
-    Fenster außerhalb der gesperrten Stücke nichts messbar — kein Wert statt einer gemessenen 0,0."""
-    return any(len(teil) > 1 for teil in abschnitte(folge, naehte))
-
-
 # ── Ansetzen eines Wechsels «bleiben» (Sensorwechsel U2 a2, Rechenweg F2/F3; ``services/zuordnung_wechsel/ansatz.py``) ──
 
 #: Ein Zuwachs des alten Sensors nach der ersten Zeile des neuen, der kleiner ist, zählt nicht als Überlappung (Rundung).
 UEBERLAPPUNG_TOL = 1e-6
+#: Ein gespeicherter Stand stimmt mit dem HA-Spiegel überein, wenn er um höchstens diese Menge (kWh) abweicht.
+SPIEGEL_TOLERANZ_KWH = 0.01
+
+
+def stand_passt_zum_spiegel(stand: float, summe: Optional[float], offset: float) -> bool:
+    """Stimmt ein Stand der Reihe mit dem HA-Spiegel überein (``summe + offset`` der zum Zeitpunkt gültigen Quelle,
+    Toleranz ``SPIEGEL_TOLERANZ_KWH``)? Ohne Spiegelzeile nein. (Bis Weg B, Sitzung B3a, in ``zaehler_versatz.py``.)"""
+    return summe is not None and abs(stand - (summe + offset)) <= SPIEGEL_TOLERANZ_KWH
 
 
 def ueberlappt(alt_heute: Optional[float], alt_bei_t1: Optional[float]) -> bool:
@@ -263,7 +233,7 @@ def verschiebung(wert_nachher: Optional[float], wert_vorher: Optional[float]) ->
     return wert_nachher - wert_vorher
 
 
-__all__ = ["Naht", "UEBERLAPPUNG_TOL", "abschnitte", "ende_der_luecke_davor", "endet_in_luecke", "gehoben", "gehobene_staende",
-           "hebung_am", "kanal_ende_alt", "kanal_versatz_neu", "monat_aus_abschnitten", "nullpunkt_neu", "offset_vor_naht",
-           "rand_versatz", "slot_beider", "stand_differenz", "tagesmenge_aus_abschnitten", "traegt_messung", "trennende", "ueber_naht", "ueberlappt",
-           "verschiebung", "versatz_der_naht", "zaehlwerk_menge"]
+__all__ = ["Naht", "SPIEGEL_TOLERANZ_KWH", "UEBERLAPPUNG_TOL", "abschnitte", "gehoben", "gehobene_staende", "hebung_am",
+           "kanal_ende_alt", "kanal_versatz_neu", "monat_aus_abschnitten", "nullpunkt_neu", "offset_vor_naht", "rand_versatz",
+           "slot_beider", "stand_differenz", "stand_passt_zum_spiegel", "tagesmenge_aus_abschnitten", "trennende", "ueber_naht",
+           "ueberlappt", "verschiebung", "versatz_der_naht", "zaehlwerk_menge"]

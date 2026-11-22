@@ -68,7 +68,6 @@ import {
 import KorrekturFortschritt, { WartendeWechsel } from './KorrekturFortschritt'
 import ZaehlerGetauschtDialog, { ZG_TITEL } from './ZaehlerGetauschtDialog'
 import { useQuellenWechsel } from './useQuellenWechsel'
-import { useGrundNachtragen } from './useGrundNachtragen'
 
 const VERFUEGBARKEIT_DEFAULT: DatenquellenVerfuegbarkeit = { ha: false, ha_quelle: null, mqtt: false }
 
@@ -194,15 +193,13 @@ interface TypCluster {
   geraete: DatenquelleGruppe[]
 }
 
-/** E4 (Daten-Checker «Sprung aufs Feld»): Gerät und Feld aus `?geraet=&feld=` (gelesen in `EinstellungenV4`); Sitzung 4b-1:
- *  `stueck=<schlüssel>~<sprung>~<rückgang>` öffnet den Dialog für ein versetztes Stück (Befund `zaehler_versatz`,
- *  `useGrundNachtragen`; «Grund nachtragen» an einem verzeichneten Wechsel, `nachtrag=<id>`, ist seit Weg B entfernt); U3 b:
+/** E4 (Daten-Checker «Sprung aufs Feld»): Gerät und Feld aus `?geraet=&feld=` (gelesen in `EinstellungenV4`); «Grund
+ *  nachtragen» (`nachtrag=`) und der Dialog am versetzten Abschnitt (`stueck=`) sind seit Weg B entfernt; U3 b:
  *  `getauscht=<Zeit>` öffnet am Feld (`geraet`/`feld`) «Zähler getauscht (gleiche Quelle)» mit vorbelegtem «Getauscht am»
  *  (Befund `mqtt_zaehlerstand_springt`). */
 export interface DatenquellenSprung {
   geraet?: string
   feld?: string
-  stueck?: string
   getauscht?: string
 }
 
@@ -369,11 +366,6 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
   // Dialog nach dem Grund, bevor etwas gesendet wird (`useQuellenWechsel`, `SensorwechselDialog`).
   const wechsel = useQuellenWechsel(selectedAnlageId ?? null, setzeFeld, neuLaden)
   const aendereQuelle = wechsel.aendere
-  // Sitzung 4b-1: «Grund nachtragen» am versetzten Abschnitt (`?stueck=…`) — gemerkt, bevor der Sprung endet.
-  const [stueck, setStueck] = useState<string | undefined>(undefined)
-  useEffect(() => { if (sprung?.stueck) setStueck(sprung.stueck) }, [sprung?.stueck])
-  const nachtragDialog = useGrundNachtragen(selectedAnlageId ?? null, wechsel.merkeLaeufe, neuLaden, stueck,
-    wechsel.merkeWartende)
 
   // Direkte Quelle ohne Modal (Inbound / keine).
   const setzeQuelleDirekt = useCallback((feld: DatenquelleFeld, quelle: string) => {
@@ -930,7 +922,6 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
 
       {wechsel.dialog}
 
-      {nachtragDialog}
 
       {getauschtFeld && selectedAnlageId != null && (
         <ZaehlerGetauschtDialog

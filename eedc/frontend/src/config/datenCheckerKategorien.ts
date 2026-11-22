@@ -48,11 +48,7 @@ export const KATEGORIE_LABELS: Record<string, string> = {
   ha_zaehler_rueckgang: 'Zählerstände – Rückgang in Home Assistant',
   // Sensorwechsel U2 Lauf c (F12): derselbe Sensor springt (Gerätetausch) — HA zählt den Sprung, eedc nennt Stunde und Weg.
   ha_zaehlerstand_springt: 'Zählerstände – Zählerstand springt',
-  // Verdacht N-803: ein Abschnitt der eigenen Standreihe liegt um +X versetzt (Stände eines anderen Sensors).
-  zaehler_versatz: 'Zählerstände – versetzter Abschnitt',
-  // Sensorwechsel U3 a (G1): eine Korrektur hat die Zählerstände einer Zeit verworfen, nichts füllt sie — Auskunft je Zeit.
-  zaehler_zeit_verworfen: 'Zählerstände – Zeit verworfen',
-  // Sensorwechsel U3 a (G2): ein gespeicherter Monatswert passt nach Wechsel oder Korrektur nicht mehr zur Quelle.
+  // Sensorwechsel U3 a (G2): ein gespeicherter Monatswert passt nach einem Wechsel nicht mehr zur Quelle.
   monatswert_ueberholt: 'Zählerstände – Gespeicherter Monatswert passt nicht mehr',
   // Sensorwechsel U3 b (G4): der Zählerstand einer MQTT-Reihe springt — «Zähler getauscht» öffnet den Dialog mit der Zeit.
   mqtt_zaehlerstand_springt: 'Zählerstände – Zählerstand springt (MQTT)',
@@ -123,8 +119,6 @@ export const KATEGORIE_REIHENFOLGE: string[] = [
   'ha_zaehlerstand_springt',
   'mqtt_zaehlerstand_springt',
   'daten_vor_aenderung_geloescht',
-  'zaehler_versatz',
-  'zaehler_zeit_verworfen',
   'monatswert_ueberholt',
   'sensor_mapping_lts',
   'sensor_mapping_einheit',
@@ -175,8 +169,6 @@ export const KATEGORIE_ANKER: Record<string, string> = {
   ha_zaehlersprung: '48b-zaehlerstaende--sprung-in-home-assistant',
   ha_zaehler_rueckgang: '48c-zaehlerstaende--rueckgang-in-home-assistant',
   ha_zaehlerstand_springt: '48h-zaehlerstaende--zaehlerstand-springt',
-  zaehler_versatz: '48f-zaehlerstaende--versetzter-abschnitt',
-  zaehler_zeit_verworfen: '48i-zaehlerstaende--zeit-verworfen',
   monatswert_ueberholt: '48j-zaehlerstaende--gespeicherter-monatswert-passt-nicht-mehr',
   mqtt_zaehlerstand_springt: '48k-zaehlerstaende--zaehlerstand-springt-mqtt',
   daten_vor_aenderung_geloescht: '48l-zaehlerstaende--daten-vor-der-aenderung-geloescht',

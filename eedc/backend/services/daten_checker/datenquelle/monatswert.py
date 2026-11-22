@@ -1,14 +1,13 @@
 """Daten-Checker — «Gespeicherter Monatswert passt nicht mehr» (``monatswert_ueberholt``; Sensorwechsel U3 a, Rechenweg G2,
 Bauplan Nr. 150, Schwere nach E6: Warnung).
 
-**Warum es das gibt.** Ein Wechsel der Quelle mit «Bisherige Werte bleiben» oder eine Korrektur ändert, was eedc für einen
-Monat aus der Quelle bildet; ein schon gespeicherter Monatswert (Monatsabschluss, «Aus HA laden», Import) bleibt, wie er ist —
+**Warum es das gibt.** Ein Wechsel der Quelle mit «Bisherige Werte bleiben» (auch «Zähler getauscht») ändert, was eedc für
+einen Monat aus der Quelle bildet; ein schon gespeicherter Monatswert (Monatsabschluss, «Aus HA laden», Import) bleibt, wie er ist —
 und alles, was eedc für diesen Monat zeigt, rechnet mit ihm (``verwerfen_vor_quellbeginn.abschluss_monate``: ein Monat mit
 Monatsdaten-Zeile ist abgeschlossen). Ohne Vergleich wäre eine Auskunft je gespeichertem Monat ein Dauer-Alarm (an der
 Produktiv-Kopie 41 Monate am Schlüssel mit Wechsel, im Monat des Wechsels 242,9 gegen 242,871 — kein Unterschied).
 
-**Regel.** Nur Monate, die ein verzeichneter Wechsel berührt — das Intervall ``[falsch_seit, ab)`` einer Korrektur und die
-Monate ab einem Wechsel «bleiben» (Grund «Fortsetzung», auch «Zähler getauscht») **bis zum Monat, in dem eedc die Zeile
+**Regel.** Nur Monate, die ein verzeichneter Wechsel berührt — die Monate ab einem Wechsel «bleiben» (Grund «Fortsetzung», auch «Zähler getauscht») **bis zum Monat, in dem eedc die Zeile
 eingetragen hat** (``eingetragen_ts``, Sensorwechsel U3-K, Nachmessung B5: einen später gespeicherten Monat hat der Anwender
 schon mit dem Wechsel gesehen — ohne die Grenze kam jeden Monat ein neuer Befund; ``NULL`` an einer Bestandszeile: bis zum
 letzten abgeschlossenen Monat) —, nur abgeschlossene Monate vor dem laufenden, und nur, wenn
@@ -16,8 +15,7 @@ letzten abgeschlossenen Monat) —, nur abgeschlossene Monate vor dem laufenden,
 * ein Wert gespeichert ist (Anlage: ``Monatsdaten.einspeisung_kwh``/``netzbezug_kwh`` nach der Regel N-739 «erfasst»;
   Gerät: ``InvestitionMonatsdaten.verbrauch_daten[feld]``),
 * eedc heute einen **vollen** Wert aus der Quelle hat — der Kanal des Felds deckt den ganzen Monat
-  (``kanal/feld_leser.kanal_feldwerte_je_fenster``, «echte Deckung»; ein Monat über eine verworfene Zeit ist nicht voll, ihn
-  nennt ``zaehler_zeit_verworfen``),
+  (``kanal/feld_leser.kanal_feldwerte_je_fenster``, «echte Deckung»),
 * beide um mindestens 1 kWh abweichen (``core/berechnungen/monatswert_vergleich.monatswert_weicht_ab``),
 * und der Anwender den gespeicherten Wert nicht im Monatsabschluss bewusst behalten hat (``geprueft_gegen[feld]`` mit genau
   diesem Wert, PN 90128).
@@ -25,13 +23,13 @@ letzten abgeschlossenen Monat) —, nur abgeschlossene Monate vor dem laufenden,
 Handgriff «Monat öffnen» (Sprung ins Formular des Monats beim Feld). **Benannt:** der Anlagen-PV-Zähler (``basis:pv_gesamt``,
 ADR-002/P7 — der gespeicherte Wert ist die Summe je Modul) und Felder ohne Kanal werden nicht geprüft.
 
-Schwesterdateien: ``verworfen.py`` (``zaehler_zeit_verworfen``), ``versatz.py``, ``geloescht.py``.
+Schwesterdatei: ``geloescht.py``. Der Anlass «Korrektur» (verworfene Zeit) ist seit Weg B, Sitzung B3a, entfernt.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Optional
 
 from sqlalchemy import select
@@ -46,7 +44,6 @@ _BASIS_SPALTE = {"einspeisung": "einspeisung_kwh", "netzbezug": "netzbezug_kwh"}
 SATZ_MELDUNG = "{name}: gespeicherter Monatswert {monat} passt nicht mehr zur Quelle"
 SATZ_DETAILS = ("Gespeichert sind {gespeichert} kWh. Seit {anlass} ergibt die Quelle für diesen Monat {quelle} kWh. Alles, was "
                 "eedc für diesen Monat zeigt, rechnet mit dem gespeicherten Wert; er bleibt, bis du ihn änderst.")
-ANLASS_KORREKTUR = "der Korrektur vom {datum}"
 ANLASS_TAUSCH = "dem Zählertausch am {datum}"
 ANLASS_WECHSEL = "dem Wechsel der Quelle am {datum}"
 
@@ -76,29 +73,21 @@ def _monate(von: tuple[int, int], bis: tuple[int, int]) -> list[tuple[int, int]]
 
 def beruehrte_monate(wechsel, heute: date) -> dict[tuple[int, int], Anlass]:
     """Die abgeschlossenen Monate (vor dem laufenden), die die nicht aufgehobenen Zeilen eines Schlüssels berühren, je mit dem
-    jüngsten Anlass: das Intervall einer Korrektur; ab einem Wechsel «bleiben» jeder Monat bis zum Monat des Eintrags (U3-K,
-    ``eingetragen_ts``; ohne ihn bis zum letzten abgeschlossenen). Lücken-Zeilen gehören zu ihrer Korrektur; ein Wechsel ohne
-    Grund berührt nichts (dort rechnet eedc wie vorher)."""
-    from backend.models.zuordnung_wechsel import GRUND_FORTSETZUNG, GRUND_KORREKTUR
-    from backend.services.zuordnung_wechsel.zeitpunkt import gleiche_quelle, ist_luecken_zeile
+    jüngsten Anlass: ab einem Wechsel «bleiben» jeder Monat bis zum Monat des Eintrags (U3-K, ``eingetragen_ts``; ohne ihn bis
+    zum letzten abgeschlossenen). Ein Wechsel ohne Grund berührt nichts (dort rechnet eedc wie vorher)."""
+    from backend.models.zuordnung_wechsel import GRUND_FORTSETZUNG
+    from backend.services.zuordnung_wechsel.zeitpunkt import gleiche_quelle
 
     letzter = _monat_davor((heute.year, heute.month))
     aus: dict[tuple[int, int], Anlass] = {}
     for w in wechsel or ():
-        if w.aufgehoben_durch is not None or ist_luecken_zeile(w):
+        if w.aufgehoben_durch is not None or w.grund != GRUND_FORTSETZUNG:
             continue
         zeit = w.erklaert_ts or w.ab_ts
         eingetragen = getattr(w, "eingetragen_ts", None)
         bis = letzter if eingetragen is None else min(letzter, (eingetragen.year, eingetragen.month))
-        if w.grund == GRUND_KORREKTUR and w.falsch_seit_ts is not None:
-            letzte = w.ab_ts - timedelta(seconds=1)
-            monate, anlass = _monate((w.falsch_seit_ts.year, w.falsch_seit_ts.month),
-                                     min((letzte.year, letzte.month), bis)), Anlass(GRUND_KORREKTUR, zeit)
-        elif w.grund == GRUND_FORTSETZUNG:
-            art = "tausch" if gleiche_quelle(w.vorher, w.nachher) else GRUND_FORTSETZUNG
-            monate, anlass = _monate((w.ab_ts.year, w.ab_ts.month), bis), Anlass(art, zeit)
-        else:
-            continue
+        art = "tausch" if gleiche_quelle(w.vorher, w.nachher) else GRUND_FORTSETZUNG
+        monate, anlass = _monate((w.ab_ts.year, w.ab_ts.month), bis), Anlass(art, zeit)
         for m in monate:
             if m not in aus or aus[m].zeit < anlass.zeit:
                 aus[m] = anlass
@@ -183,9 +172,7 @@ class MonatswertUeberholtChecks:
 
 
 def _anlass_text(anlass: Anlass) -> str:
-    from backend.models.zuordnung_wechsel import GRUND_KORREKTUR
-
-    vorlage = {GRUND_KORREKTUR: ANLASS_KORREKTUR, "tausch": ANLASS_TAUSCH}.get(anlass.art, ANLASS_WECHSEL)
+    vorlage = ANLASS_TAUSCH if anlass.art == "tausch" else ANLASS_WECHSEL
     return vorlage.format(datum=anlass.zeit.strftime("%d.%m.%Y"))
 
 

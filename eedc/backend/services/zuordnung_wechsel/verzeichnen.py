@@ -3,7 +3,7 @@
 Ablauf in jedem Schreibweg (``api/routes/datenquellen.py`` Feld-Route und Energie-Vorschläge, Preset ``mqtt_presets.py``,
 Gateway-Zeile anlegen/ändern/löschen ``mqtt_gateway.py``): **vor** der ersten Änderung ``momentaufnahme``, **nach** der letzten
 (vor dem Commit des Aufrufers) ``verzeichne`` — eine Zeile je Schlüssel, dessen wirksame Quelle sich geändert hat, mit ``grund``
-leer (Sitzung 3b: ``fortsetzung``, wenn der Anwender ihn nennt; eine Korrektur legt der Dienst an) und ``herkunft = wechsel``. Nicht verzeichnet werden: eine Änderung an einem Schlüssel **ohne eigene Werte** (Zählerstände
+leer (Sitzung 3b: ``fortsetzung``, wenn der Anwender ihn nennt) und ``herkunft = wechsel``. Nicht verzeichnet werden: eine Änderung an einem Schlüssel **ohne eigene Werte** (Zählerstände
 der Reihe oder Kanalzeilen) — auch A → B und → «Keine» (Bauplan §8 Nr. 17: nichts zu schützen; sonst legte B-0 die Vergangenheit
 auf eine verworfene Erstwahl fest), die Materialisierung beim Lesen der Fläche (W7, ``_festschreiben`` — wirksam unverändert), die Stilllegung und das Entfernen
 von Innengeräten (W9, Geräte-Ende), das Vorzeichen (``/invert`` — keine Quelle). Festlegungen Bauplan §7 Nr. 15.
@@ -28,8 +28,8 @@ async def verzeichne(db, anlage, vorher: dict[str, dict], *, jetzt: Optional[dat
                      gruende: Optional[dict[str, str]] = None, auslassen: Optional[set[str]] = None) -> list[ZuordnungWechsel]:
     """Vergleicht mit dem Stand **nach** der Änderung und legt je geänderten Schlüssel eine Zeile an (``flush``, kein Commit).
 
-    Sitzung 3b: ``gruende`` — Grund je Schlüssel (``fortsetzung``; sonst leer); ``auslassen`` — Schlüssel, deren Zeile der
-    Dienst der Korrektur selbst anlegt (``grund = korrektur``, ``abfrage.vollziehe``)."""
+    Sitzung 3b: ``gruende`` — Grund je Schlüssel (``fortsetzung``; sonst leer); ``auslassen`` — Schlüssel ohne Zeile
+    («Daten vor der Änderung löschen», ``abfrage.vollziehe``, Weg B)."""
     nachher = await lade_wirksame_quellen(db, anlage)
     jetzt = (jetzt or datetime.now()).replace(microsecond=0)
     zeilen: list[ZuordnungWechsel] = []

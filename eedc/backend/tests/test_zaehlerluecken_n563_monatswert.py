@@ -66,7 +66,7 @@ def test_p13_anker_beliebig_weit_zurueck_luecke_ueber_monatsgrenze():
     assert _sql_wert(svc, "sensor.pv").differenz == 110.0  # alt: 50
 
 
-def test_p13_ohne_anker_ist_der_aelteste_im_monat_der_anker():
+def test_p13_ohne_anker_beginnt_die_reihe_mit_anfangsstand_null():
     """Die Reihe beginnt im Monat (HA führt keine Zeile davor) ⇒ Anfangsstand 0 wie in HA: die erste Zeile zählt mit
     ihrem `sum` (Regel 21.11.2026; bis dahin war der älteste `sum` im Monat der Anker, start 10,0 · Δ 60,0)."""
     svc = _make_service_with_mock_db()

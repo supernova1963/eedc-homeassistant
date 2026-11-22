@@ -494,7 +494,7 @@ def test_handbuch_waerme_klima_zitiert_die_gruende_woertlich():
     from backend.core.tageswert_grund import TAGESWERT_GRUND_TEXT
 
     tabelle = _handbuch_abschnitt("### Die Gründe, wörtlich")
-    nur_am_tag = _handbuch_abschnitt("### Und vier Gründe, die nur der **Tag** kennt")
+    nur_am_tag = _handbuch_abschnitt("### Und drei Gründe, die nur der **Tag** kennt")
 
     sperr_gruende = [
         GRUND_GERAETE_OHNE_WAERME, GRUND_FREMDSTROM, GRUND_FREMDWAERME,
@@ -526,7 +526,7 @@ def test_handbuch_waerme_klima_zitiert_die_gruende_woertlich():
         if not any(f"**{g}**" in z for z in nur_am_tag)
     ]
     assert not fehlend_tag, (
-        "Diese Tages-Gründe stehen nicht mehr im Abschnitt „Und vier Gründe, "
+        "Diese Tages-Gründe stehen nicht mehr im Abschnitt „Und drei Gründe, "
         f"die nur der Tag kennt“: {fehlend_tag}"
     )
 

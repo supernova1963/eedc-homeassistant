@@ -15,7 +15,7 @@ der alte nach T1 weiterzählte (``zaehler_naht.ueberlappt``: heutiger letzter St
   Rand-Stände sind die Stände in der Zeile vor G (der Stand um G).
 * ``ab_ts`` = G + 1 h (der erste Stand der neuen Quelle; «zählt ab» = G = ``kanal_quelle.gueltig_ab``).
 * **Höhe der Reihe** (Bauplan Nr. 144, M3): die Rand-Stände stehen in der Höhe der gespeicherten Reihe — der gespeicherte Stand
-  des alten am Rand, sonst HAs Wert, wenn die Höhe passt (dieselbe Prüfung wie ``korrektur._hoehe_passt``: der letzte
+  des alten am Rand, sonst HAs Wert, wenn die Höhe passt (die frühere Prüfung der Korrektur: der letzte
   gespeicherte Stand des alten gleich HAs Summe dort), sonst der letzte gespeicherte. Führt HA den alten nicht mehr (Nr. 143
   (2)): der letzte bei eedc gespeicherte Stand, nur einer aus HAs Statistik — nie ein Live- oder Zustands-Wert. Der Kanal führt
   seinen Versatz selbst aus HAs Zeilen (``zaehler_naht.kanal_ende_alt``).
@@ -239,7 +239,7 @@ async def _ha_stand(svc, eid: str, zeile: Optional[dict], key: str) -> Optional[
 async def _rand_reihe(db, la: Lage, row, svc, erste: dict, stand: bool) -> None:
     """Die Rand-Stände in der Höhe der Reihe und die Zeiten, deren Stände verworfen und neu gelesen werden."""
     from backend.core.berechnungen.zaehler_naht import nullpunkt_neu
-    from backend.core.berechnungen.zaehler_versatz import stand_passt_zum_spiegel
+    from backend.core.berechnungen.zaehler_naht import stand_passt_zum_spiegel
 
     beide = la.art == ANSATZ_BEIDE
     s_alt = la.ab_neu if beide else la.g                                   # Zeit des Rand-Stands des alten
@@ -384,17 +384,13 @@ async def _nachbarn(db, row, la: Lage) -> None:
 
 def _vorige_grenze(alle, row, erklaert: datetime) -> Optional[datetime]:
     """Lab-K F5: ab wann die bisherige Quelle gilt — der jüngste verzeichnete Wechsel des Felds vor dieser Zeile (nicht
-    aufgehoben, keine Lücken-Zeile): eine Korrektur ab «Falsch seit», jeder andere ab seinem ``ab_ts`` (G + 1 h). Früher darf
-    «Der neue Sensor zählt ab» nicht liegen, sonst überschriebe das Ansetzen die Zeit der Quelle davor."""
-    from backend.models.zuordnung_wechsel import GRUND_KORREKTUR
-    from backend.services.zuordnung_wechsel.zeitpunkt import ist_luecken_zeile
-
-    frueher = sorted((w for w in alle if w.id != row.id and w.aufgehoben_durch is None and not ist_luecken_zeile(w)
+    aufgehoben) ab seinem ``ab_ts`` (G + 1 h). Früher darf «Der neue Sensor zählt ab» nicht liegen, sonst überschriebe das
+    Ansetzen die Zeit der Quelle davor."""
+    frueher = sorted((w for w in alle if w.id != row.id and w.aufgehoben_durch is None
                       and w.erklaert_ts is not None and w.erklaert_ts < erklaert), key=lambda w: (w.erklaert_ts, w.id or 0))
     if not frueher:
         return None
-    p = frueher[-1]
-    return p.falsch_seit_ts if (p.grund == GRUND_KORREKTUR and p.falsch_seit_ts is not None) else p.ab_ts
+    return frueher[-1].ab_ts
 
 
 async def _hat_staende(db, row, von: datetime, bis: datetime) -> bool:

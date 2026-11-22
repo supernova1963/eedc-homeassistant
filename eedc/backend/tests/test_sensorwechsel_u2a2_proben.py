@@ -8,7 +8,7 @@ Zeile erst, wenn ihre Stunde vorbei ist (``_ha_bis``); eedc läuft je Stunde wie
 «Fortsetzung» (die Uhr der Abfrage auf die Umstellzeit gestellt). Lab-Soll: Stunde 1,3 · Tag 15,3 · Folgetage 12,0 — in
 jeder Sicht, bei Umstellung 07:40, 08:20, 10:30 und zwei Tage später.
 
-Schwesterdateien: test_sensorwechsel_u2a1_proben.py (die Leser mit von Hand gesetzten Zeilen), test_sensorwechsel_s3_korrektur.py (der Dienst, dessen Lauf das Ansetzen mitbenutzt).
+Schwesterdateien: test_sensorwechsel_u2a1_proben.py (die Leser mit von Hand gesetzten Zeilen), test_sensorwechsel_s3_korrektur.py (der Lauf, den das Ansetzen mitbenutzt).
 """
 
 from __future__ import annotations
@@ -91,7 +91,7 @@ def _ha_bis(w: Welt, bis: int) -> None:
     w.bis = bis
 
 
-async def _umstellen(w: Welt, U: datetime, monkeypatch, *, grund: str = "fortsetzung", falsch_seit=None):
+async def _umstellen(w: Welt, U: datetime, monkeypatch, *, grund: str = "fortsetzung"):
     import backend.services.zuordnung_wechsel.abfrage as ab
     from backend.api.routes.datenquellen import QuelleSetRequest, set_feld_quelle
 
@@ -101,44 +101,13 @@ async def _umstellen(w: Welt, U: datetime, monkeypatch, *, grund: str = "fortset
             return U
     monkeypatch.setattr(ab, "datetime", Uhr)
     try:
-        if grund == "korrektur":
-            await _korrektur_wie_bis_b1(w, U, falsch_seit)
-        else:
-            for fid in (FID, "inv_energy_2_ladung_pv_kwh"):
-                await set_feld_quelle(w.a.id, fid, QuelleSetRequest(quelle="ha_app", entity_id=NEU, grund=grund), w.db)
-                await _laeufe()        # die In-Memory-Datenbank hat eine Verbindung: der Lauf nicht neben der nächsten Route
-                _frisch(w)
+        for fid in (FID, "inv_energy_2_ladung_pv_kwh"):
+            await set_feld_quelle(w.a.id, fid, QuelleSetRequest(quelle="ha_app", entity_id=NEU, grund=grund), w.db)
+            await _laeufe()        # die In-Memory-Datenbank hat eine Verbindung: der Lauf nicht neben der nächsten Route
+            _frisch(w)
     finally:
         monkeypatch.setattr(ab, "datetime", datetime)
     await _laeufe()
-
-
-async def _korrektur_wie_bis_b1(w: Welt, U: datetime, falsch_seit: datetime) -> None:
-    """Weg B (Sitzung B1): der Dialog beim Wechsel bietet «verwerfen» nicht mehr an; der Korrektur-Dienst bleibt bis zum Rückbau
-    (Stück, Werkbank). Die Probe ruft ihn mit dem Auftrag, den bis B1 die Abfrage baute: Zuordnung umstellen,
-    je Schlüssel der Lauf (``ab`` = volle Stunde nach der Änderung, Herkunft «wechsel»), Commit, Nachlauf."""
-    from sqlalchemy.orm.attributes import flag_modified
-
-    from backend.models.anlage import Anlage
-    from backend.models.zuordnung_wechsel import HERKUNFT_WECHSEL
-    from backend.services.zuordnung_wechsel import korrektur as kr
-    from backend.services.zuordnung_wechsel.zeitpunkt import ab_ts_aus
-
-    a = (await w.db.execute(select(Anlage).where(Anlage.id == w.a.id))).scalar_one()
-    m = dict(a.sensor_mapping)
-    m["investitionen"] = {"2": {"felder": {f: {"strategie": "sensor", "sensor_id": NEU} for f in ("ladung_kwh", "ladung_pv_kwh")}}}
-    a.sensor_mapping = m
-    flag_modified(a, "sensor_mapping")
-    for key in (KEY, "inv:2:ladung_pv_kwh"):
-        au = kr.Auftrag(anlage_id=w.a.id, sensor_key=key, falsch_seit=falsch_seit.replace(minute=0, second=0),
-                        ab=ab_ts_aus(U), vorher={"art": "ha", "entity_id": ALT}, nachher={"art": "ha", "entity_id": NEU},
-                        herkunft=HERKUNFT_WECHSEL, erklaert=U)
-        erg = await kr.fuehre_aus(w.db, au, ha_svc=kr.ha_dienst(None), jetzt=U)
-        await w.db.commit()
-        await kr.nach_dem_commit(erg, ha_svc=kr.ha_dienst(None))
-        await _laeufe()
-        _frisch(w)
-    _frisch(w)
 
 
 async def _laeufe() -> None:
@@ -704,37 +673,6 @@ async def _gleich(x):
 
 # ═══ P-1 — Korrektur zwischen zwei Sensoren: Rand-Stände an «Falsch seit» ══════════════════════════════════════════════
 
-@pytest.mark.parametrize("sprengsatz", [False, True])
-async def test_p1_korrektur_zwischen_zwei_sensoren_mit_rand(db, monkeypatch, sprengsatz):
-    """Korrektur beim Wechsel (Feld-Route, «falsch seit» 04:00): bis dahin der alte, danach der richtige Sensor, den HA mit
-    Geschichte führt. Die Korrektur-Zeile trägt die Rand-Stände nach der Regel «bleiben» mit Schnitt an «falsch seit − 1 h»
-    (``ansatz = schnitt``: gespeicherter Stand des alten um 03:00, Stand des richtigen dort aus HA) ⇒ die Reihe zählt den Tag wie
-    der Tagesabschluss aus HA-Slots (die Stunde vor «falsch seit» mit dem richtigen Sensor, wie der Kanal). Sprengsatz: ohne
-    Rand-Stände teilt die Naht ⇒ der Reihe fehlt diese Stunde (0,2)."""
-    import backend.services.zuordnung_wechsel.korrektur as kr
-
-    if sprengsatz:
-        async def ohne(*_a, **_k):
-            return None
-        monkeypatch.setattr(kr, "_rand_an_falsch_seit", ohne)
-    lab = Lab(T1, vorgeschichte=True)
-    w = await _welt(db, monkeypatch, lab)
-    U, fs = T1 + timedelta(hours=3, minutes=30), T1 - timedelta(hours=3)
-    await betrieb(w, monkeypatch, T1 - timedelta(hours=30), ende(U), U, grund="korrektur", falsch_seit=fs)
-    zw.vergiss(db)
-    korr = [x for x in (await zw.lade_wechsel(db, w.a.id))[KEY] if x.grund == "korrektur" and x.aufgehoben_durch is None]
-    assert len(korr) == 1 and korr[0].falsch_seit_ts == fs
-    ist = await sichten(w)
-    if sprengsatz:
-        assert korr[0].ansatz is None and ist["reihe_tag"] == pytest.approx(ist["ha_tag"] - 0.2)
-        return
-    assert korr[0].ansatz == "schnitt" and zw.korrektur_rand_versatz(korr[0]) is not None
-    assert ist["reihe_tag"] == pytest.approx(ist["ha_tag"]) == pytest.approx(ist["bereichs_leser"])
-    D = T1.replace(hour=0)
-    soll_d = sum(z for e, (z, _s) in lab.alt.items() if D <= datetime.fromtimestamp(e) < fs - timedelta(hours=1)) + \
-        sum(z for e, (z, _s) in lab.neu.items() if fs - timedelta(hours=1) <= datetime.fromtimestamp(e) < D + timedelta(days=1))
-    assert ist["kanal_tag"][T1.date().isoformat()] == pytest.approx(round(soll_d, 3))
-
 
 # ═══ Erste und letzte Zeile über WebSocket (Bauplan Nr. 143 (3)) ════════════════════════════════════════════════════════
 
@@ -801,3 +739,15 @@ def test_ws_erste_und_letzte_zeile_gestuft(monkeypatch, sprengsatz):
         return
     assert z["start_ts"] == _ep(ende_) and z["sum"] == zeilen[_ep(ende_)]
     assert sum(n for _p, n in ws.aufrufe) < 100 and all(p != "hour" or n <= 25 for p, n in ws.aufrufe)
+
+
+def test_stand_und_spiegel():
+    """Die Höhen-Prüfung des Ansetzens (``ansatz.lage``: ``hoehe_passt``): ein gespeicherter Stand passt zum HA-Spiegel, wenn er
+    um höchstens 0,01 kWh von ``summe + offset`` abweicht (bis Weg B, Sitzung B3a, in ``core/berechnungen/zaehler_versatz.py``
+    und den Proben des Befunds ``zaehler_versatz``)."""
+    from backend.core.berechnungen.zaehler_naht import stand_passt_zum_spiegel
+
+    assert stand_passt_zum_spiegel(511.641, 511.6414, 0.0)
+    assert stand_passt_zum_spiegel(303.0, 511.0, -208.0)
+    assert not stand_passt_zum_spiegel(1415.586, 3322.086, 0.0)
+    assert not stand_passt_zum_spiegel(1.0, None, 0.0)

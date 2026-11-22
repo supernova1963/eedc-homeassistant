@@ -191,8 +191,8 @@ async def loesche_zeilen(db: AsyncSession, kanal_id: int, t: int) -> int:
 
 
 async def loesche_zeilen_zwischen(db: AsyncSession, kanal_id: int, unten: Optional[int], oben: int) -> int:
-    """Die Kanalzeilen in ``[unten, oben)`` löschen (``unten`` ``None`` = von Beginn an) — Korrektur eines Sensorwechsels
-    (``kanal/korrektur.py``, Sensorwechsel S3). Returns: Zahl der gelöschten Zeilen."""
+    """Die Kanalzeilen in ``[unten, oben)`` löschen (``unten`` ``None`` = von Beginn an) — Ansetzen eines Wechsels «bleiben»
+    (``zuordnung_wechsel/ansatz.py``; bis Weg B, Sitzung B3a, auch die Korrektur). Returns: Zahl der gelöschten Zeilen."""
     bed = [KanalStatistik.kanal_id == kanal_id, KanalStatistik.start_ts < oben]
     if unten is not None:
         bed.append(KanalStatistik.start_ts >= unten)

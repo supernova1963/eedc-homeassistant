@@ -1171,7 +1171,6 @@ _ERZEUGER = {
     "datenquelle/ha_rueckgang.py": ["ha_zaehler_rueckgang"],
     "datenquelle/ha_sprung.py": ["ha_zaehlersprung"],
     "datenquelle/standsprung.py": ["ha_zaehlerstand_springt"],
-    "datenquelle/verworfen.py": ["zaehler_zeit_verworfen"],
     "datenquelle/monatswert.py": ["monatswert_ueberholt"],
     "datenquelle/mqtt_standsprung.py": ["mqtt_zaehlerstand_springt"],
     "datenquelle/geloescht.py": ["daten_vor_aenderung_geloescht"],

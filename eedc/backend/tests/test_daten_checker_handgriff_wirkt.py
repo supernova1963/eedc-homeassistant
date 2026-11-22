@@ -44,7 +44,7 @@ WIRKUNG: dict[str, list[tuple[str, str]]] = {
         ("Kanal-Tag mit Spiegel (S2: Abgleich statt Tag)", "test_n790_drift_handgriff.py::test_a_komponenten_achse_mit_spiegel_traegt_den_handgriff"),
     ],
     "reaggregate_range": [
-        ("Bestandstag", "test_n791_reparatur_zaehler_ohne_leistungskurve.py::test_w11_bereich_ueber_plan_und_ausfuehren_behebt_die_drift"),
+        ("Erster Tag eines Zählers (Kanal-Tag seit 21.11.2026)", "test_n791_reparatur_zaehler_ohne_leistungskurve.py::test_w11_bereich_ueber_plan_und_ausfuehren_laesst_die_drift_am_kanal_tag"),
         ("Kanal-Tag mit Spiegel", "test_daten_checker_handgriff_wirkt.py::test_s2_kanal_tag_mit_spiegel_bekommt_den_abgleich"),
         ("Kanal-Tag ohne Spiegel", "test_daten_checker_handgriff_wirkt.py::test_s2_kanal_tag_ohne_spiegel_ohne_knopf"),
         ("Bestand + Kanal gemischt", "test_daten_checker_handgriff_wirkt.py::test_s2_bereich_nur_ueber_bestandstage"),

@@ -47,7 +47,7 @@ import {
 
 /** Sprung-Parameter der Komponenten (E4, Konzept §3.3) und der Datenquellen-Fläche (Gerät aufklappen, Feld markieren). */
 const KOMPONENTEN_SPRUNG = ['bearbeiten', 'neu', 'feld'] as const
-const DATENQUELLEN_SPRUNG = ['geraet', 'feld', 'stueck', 'getauscht'] as const
+const DATENQUELLEN_SPRUNG = ['geraet', 'feld', 'getauscht'] as const
 const WIZARD_SPRUNG = ['wizard'] as const
 /** Assistenten, die ein Sprung öffnen darf (`wizard=`, Backend `ziele.WIZARDS`). */
 const SPRUNG_WIZARDS: readonly WizardKey[] = ['connector']

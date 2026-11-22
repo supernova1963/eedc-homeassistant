@@ -1,4 +1,4 @@
-"""Sensorwechsel U3 Lauf b «MQTT» (Rechenweg ``opus-berichte/SENSORWECHSEL-U3-RECHENWEG-2026-11-19.md`` G4, G5, G7; Bauplan
+"""Sensorwechsel U3 Lauf b «MQTT» (Rechenweg ``opus-berichte/SENSORWECHSEL-U3-RECHENWEG-2026-11-19.md`` G4, G5; Bauplan
 Nr. 150, Entscheide E1 = A, E2, E3, E4, E5, E6) — Proben mit Sprengsatz.
 
 * **G4** ``mqtt_zaehlerstand_springt``: der Kern aus U2 c mit dem Arm «Rückgang» je Quell-Abschnitt eines MQTT-Kanals; je
@@ -8,10 +8,9 @@ Nr. 150, Entscheide E1 = A, E2, E3, E4, E5, E6) — Proben mit Sprengsatz.
 * **G5** Rand-Stände aus Rohständen: «Zähler getauscht» (später und sofort, Neubeginn, Rückgang), «bleiben» zwischen zwei
   MQTT-Quellen (im Stundenlauf und im Nachtrag) — Naht-Stunde 0,458, Tag 11,958 in Kanal **und** Reihe; ein Zeitpunkt ohne
   Sprung wird abgelehnt; ohne Rohstände wie bisher (11,5).
-* **G7** versetzter Abschnitt einer MQTT-Reihe: Befund mit beiden Antworten; «bleiben» = zwei Einträge (11,958 · 12,0 ·
-  11,958); «verwerfen» = Korrektur über das Stück mit Kanal-Beginn eine Stunde vor «Falsch seit» und Brücke ohne Höhenwechsel
-  (08. 5,0 · 09. «—» · 10. 31,0; drei Tage zusammen 36,0); G4 schweigt für die Schritte des Abschnitts; die Auskunft «Zeit
-  verworfen» sagt danach «wie eine Zählerlücke» (P-1 aus U3 a).
+* **G7** (versetzter Abschnitt einer MQTT-Reihe, Befund ``zaehler_versatz`` mit «bleiben»/«verwerfen») ist seit Weg B, Sitzung
+  B3a, entfernt; geblieben ist die Probe, dass G4 die Schritte eines solchen Abschnitts jetzt nennt und ein eingetragener Tausch
+  sie nicht mehr nennen lässt (Bauplan Nr. 183/2).
 * **Zeit-Proben:** Tausch über Mitternacht, an der Monatsgrenze, genau zur vollen Stunde, Publisher im 15-Minuten-Takt, am Tag
   der Herbstumstellung; die Datei liest keine Uhr und läuft auch mit ``TZ=Pacific/Auckland`` und ``TZ=UTC``. Der Tausch IN der
   doppelten Herbststunde bleibt benannte Grenze (BERECHNUNGEN; die Rohstände tragen örtliche Zeit ohne Zone).
@@ -20,8 +19,7 @@ Saat: reine MQTT-Anlage, Netzbezug 0,5 kWh je Stunde ab 5 000 kWh, Rohstände im
 (``mqtt_energy_snapshots``), je volle Stunde um :05 der Stundenlauf (Reihe ``snapshot_anlage`` + Kanäle
 ``schreibe_kanaele_im_stundenlauf``) — dieselbe Saat wie die Messung des Rechenwegs (``golden-master/sensorwechsel-saat/u3/``), mit
 festen Tagen. Schwesterdateien: test_sensorwechsel_u2c_proben.py (Kern, HA-Spiegel), test_sensorwechsel_s2_naht.py (Naht im
-Kanal), test_sensorwechsel_s3bk_proben.py («Zähler getauscht»), test_sensorwechsel_u3a_proben.py (Auskunft «Zeit verworfen»),
-test_daten_checker_zaehler_versatz.py (versetzter Abschnitt), test_s4_r7_tagesreset_zaehler.py (Tageszähler).
+Kanal), test_sensorwechsel_s3bk_proben.py («Zähler getauscht»), test_s4_r7_tagesreset_zaehler.py (Tageszähler).
 """
 
 from __future__ import annotations
@@ -585,111 +583,29 @@ def _stueck(versatz=2000.0):
     return lambda t: wahr(t) + (versatz if ST_VON <= t < ST_BIS else 0.0)
 
 
-async def _versatz(db, aid):
+@pytest.mark.parametrize("versatz", [100.0, 2000.0], ids=["plus_100", "plus_2000"])
+@pytest.mark.parametrize("eintrag", [False, True], ids=["ohne_eintrag", "getauscht_am_sprung_und_rueckgang"])
+async def test_g7_entfaellt_g4_nennt_die_schritte_eines_frueher_versetzten_abschnitts(db, monkeypatch, versatz, eintrag):
+    """Weg B, Sitzung B3a (Bauplan Nr. 183/2): ohne die Korrektur am Stück gibt es keinen versetzten Abschnitt mehr, die
+    Ausnahme G7 (``versatz_mqtt.mqtt_versatz_stunden``) entfällt — G4 nennt die Schritte, die bis dahin der Befund
+    ``zaehler_versatz`` deckte, mit dem Knopf «Zähler getauscht»; einen Rückgang, den G4 nennt, nennt ``zaehler_ruecksprung``
+    nicht noch einmal (ein Befund je Ursache), einen, den G4 nicht nennt, nennt er. Ist an beiden Schritten ein Tausch über
+    «Zähler getauscht» eingetragen, nennt keiner der beiden Befunde einen Schritt."""
     from backend.services.daten_checker import DatenChecker
 
-    zw.vergiss(db)
-    return [e for e in await DatenChecker(db)._check_zaehler_versatz(await _anlage_frisch(db, aid)) if e.schwere != "ok"]
-
-
-def _stueck_route(grund):
-    async def f(db, aid):
-        from backend.api.routes import sensorwechsel as sw
-
-        b = [e for e in await _versatz(db, aid)][0]
-        req = sw.StueckRequest(sensor_key=b.werte["schluessel"], sprung=datetime.fromisoformat(b.werte["sprung"]),
-                               rueckgang=datetime.fromisoformat(b.werte["rueckgang"]), grund=grund)
-        p = await sw.pruefe_stueck(aid, req, db)
-        r = await sw.stueck_korrigieren(aid, req, db)
-        return {"befund": b, "pruefen": p, "eintragen": r}
-    return f
-
-
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_nur_der_sprung"])
-async def test_g7_bleiben_zwei_eintraege_11958_12_11958(db, monkeypatch, sprengsatz):
-    if sprengsatz:
-        from backend.services.zuordnung_wechsel import stueck as st
-
-        echt = st.tausch_lagen
-
-        async def nur_erste(db, anlage, la):
-            return (await echt(db, anlage, la))[:1]
-        monkeypatch.setattr(st, "tausch_lagen", nur_erste)
     aid = (await _anlage(db)).id
-    antw = await betrieb(db, aid, Saat(_stueck(), ende=datetime(2026, 6, 12), spaet=[_stueck_route("fortsetzung")]))
-    b, p = antw[0]["befund"], antw[0]["pruefen"]
-    assert b.code == "zaehler_versatz" and b.werte["lage"] == "mqtt" and b.schwere == "warning"
-    assert b.werte["sprung"] == "2026-06-08T11:00" and b.werte["rueckgang"] == "2026-06-10T11:00"
-    assert p["gruende"] == ["fortsetzung", "korrektur"] and "zwei" in p["bleiben_satz"]
-    tage = [date(2026, 6, 8), date(2026, 6, 9), date(2026, 6, 10)]
-    ansicht = await tagesansicht(db, aid, tage)
-    if sprengsatz:                                          # der Rückgang zählt als Neubeginn (+5 000)
-        assert ansicht[:2] == [pytest.approx(11.958, abs=0.001), pytest.approx(12.0)] and ansicht[2] > 5000
-        return
-    assert ansicht == [pytest.approx(11.958, abs=0.001), pytest.approx(12.0), pytest.approx(11.958, abs=0.001)]
-    for d, soll in zip(tage, (11.958, 12.0, 11.958)):
-        assert await kanal_tag(db, aid, d) == pytest.approx(soll, abs=0.001)
-        assert await reihe_tag(db, aid, d) == pytest.approx(soll, abs=0.001)
-    if not sprengsatz:
-        assert await _versatz(db, aid) == []                     # der Befund ist weg
-
-
-@pytest.mark.parametrize("sprengsatz", ["gebaut", "ohne_kanal_beginn_davor", "ohne_bruecke"])
-async def test_g7_verwerfen_monat_vollstaendig(db, monkeypatch, sprengsatz):
-    from backend.services.kanal import korrektur as kk
-    from backend.services.zuordnung_wechsel import korrektur as kr
-
-    if sprengsatz == "ohne_kanal_beginn_davor":
-        monkeypatch.setattr(kr, "_kanal_beginn", lambda a: int(a.falsch_seit.timestamp()))
-    if sprengsatz == "ohne_bruecke":
-        async def keine(*a, **k):
-            return None
-        monkeypatch.setattr(kk, "bruecken_versatz", keine)
-    aid = (await _anlage(db)).id
-    await betrieb(db, aid, Saat(_stueck(), ende=datetime(2026, 6, 12), spaet=[_stueck_route("korrektur")]))
-    tage = await tagesansicht(db, aid, [date(2026, 6, d) for d in (8, 9, 10)])
-    soll = {"gebaut": [5.0, None, 31.0], "ohne_kanal_beginn_davor": [2005.5, None, -1969.5], "ohne_bruecke": [5.0, None, 6.0]}
-    assert tage == [pytest.approx(x, abs=0.001) if x is not None else None for x in soll[sprengsatz]]
-    if sprengsatz == "gebaut":
-        assert await _versatz(db, aid) == []
-
-
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_kanal_ohne_bruecke_gelesen"])
-async def test_g7_p1_auskunft_zeit_verworfen_wie_zaehlerluecke(db, monkeypatch, sprengsatz):
-    from backend.services.daten_checker import DatenChecker
-    from backend.services.kanal import korrektur as kk
-
-    aid = (await _anlage(db)).id
-    await betrieb(db, aid, Saat(_stueck(), ende=datetime(2026, 6, 12), spaet=[_stueck_route("korrektur")]))
-    if sprengsatz:
-        async def nie(*a, **k):
-            return False
-        monkeypatch.setattr(kk, "ist_ueberbrueckt", nie)
-    zw.vergiss(db)
-    erg = await DatenChecker(db)._check_zaehler_zeit_verworfen(await _anlage_frisch(db, aid))
-    assert len(erg) == 1
-    if sprengsatz:
-        assert "keine Differenz" in erg[0].details
-    else:
-        assert "wie über jede Zählerlücke" in erg[0].details and "10.06.2026" in erg[0].details
-
-
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_ohne_ausnahme_g7"])
-async def test_g7_g4_schweigt_fuer_die_schritte_des_abschnitts(db, monkeypatch, sprengsatz):
-    """Ein Abschnitt +100: der Rückgang (5 100 → 5 000, über 90 %) zählt im Kanal −100 — G4 nennt ihn nicht, weil der versetzte
-    Abschnitt ihn nennt (G7); ``zaehler_ruecksprung`` ebenso nicht."""
-    from backend.services.daten_checker import DatenChecker
-    from backend.services.daten_checker.datenquelle import versatz_mqtt
-
-    if sprengsatz:
-        async def keine(db, aid):
-            return {}
-        monkeypatch.setattr(versatz_mqtt, "mqtt_versatz_stunden", keine)
-    aid = (await _anlage(db)).id
-    await betrieb(db, aid, Saat(_stueck(100.0), ende=datetime(2026, 6, 12)))
+    spaet = [getauscht(ST_VON), getauscht(ST_BIS)] if eintrag else []
+    await betrieb(db, aid, Saat(_stueck(versatz), ende=datetime(2026, 6, 12), spaet=spaet))
     a = await _anlage_frisch(db, aid)
-    assert [e.werte["lage"] for e in await _versatz(db, aid)] == ["mqtt"]
-    g4 = await DatenChecker(db)._check_mqtt_zaehlerstand_springt(a)
-    assert [e.werte["art"] for e in g4] == (["rueckgang"] if sprengsatz else [])
     zw.vergiss(db)
-    assert await DatenChecker(db)._check_zaehler_ruecksprung(a, jetzt=datetime(2026, 6, 12)) == [] or sprengsatz
+    g4 = await DatenChecker(db)._check_mqtt_zaehlerstand_springt(a)
+    if eintrag:
+        assert g4 == []
+    else:
+        # Gemessen (B3a): +100 ⇒ der Rückgang (über 90 % des Stands, −100 in der Stunde); +2 000 ⇒ der Sprung, den Fall um mehr
+        # als ein Zehntel nennt dann «Zählerstände – Rücksprung» (unten).
+        assert [e.werte["art"] for e in g4] == (["rueckgang"] if versatz == 100.0 else ["sprung"])
+        assert all(e.knopf == "Zähler getauscht" for e in g4)
+    zw.vergiss(db)
+    rs = await DatenChecker(db)._check_zaehler_ruecksprung(a, jetzt=datetime(2026, 6, 12))
+    assert [e.code for e in rs] == (["zaehler_ruecksprung"] if (versatz == 2000.0 and not eintrag) else [])
