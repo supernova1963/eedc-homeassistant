@@ -20,6 +20,7 @@ from sqlalchemy import and_, select
 from backend.models.zuordnung_wechsel import ANSATZ_SCHNITT, GRUND_FORTSETZUNG, HERKUNFT_WECHSEL, ZuordnungWechsel
 from backend.services.kanal.nachfuellen import nachfuellen_anlage, nachfuellen_spiegel
 from backend.services.repair_orchestrator import _reset_state_for_tests
+from backend.tests import test_sensorwechsel_u3b_proben as U3B  # lädt alle Modelle, bevor die ``db``-Fixture das Schema anlegt
 from backend.tests.test_kanal_nachfuellen import (  # noqa: F401 — Fixtures
     datei,
     ha,
@@ -97,3 +98,38 @@ async def test_werkbank_nach_bleiben_rechnet_wie_ohne_zeile(ha, datei, monkeypat
     await _verwerfen(sitzungen, aid, EINSP, t)
     assert await _aus_ha_laden(sitzungen, aid, svc, monkeypatch) == ohne
     assert await _wechsel(sitzungen, aid) == ([(spaeter, "sensor.einsp_neu", "sensor.einsp_neu")] if mit_zeile else [])
+
+
+async def test_werkbank_mqtt_feld_der_zaehler_getauscht_in_der_ersten_stunde_bleibt(db):
+    """Dritter Fall (Korrekturrunde WEGB-K, Nachmessung B1): MQTT-Feld Netzbezug (0,5 kWh/h), «Zähler getauscht» am 08.06. um
+    10:20 eingetragen (der neue Zähler steht 2 000 höher). Die Werkbank mit ihrer Vorgabe-Zeit (Beginn der jüngsten Quelle =
+    die Stunde des Tauschs, 10:00) hebt den Tausch nicht auf — sein ``ab_ts`` (11:00) liegt nach dem Zeitpunkt; nach der
+    Neubildung des Tags zeigt die Tagesansicht 11,958 (die Minuten zwischen dem letzten alten und dem ersten neuen Stand fehlen,
+    wie ohne Werkbank), nicht 2 012,0 (der Sprung als Menge)."""
+    from sqlalchemy import text
+
+    from backend.api.routes.sensorwechsel import ZaehlerGetauschtRequest, zaehler_getauscht
+    from backend.services.zuordnung_wechsel.korrektur import sitzungen_wie
+
+    async def getauscht(db_, aid_):
+        await zaehler_getauscht(aid_, U3B.NETZ_FID, ZaehlerGetauschtRequest(getauscht_am=U3B.E + timedelta(minutes=3)), db_)
+        await U3B._laeufe()
+        U3B.zw.vergiss(db_)
+
+    aid = (await U3B._anlage(db)).id
+    await U3B.betrieb(db, aid, U3B.Saat(lambda x: U3B.wahr(x) + (2000.0 if x >= U3B.E else 0.0),
+                                       handlungen=[(U3B.E + timedelta(minutes=40), getauscht)]))
+    tag = U3B.E.date()
+    assert (await U3B.tagesansicht(db, aid, [tag]))[0] == pytest.approx(11.958)
+    t = (await db.execute(text("select max(q.gueltig_ab) from kanal_quelle q join kanal k on k.id = q.kanal_id "
+                               "where k.anlage_id = :a and k.key = :k"), {"a": aid, "k": U3B.NETZ})).scalar_one()
+    assert datetime.fromtimestamp(t) == U3B.E.replace(minute=0)              # die Vorgabe-Zeit der Werkbank
+    sitzungen = sitzungen_wie(db, None)
+    await _verwerfen(sitzungen, aid, U3B.NETZ, t)
+    db.expunge_all()
+    for d in (tag, tag + timedelta(days=1)):                                 # «Tag reparieren» bzw. Nachtlauf
+        await U3B._tagesabschluss(db, aid, d)
+    db.expunge_all()
+    assert (await U3B.tagesansicht(db, aid, [tag]))[0] == pytest.approx(11.958)
+    zeilen = (await db.execute(text("select grund, ab_ts from zuordnung_wechsel where anlage_id = :a"), {"a": aid})).all()
+    assert [(g, str(a)[:16]) for g, a in zeilen] == [("fortsetzung", "2026-06-08 11:00")]

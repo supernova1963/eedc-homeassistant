@@ -4,9 +4,10 @@
 Beim Wechsel der Quelle dieses Felds wurde «Daten vor der Änderung löschen» gewählt. Die Daten dieses Felds aus der Zeit vor
 der Änderung sind gelöscht; seitdem verhält sich das Feld, als wäre der neue Sensor von Anfang an zugeordnet: Was Home
 Assistant für ihn führt, übernimmt eedc, für die Zeit davor zeigt das Feld «—». Die Meldung nennt das Feld und den Zeitpunkt
-der Änderung. Die Details sagen, seit wann Home Assistant den neuen Sensor führt (bei einer MQTT-Quelle: seit wann eedc ihren
-ersten Wert hat) und — beginnt er mitten an einem Tag — dass dieser Tag für das Feld nicht vollständig ist: eedc zählt ihn wie
-Home Assistant erst ab dieser Stunde. Dazu nennen die Details die Monate mit gespeichertem Monatswert; die bleiben, wie sie sind.
+der Änderung. Die Details sagen, seit wann Home Assistant den neuen Sensor führt, und — beginnt er mitten an einem Tag — dass
+dieser Tag für das Feld nicht vollständig ist: eedc zählt ihn wie Home Assistant erst ab dieser Stunde. Bei einer Quelle ohne
+Statistik in Home Assistant (MQTT) sprechen sie von der neuen Quelle und nennen den Zeitpunkt ihres ersten gespeicherten
+Zählerstands: ab ihm zählt eedc. Dazu nennen die Details die Monate mit gespeichertem Monatswert; die bleiben, wie sie sind.
 
 ## Lösungsweg
 1. Die Angabe lesen. Stimmt sie, ist nichts zu tun: die Auskunft beschreibt, was beim Wechsel gewählt wurde.

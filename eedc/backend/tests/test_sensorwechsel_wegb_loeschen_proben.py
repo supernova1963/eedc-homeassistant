@@ -680,7 +680,11 @@ async def test_c_mqtt_feld_allein_sichtbare_netz_tageswerte(db, monkeypatch, ste
     b = await befunde(w)
     meldung, details = b["daten_vor_aenderung_geloescht"][0].split(" || ")
     assert meldung == "Netzbezug: Daten vor dem 04.11.2026 10:20 Uhr gelöscht"
-    assert "eedc zählt die neue Quelle seit dem 04.11.2026 10:00 Uhr; davor zeigt das Feld «—»." in details
+    # WEGB-K (Nachmessung B3): «die neue Quelle» statt «der neue Sensor», die Zeit des ersten gespeicherten Stands (11:00), nicht
+    # die volle Stunde davor (10:00, Beginn der ersten Kanal-Zeile = Nullpunkt)
+    assert "als wäre die neue Quelle von Anfang an zugeordnet." in details
+    assert ("eedc zählt die neue Quelle ab ihrem ersten gespeicherten Zählerstand am 04.11.2026 11:00 Uhr; davor zeigt das Feld "
+            "«—»." in details)
 
 
 async def test_dialog_zwei_antworten_und_kein_verwerfen(db, monkeypatch, stehende_uhr):

@@ -33,10 +33,15 @@ CODE = "daten_vor_aenderung_geloescht"
 SATZ_MELDUNG = "{name}: Daten vor dem {zeit} Uhr gelöscht"
 SATZ_GELOESCHT = ("Die Daten dieses Felds vor dem {zeit} Uhr sind gelöscht («Daten vor der Änderung löschen»). Seitdem verhält "
                   "sich das Feld, als wäre der neue Sensor von Anfang an zugeordnet.")
+#: Ohne Beginn einer HA-Statistik (MQTT, eigene Zählerstände; Korrekturrunde WEGB-K, Nachmessung B3): «Quelle», nicht «Sensor».
+SATZ_GELOESCHT_QUELLE = ("Die Daten dieses Felds vor dem {zeit} Uhr sind gelöscht («Daten vor der Änderung löschen»). Seitdem "
+                         "verhält sich das Feld, als wäre die neue Quelle von Anfang an zugeordnet.")
 SATZ_HA_SEIT = "Home Assistant führt den neuen Sensor seit dem {zeit} Uhr; davor zeigt das Feld «—»."
 SATZ_TAG_TEIL = ("Der {tag} ist für dieses Feld deshalb nicht vollständig: eedc zählt ihn, wie Home Assistant, erst ab "
                  "{uhr} Uhr.")
-SATZ_QUELLE_SEIT = "eedc zählt die neue Quelle seit dem {zeit} Uhr; davor zeigt das Feld «—»."
+#: Die Zeit ist die des ersten gespeicherten Zählerstands (Ende der ersten Kanal-Stunde): die erste Zeile ist der Nullpunkt,
+#: gezählt wird ab ihr (WEGB-K, Nachmessung B3 — vorher die volle Stunde davor).
+SATZ_QUELLE_SEIT = "eedc zählt die neue Quelle ab ihrem ersten gespeicherten Zählerstand am {zeit} Uhr; davor zeigt das Feld «—»."
 SATZ_NOCH_KEIN_WERT = "Die neue Quelle hat noch keinen Wert geliefert; bis dahin zeigt das Feld «—»."
 SATZ_MONAT = "Für {monate} ist ein Monatswert gespeichert. Er bleibt, wie er ist."
 SATZ_MONATE = "Für {monate} sind Monatswerte gespeichert. Sie bleiben, wie sie sind."
@@ -94,7 +99,7 @@ def texte(name: str, g: Geloescht) -> tuple[str, str]:
     """Meldung und Details in Anwender-Sprache (kein Menüweg — «Was gilt» öffnet den Lösungsweg)."""
     from backend.services.verwerfen_vor_quellbeginn import _monate_text
 
-    teile = [SATZ_GELOESCHT.format(zeit=_uhr(g.geloescht_am))]
+    teile = [(SATZ_GELOESCHT if g.ha_beginn else SATZ_GELOESCHT_QUELLE).format(zeit=_uhr(g.geloescht_am))]
     if g.erste is None:
         teile.append(SATZ_NOCH_KEIN_WERT)
     elif g.ha_beginn:
@@ -102,7 +107,7 @@ def texte(name: str, g: Geloescht) -> tuple[str, str]:
         if g.teil_tag is not None:
             teile.append(SATZ_TAG_TEIL.format(tag=g.teil_tag.strftime("%d.%m.%Y"), uhr=g.erste.strftime("%H:%M")))
     else:
-        teile.append(SATZ_QUELLE_SEIT.format(zeit=_uhr(g.erste)))
+        teile.append(SATZ_QUELLE_SEIT.format(zeit=_uhr(datetime.fromtimestamp(g.erste.timestamp() + 3600))))
     if g.monate:
         teile.append((SATZ_MONAT if len(g.monate) == 1 else SATZ_MONATE).format(monate=_monate_text(g.monate)))
     return SATZ_MELDUNG.format(name=name, zeit=_uhr(g.geloescht_am)), " ".join(teile)
@@ -110,7 +115,7 @@ def texte(name: str, g: Geloescht) -> tuple[str, str]:
 
 def feld_name(invs: dict, key: str) -> str:
     """``inv:2:ladung_kwh`` → «<Gerät> – Ladung gesamt»; ``basis:netzbezug`` → «Netzbezug» (Namen der Oberfläche). Seit Weg B
-    (Sitzung B2) hier — vorher in ``grund_fehlt.py`` (entfernt); auch für ``monatswert.py`` und ``verworfen.py``."""
+    (Sitzung B2) hier — vorher in ``grund_fehlt.py`` (entfernt); auch für ``monatswert.py``."""
     from backend.core.field_definitions import FELD_LABELS, feld_label_fuer_investition
 
     if key.startswith("inv:"):

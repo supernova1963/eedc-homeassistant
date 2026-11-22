@@ -14,7 +14,8 @@ ihrem eigenen Weg wie in v4.3.1 (sie löscht keine Zählerstände, füllt nichts
   am» (Werkbank-Form, ein Halt fürs Nachfüllen).
 * **Zählerstände** (``sensor_snapshots``) und **MQTT-Rohstände** des Schlüssels vor ``t`` (``verwerfe_staende``).
 * **Wechsel-Zeilen** des Schlüssels (nur mit ``zum_platzhalter``; ``loesche_wechsel``): ohne sie gilt für jede Zeit die heutige
-  Zuordnung. Die Werkbank löscht über denselben Baustein die Wechsel bis zum Ende der ersten Stunde ab ihrem Zeitpunkt.
+  Zuordnung. Die Werkbank löscht über denselben Baustein die Wechsel bis zum Ende der ersten Stunde ab ihrem Zeitpunkt, einen
+  «Zähler getauscht» nur bis zu ihrem Zeitpunkt.
 * **Bestand:** der Feld-Schlüssel in Stunden- und Tageszeilen bis zum Bestandstag von ``t``
   (``verwerfen_vor_quellbeginn.leere_bestand``) — mit ``auch_abschluss`` in **allen** Monaten, sonst ohne Monate mit
   Abschluss.
@@ -121,16 +122,23 @@ async def _kanal(db: AsyncSession, g: Geloescht, anlage_id: int, t_ts: int, jetz
                                                    nur=lambda key: gehoert_zu(g.abgeleitet_familien, key))
 
 
-async def loesche_wechsel(db: AsyncSession, anlage_id: int, key: str, *, bis: Optional[datetime] = None) -> int:
+async def loesche_wechsel(db: AsyncSession, anlage_id: int, key: str, *, bis: Optional[datetime] = None,
+                          gleiche_quelle_bis: Optional[datetime] = None) -> int:
     """Die verzeichneten Wechsel des Schlüssels löschen — alle («löschen»), mit ``bis`` die mit ``ab_ts ≤ bis`` (Werkbank «Werte
-    vor dem Sensorbeginn verwerfen», Bauplan Sensorwechsel Nr. 184/2); ohne sie gilt dort die heutige Zuordnung (B-0). In der
-    Sitzung des Aufrufers, ohne Commit. Returns: Zahl der gelöschten Zeilen."""
+    vor dem Sensorbeginn verwerfen», Bauplan Sensorwechsel Nr. 184/2); ohne sie gilt dort die heutige Zuordnung (B-0). Mit
+    ``gleiche_quelle_bis`` (der Zeitpunkt der Werkbank) eine Zeile derselben Quelle («Zähler getauscht») nur mit ``ab_ts`` bis
+    dorthin — ein Tausch in der ersten Stunde ab dem Zeitpunkt bleibt verzeichnet, sonst zählte sein Sprung wieder als Menge
+    (Korrekturrunde WEGB-K, Nachmessung B1). In der Sitzung des Aufrufers, ohne Commit. Returns: Zahl der gelöschten Zeilen."""
     from backend.models.zuordnung_wechsel import ZuordnungWechsel
-    from backend.services.zuordnung_wechsel.zeitpunkt import vergiss
+    from backend.services.zuordnung_wechsel.zeitpunkt import gleiche_quelle, vergiss
 
     bed = [ZuordnungWechsel.anlage_id == anlage_id, ZuordnungWechsel.sensor_key == key]
     if bis is not None:
         bed.append(ZuordnungWechsel.ab_ts <= bis)
+    if gleiche_quelle_bis is not None:
+        bleibt = [w.id for w in (await db.execute(select(ZuordnungWechsel).where(and_(*bed)))).scalars().all()
+                  if w.ab_ts > gleiche_quelle_bis and gleiche_quelle(w.vorher, w.nachher)]
+        bed.append(ZuordnungWechsel.id.not_in(bleibt))
     n = int((await db.execute(delete(ZuordnungWechsel).where(and_(*bed)))).rowcount or 0)
     vergiss(db, anlage_id)
     return n

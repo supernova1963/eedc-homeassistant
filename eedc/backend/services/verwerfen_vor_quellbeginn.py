@@ -21,7 +21,8 @@ in **beiden Schichten, feldgenau, ohne eine Zeile zu löschen** (außer den Kana
   nennt, wie viele Stunden des Geräts er trägt).
 * **Verzeichnete Wechsel** des Felds bis zum Ende der ersten Stunde ab ``t`` (etwa ein Wechsel «bleiben» zum Sensor ab ``t``)
   löscht sie über denselben Baustein wie «löschen» (``feld_loeschen.loesche_wechsel``, Bauplan Sensorwechsel Nr. 184/2): sonst
-  läse «Aus HA laden» vor ``t`` weiter den alten Sensor (Zuordnung zum Zeitpunkt). Ein späterer Wechsel bleibt.
+  läse «Aus HA laden» vor ``t`` weiter den alten Sensor (Zuordnung zum Zeitpunkt). Ein späterer Wechsel bleibt, ebenso ein
+  «Zähler getauscht» (dieselbe Quelle) mit ``ab_ts`` nach ``t`` — sein Sprung zählte sonst wieder als Menge.
 
 **Ein Lauf, idempotent:** der zweite Lauf findet keine Kanalzeile und keinen Schlüssel mehr und sagt «nichts zu
 verwerfen». **Kein Rückweg in eedc:** die Vorschau nennt die Sicherung der eedc-Datenbank. Aktivität in derselben Sitzung
@@ -514,8 +515,10 @@ async def fuehre_aus(db: AsyncSession, anlage_id: int, params: dict[str, Any]) -
     markiert = await kv.markiere_quellen(db, la.kanal.kanal_id, la.t, int(datetime.now().timestamp())) if geloescht else 0
     # Bauplan Sensorwechsel Nr. 184/2: verzeichnete Wechsel in der verworfenen Zeit aufheben, wie «löschen» (derselbe Baustein) —
     # bis zum Ende der ersten Stunde ab ``t``: ein Wechsel «bleiben» gilt ab der vollen Stunde nach seiner Kanal-Quelle
-    # (``zuordnung_wechsel/ansatz``: ``ab_ts`` = G + 1 h). Ein späterer Wechsel bleibt.
-    await feld_loeschen.loesche_wechsel(db, anlage_id, la.key, bis=datetime.fromtimestamp(la.t + 3600))
+    # (``zuordnung_wechsel/ansatz``: ``ab_ts`` = G + 1 h). Ein späterer Wechsel bleibt, ebenso ein «Zähler getauscht» in der
+    # ersten Stunde ab ``t`` (WEGB-K, Nachmessung B1: die Vorgabe-Zeit ist an einem MQTT-Feld die Stunde des jüngsten Tauschs).
+    await feld_loeschen.loesche_wechsel(db, anlage_id, la.key, bis=datetime.fromtimestamp(la.t + 3600),
+                                        gleiche_quelle_bis=datetime.fromtimestamp(la.t))
     summary = {"kanal": la.key, "zeitpunkt": kv.text_aus_zeitpunkt(la.t), "kanalzeilen_geloescht": geloescht,
                "quellen_markiert": markiert, **bestand}
     if geloescht or bestand["felder_geleert"]:

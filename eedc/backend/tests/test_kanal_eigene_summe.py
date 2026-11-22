@@ -214,24 +214,26 @@ async def test_nachholen_ueber_eine_luecke_und_kein_doppeltes_schreiben(db):
     assert [r.sum for r in rows] == [0.0, 1.0, 5.0]
 
 
-async def test_deckel_bleibt_schreibfilter_auf_pv_und_einspeisung(db):
-    """10 kWp ⇒ Schwelle 15 kWh je Stunde (``schwelle_pv_einspeisung_stunde_kwh``). Ein Sprung von
-    +250 kWh in einer Stunde wird verworfen: der Stand läuft weiter, die Summe nicht. Der Netzbezug
-    hat keinen Deckel (``ACHSEN_MIT_DECKEL``) und trägt denselben Sprung."""
+async def test_kein_deckel_der_sprung_zaehlt_wie_gemeldet_auf_pv_und_einspeisung(db):
+    """Korrekturrunde WEGB-K, K7 (Entscheid Gernot 22.11.2026): die Eigene Summe deckelt nicht mehr. Ein Sprung von +250 kWh in
+    einer Stunde (10 kWp, früher über der Schwelle von 15 kWh je Stunde verworfen) zählt an PV wie am Netzbezug als Menge der
+    Stunde — wie gemeldet; den Sprung nennt der Daten-Checker (``mqtt_zaehlerstand_springt``) mit «Zähler getauscht».
+    Bis K7: PV ``[0, 4, 4, 8]`` (die Stunde zählte 0, auch ihre echte Menge)."""
     a, pv = await _anlage(db, kwp=10.0)
     folge = {0: [100.0], 1: [104.0], 2: [354.0], 3: [358.0]}
     await _staende(db, a.id, f"inv/{pv.id}/pv_erzeugung_kwh", folge)
     await _staende(db, a.id, "netzbezug_kwh", folge)
     await _lauf(db, a, [1, 2, 3, 4])
     _, pvrows = await _kanal(db, a, f"inv:{pv.id}:pv_erzeugung_kwh")
-    assert [r.sum for r in pvrows] == [0.0, 4.0, 4.0, 8.0]
+    assert [r.sum for r in pvrows] == [0.0, 4.0, 254.0, 258.0]
     assert [r.state for r in pvrows] == [100.0, 104.0, 354.0, 358.0]
     _, netz = await _kanal(db, a, "basis:netzbezug")
     assert [r.sum for r in netz] == [0.0, 4.0, 254.0, 258.0]
 
 
-async def test_deckel_fenster_waechst_mit_der_luecke(db):
-    """Drei Stunden ohne Stand (Lücke): n = 4 ⇒ Schwelle 60 kWh; +40 kWh nach der Lücke bleiben."""
+async def test_nach_einer_luecke_zaehlt_der_zuwachs_ganz(db):
+    """Drei Stunden ohne Stand (Lücke): +40 kWh nach der Lücke stehen in der Stunde danach (wie HA). Bis K7 hing das am
+    Deckel-Fenster (n = 4 ⇒ Schwelle 60 kWh); seither gibt es keinen Deckel."""
     a, pv = await _anlage(db, kwp=10.0)
     await _staende(db, a.id, f"inv/{pv.id}/pv_erzeugung_kwh", {0: [100.0], 4: [140.0]})
     await _lauf(db, a, [1, 5])

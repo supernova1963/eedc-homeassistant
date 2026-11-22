@@ -4,7 +4,15 @@
 Für eine Komponente (Wallbox, E-Auto, Wärmepumpe, Sonstiges, Einspeisung oder Netzbezug) steht in eedc an einem oder
 mehreren Tagen ein anderer Wert als in der Langzeitstatistik von Home Assistant — mindestens 2 kWh und 5 % Unterschied.
 Es gibt eine Zeile je Gerät, nicht je Tag; sie nennt den Tag mit der größten Abweichung und beide Zahlen. Diese Werte
-tragen Wirtschaftlichkeit und CO₂-Bilanz mit — eine Abweichung an der Wallbox kostet genauso wie eine an der PV.
+tragen Wirtschaftlichkeit und CO₂-Bilanz mit — eine Abweichung an der Wallbox kostet genauso wie eine an der PV. Geprüft werden
+die Tage der letzten 90 Tage bis gestern.
+
+**Benannte Grenze — der erste Tag einer Statistik:** am Tag, an dem die Statistik eines Sensors in Home Assistant beginnt, kann
+die Prüfung den Tag nennen, obwohl eedc und Home Assistant für ihn dieselbe Zahl zeigen. Dann ist nichts zu tun;
+«Aus Home Assistant neu übernehmen» ändert daran nichts. Der Grund: eedc zählt den Kalendertag ab der ersten Stunde wie Home
+Assistant, der Vergleichswert der Prüfung reicht für diesen Tag aber nur bis 23 Uhr (die Stunde 23–24 Uhr zählt er zum
+Folgetag). Läuft das Gerät in dieser letzten Stunde — etwa eine Wärmepumpe nachts — mit mindestens 2 kWh und 5 % des Tages,
+erscheint der Tag (gemessen: «12,5 → 10,0 kWh», Tagesansicht und Home Assistant 12,5).
 
 ## Lösungsweg
 1. In Home Assistant prüfen, welcher Wert stimmt. Ist die Statistik dort falsch (etwa ein Zählersprung), sie unter

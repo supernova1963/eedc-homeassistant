@@ -74,18 +74,6 @@ async def _anlage(db, *, staende=None, spiegel=True, spiegel_plus=0.0, quelle_se
     return a, wb, key
 
 
-def _kanal_tage(monkeypatch, je_tag: dict):
-    """Die Tageswahl der Kanal-Schicht gestellt: ``{datum: Schlüssel aus den Kanälen}`` (ohne Eintrag: keiner). Die Feld-Auskunft
-    ``feld_leser.feld_aus_kanal_am_tag``, die bis Weg B, Sitzung B3a, mit gestellt wurde, ist mit dem Befund ``zaehler_versatz``
-    entfernt."""
-    import backend.services.energie_profil.kanal_stunden as ks
-
-    async def _schluessel(_db, _aid, datum):
-        return frozenset(je_tag.get(datum, ()))
-
-    monkeypatch.setattr(ks, "kanal_schluessel_des_tages", _schluessel)
-
-
 QA = {"art": "ha", "entity_id": SENSOR}
 
 
@@ -170,7 +158,6 @@ async def test_g3_tag_fest_nur_mit_tag_und_wert(db, monkeypatch, traegt):
     from backend.services import verwerfen_vor_quellbeginn as vq
     from backend.services.zuordnung_wechsel import zaehler_getauscht as zg
 
-    _kanal_tage(monkeypatch, {})
     a, _wb, key = await _anlage(db, spiegel=False, feld="ladung_kwh")
     ziele = await vq.bestand_ziele(db, a, key)
     assert ziele.tz_keys                                              # Wallbox «Ladung gesamt» steht in der Tageszeile

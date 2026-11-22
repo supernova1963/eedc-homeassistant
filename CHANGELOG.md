@@ -38,11 +38,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   bisher (Beispiel aus der Messung: Netzbezug 47,5 → 48,0 kWh). Der erste Tag eines neuen Zählers zeigt einen Sprung beim
   ersten Wert wie Home Assistant; der Weg ist, den Wert in Home Assistant zu berichtigen („Summe anpassen“) und danach im
   Daten-Checker „Aus Home Assistant neu übernehmen“. Die Auskunft „Tage mit Mengen aus den gespeicherten Stundenwerten“
-  („… Tage ohne Kanal-Deckung …“) kann einen Tag weniger nennen — der Tag, an dem eine Statistik beginnt, zählt nicht mehr dazu. Am ersten Tag einer Statistik kann „Abweichung zu Home
-  Assistant an einem Tag (PV)“ den Tag nennen, wenn seine letzte Stunde viel trägt (der Vergleichswert endet um 23 Uhr; der
-  Lösungsweg sagt es). Gespeicherte Monatswerte und gespeicherte Tageswerte ändern sich nicht von selbst. Ein leerer Tag sagt
+  („… Tage ohne Kanal-Deckung …“) kann einen Tag weniger nennen — der Tag, an dem eine Statistik beginnt, zählt nicht mehr dazu.
+  Am ersten Tag einer Statistik können „Abweichung zu Home Assistant an einem Tag (PV)“ und „Ein Gerät weicht an Tagen von
+  Home Assistant ab“ (etwa an einer Wärmepumpe, die nachts läuft) den Tag nennen, obwohl eedc und Home Assistant dieselbe Zahl
+  zeigen — der Vergleichswert endet an diesem Tag um 23 Uhr, bei einer importierten Statistik mit großem ersten Wert lässt er
+  die erste Stunde aus; nichts zu tun, beide Lösungswege sagen es. Die Werte der ersten Stunde nach „Werte vor dem
+  Sensorbeginn verwerfen“ und der erste Tag einer Wallbox bleiben, wie sie bisher waren (ohne die erste Stunde). Gespeicherte Monatswerte und gespeicherte Tageswerte ändern sich nicht von selbst. Ein leerer Tag sagt
   jetzt nur „Zähler zugeordnet, aber für diesen Tag liegen keine Zählerstände vor — eedc bildet für diesen Tag deshalb keinen
-  Tageswert.“ (bisher versprach der Satz ein Nachrechnen in der Reparatur-Werkbank).
+  Tageswert.“ (bisher versprach der Satz ein Nachrechnen in der Reparatur-Werkbank). **MQTT:** springt der Zählerstand eines PV- oder Einspeise-Felds,
+  steht der Sprung jetzt in Tag und Monat (bisher zählte die ganze Stunde nicht, auch ihre echte Menge, und kein Befund nannte
+  sie); der Daten-Checker nennt ihn unter „Zählerstand springt (MQTT)“ mit dem Knopf „Zähler getauscht“ — wie schon am
+  Netzbezug. An einem Tag ohne Kanal-Deckung (Tageswerte aus den gespeicherten Stundenwerten) und für schon gespeicherte
+  Stunden bleibt es wie bisher.
 - **Menüwege von Home Assistant 2026.11** in Befunden, Lösungswegen, Handbüchern und Dialogen: „Einstellungen → Werkzeuge →
   Statistik (in älteren Home-Assistant-Versionen: Entwicklerwerkzeuge → Statistik)“, „Summe anpassen“, „Zeitpunkt auswählen“,
   „Neuer Wert“, „Anpassen“.
@@ -50,7 +57,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Changed
 
 - **Reparatur-Werkbank „Werte vor dem Sensorbeginn verwerfen“:** hebt verzeichnete Sensorwechsel des Felds bis zur ersten
-  Stunde ab dem gewählten Zeitpunkt mit auf — danach rechnet eedc für das Feld, als hätte es den Wechsel nicht gegeben.
+  Stunde ab dem gewählten Zeitpunkt mit auf — danach rechnet eedc für das Feld, als hätte es den Wechsel nicht gegeben. Ein
+  „Zähler getauscht“ in dieser ersten Stunde bleibt eingetragen; sein Sprung zählt weiter nicht als Menge.
 - **Auswertungen → Prognose: die Abweichung heißt überall „MAPE“** — die Kachel nannte die mittlere prozentuale
   Abweichung oben „MAPE“, der Satz zur besten Quelle, die Kopfzeile „Korrektur ausgesetzt“ und der Hinweis am Ausreißer
   dieselbe Zahl „MAE“. Jetzt steht überall „MAPE“ (Mittel der täglichen Abweichung in Prozent vom IST); die Zahlen

@@ -6,6 +6,5 @@
 1144	services/energie_profil/aggregator.py
 989	services/ha_sensors_export.py
 1068	services/ha_statistics_service.py
-914	services/kanal/schreiber.py
 906	services/pdf/builders/jahresbericht.py
 1061	services/repair_orchestrator.py

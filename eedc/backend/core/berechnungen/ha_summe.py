@@ -23,8 +23,9 @@ Die Regel, wie HA sie für ``state_class: total_increasing`` anwendet:
 * Am Ende der Periode: ``_sum += new_state − old_state``; gespeichert werden ``sum`` und
   ``state = new_state``.
 
-DB-frei (ADR-001). Der Plausibilitäts-Deckel (R3) ist **nicht** Teil dieser Regel — HA kennt ihn
-nicht; der Schreiber legt ihn als Filter darüber (Bauplan §4, ``services/kanal/schreiber.py``).
+DB-frei (ADR-001). Der Plausibilitäts-Deckel (R3) ist **nicht** Teil dieser Regel — HA kennt ihn nicht. Die Eigene Summe
+(``services/kanal/schreiber.py``) rechnet seit der Korrekturrunde WEGB-K (K7, Entscheid Gernot 22.11.2026) nur mit dieser Regel;
+den Deckel trägt allein noch der Bestands-Tagespfad (``snapshot/tages_tabelle.py``).
 """
 
 from __future__ import annotations

@@ -777,17 +777,9 @@ class HAStatisticsService:
         vor ``ts`` (1 · 8 · 32 · 128 · 1024 Tage), Abbruch beim ersten Treffer,
         wie der Anker in `get_hourly_slots_for_day`.
         """
-        if conn is None:
-            for tage in _WS_ANKER_FENSTER_TAGE:
-                zeilen = self._ws_zeilen(
-                    [sensor_id], ts - tage * 86400, ts - 1, types=["sum"],
-                ).get(sensor_id, [])
-                treffer = [z for z in zeilen
-                           if z.get("sum") is not None and z["start_ts"] < ts]
-                if treffer:
-                    letzte = max(treffer, key=lambda z: z["start_ts"])
-                    return float(letzte["start_ts"]), letzte["sum"]
-            return None
+        if conn is None:      # Leiter, danach gestuft (WEGB-K: eine Statistik, die über 1 024 Tage ruhte, ist kein Beginn)
+            from backend.services.ha_statistik_rand import ws_anker
+            return ws_anker(self, [sensor_id], ts).get(sensor_id)
         zeile = conn.execute(text("""
             SELECT start_ts, sum FROM statistics
             WHERE metadata_id = :mid AND start_ts < :ts AND sum IS NOT NULL
@@ -1951,21 +1943,10 @@ class HAStatisticsService:
         brauchen = [sid for sid in meta_by_id
                     if per_sensor[sid] and -1 not in per_sensor[sid]]
         if brauchen:
-            if conn is None:
-                offen = list(brauchen)
-                for tage in _WS_ANKER_FENSTER_TAGE:
-                    if not offen:
-                        break
-                    zeilen = self._ws_zeilen(
-                        offen, ts_von - tage * 86400, ts_von - 1, types=["sum"],
-                    )
-                    for sid in list(offen):
-                        treffer = [z for z in zeilen.get(sid, [])
-                                   if z.get("sum") is not None and z["start_ts"] < ts_von]
-                        if treffer:
-                            letzte = max(treffer, key=lambda z: z["start_ts"])
-                            anker[sid] = (letzte["sum"] * _slot_kwh_faktor(meta_by_id, sid), float(letzte["start_ts"]))
-                            offen.remove(sid)
+            if conn is None:  # Leiter, danach gestuft (``ha_statistik_rand.ws_anker``, WEGB-K)
+                from backend.services.ha_statistik_rand import ws_anker
+                for sid, (start, summe) in ws_anker(self, brauchen, ts_von).items():
+                    anker[sid] = (summe * _slot_kwh_faktor(meta_by_id, sid), start)
             else:
                 for sid in brauchen:
                     zeile = conn.execute(

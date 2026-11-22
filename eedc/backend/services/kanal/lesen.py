@@ -263,12 +263,20 @@ def _offset_sql(kid: str, ts: str) -> str:
 #: EINE Bedingung für alle Δ-Leser (zeitraum/reihe, stunden, deltas, zellen); die zwei HA-Leser, die Δ aus HA-Zeilen bilden
 #: (``ha_statistics_service.get_sensor_fensterwert``, ``get_hourly_slots_for_day``), fragen dasselbe als «HA führt keine Zeile
 #: davor». Allgemein, nicht nur nach einem Sensorwechsel — jede Zuordnung eines Sensors, dessen Statistik in HA beginnt.
+#: **Abgrenzung (Korrekturrunde WEGB-K, Nachmessung A1/A2):** die Quelle der ersten Zeile ist die **erste Quelle des Kanals**,
+#: die kein Platzhalter von «löschen» ist (``verwerfen.platzhalter_bedingung``) — die erste Zeile einer späteren Quelle derselben
+#: Entity (A → B → A, danach Werkbank) ist nie der Beginn der Statistik; und der Beginn gilt für die Entity, die die Marke
+#: bestätigt (ohne Grund) oder nach einem Wechsel «bleiben» weiterträgt (``ergebnis.beginn``, ``nachfuellen._bestaetigter_beginn``).
+#: Im Zweifel gilt die Regel nicht (dann fehlt die erste Stunde wie in v4.3.1) — nie ein Zählerstand als Menge.
 def _ha_beginn_sql(kid: str, ts: str) -> str:
     return (f"(SELECT 1 FROM kanal_quelle q JOIN kanal_nachfuellung m ON m.kanal_id = q.kanal_id "
-            f"AND m.statistic_id = q.statistic_id WHERE q.kanal_id = {kid} AND q.familie = 'spiegel' "
-            f"AND q.verworfen_ts IS NULL AND json_extract(m.ergebnis, '$.grund') IS NULL "
+            f"WHERE q.kanal_id = {kid} AND q.familie = 'spiegel' AND q.verworfen_ts IS NULL "
+            f"AND ((m.statistic_id = q.statistic_id AND json_extract(m.ergebnis, '$.grund') IS NULL) "
+            f"OR json_extract(m.ergebnis, '$.beginn') = q.statistic_id) "
             f"AND q.gueltig_ab = (SELECT MAX(q2.gueltig_ab) FROM kanal_quelle q2 WHERE q2.kanal_id = {kid} "
             f"AND q2.gueltig_ab <= {ts}) "
+            f"AND NOT EXISTS (SELECT 1 FROM kanal_quelle q3 WHERE q3.kanal_id = {kid} AND q3.gueltig_ab < q.gueltig_ab "
+            f"AND (q3.verworfen_ts IS NULL OR q3.statistic_id IS NOT NULL)) "
             f"AND NOT EXISTS (SELECT 1 FROM kanal_statistik s0 WHERE s0.kanal_id = {kid} AND s0.start_ts < {ts}))")
 
 

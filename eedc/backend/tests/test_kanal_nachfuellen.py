@@ -446,7 +446,8 @@ async def test_neue_quelle_eines_kanals_wird_geprueft_ohne_ha_abruf(ha, datei):
     await nachfuellen_anstossen(sitzungen, jetzt=JETZT, ha_svc=gezaehlt)
     assert gezaehlt.abrufe == []
     marken = {sid: e for sid, e in (await _marken(sitzungen)).values()}
-    assert marken["sensor.einsp_neu"] == {"zeilen": 0, "grund": "vorgeschichte_andere_quelle"}
+    # WEGB-K (Nachmessung A2): die neue Marke trägt den bestätigten Beginn der Statistik der bisherigen Quelle weiter.
+    assert marken["sensor.einsp_neu"] == {"zeilen": 0, "grund": "vorgeschichte_andere_quelle", "beginn": "sensor.einsp"}
     assert "sensor.einsp" not in marken
 
 

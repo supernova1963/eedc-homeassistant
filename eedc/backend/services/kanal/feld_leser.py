@@ -24,9 +24,7 @@ Marke (Bereichs-Leser, ``kanal_feldwerte_je_fenster``) nimmt den Kanal nur bei e
 
 Leser: ``snapshot/aggregator.get_tagesdetail_kwh`` (*Cockpit → Tag*, Wärme-Verlauf Stunden, Wärme-Verteilung Tag) ·
 ``snapshot/bereichs_leser.lade_tageswerte_je_geraet(kanal_zuerst=True)`` (Speicher-Netzladung der Monats-Fakten,
-``monats_fakten/netzladung_tage.py``). Die Feld-Auskunft ``feld_aus_kanal_am_tag`` (Befund ``zaehler_versatz``) ist mit dem
-Befund seit Sensorwechsel Weg B, Sitzung B3a, entfernt. Wächter «Reihen-Leser»
-(``tests/test_reihen_leser_waechter.py``).
+``monats_fakten/netzladung_tage.py``). Wächter «Reihen-Leser» (``tests/test_reihen_leser_waechter.py``).
 """
 
 from __future__ import annotations

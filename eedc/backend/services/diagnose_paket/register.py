@@ -57,7 +57,7 @@ DETAILS_JSON_SCHLUESSEL = frozenset({
     "investition_id", "typ", "snapshots_entfernt", "kanaele_entfernt", "korrigiert", "gekuerzt", "datum",
     "reaggregation_fehler", "kanaele", "abschnitte", "gleich", "plan_id", "operation", "params", "actual_changes", "timestamp",
     "pv_erzeugung_kwh", "einspeisung_kwh", "netzbezug_kwh", "batterie_ladung_kwh", "batterie_entladung_kwh",
-    "wallbox_ladung_kwh", "gefuellt", "zeilen", "bloecke", "markiert", "live_fallback", "unknown", "deckel_verworfen",
+    "wallbox_ladung_kwh", "gefuellt", "zeilen", "bloecke", "markiert", "live_fallback", "unknown",
     "tagesstand_reihen", "kanal", "zeitpunkt", "kanalzeilen_geloescht", "quellen_markiert", "stundenzeilen_geleert",
     "tageszeilen_geleert", "felder_geleert", "pv", "speicher", "wallbox",
 })

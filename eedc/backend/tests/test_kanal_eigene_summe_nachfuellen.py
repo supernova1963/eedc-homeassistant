@@ -285,7 +285,7 @@ async def test_auswahl_wie_der_stundenlauf(datei):
     assert gefunden[1] == gefunden[0] | {"basis:netzbezug"}
 
 
-# ── live_fallback, Deckel ───────────────────────────────────────────────────
+# ── live_fallback, kein Deckel ──────────────────────────────────────────────
 
 
 async def test_live_fallback_ist_kein_rohstand_ausgeschlossen_und_gezaehlt(datei):
@@ -314,9 +314,10 @@ async def test_unknown_ist_kein_rohstand_ausgeschlossen_und_gezaehlt(datei):
     assert await _keys(sitzungen, aid) == {"basis:netzbezug"}
 
 
-async def test_deckel_bleibt_schreibfilter_und_wird_gezaehlt(datei):
-    """10 kWp ⇒ Schwelle 15 kWh je Stunde: +250 kWh auf der PV-Achse wird verworfen (Stand läuft weiter, Summe nicht),
-    der Netzbezug (ohne Deckel) trägt denselben Sprung. Gezählt: eine verworfene Stunde."""
+async def test_kein_deckel_der_sprung_zaehlt_wie_gemeldet(datei):
+    """Korrekturrunde WEGB-K, K7: das Nachfüllen rechnet über dieselbe Stelle wie der Stundenlauf ohne Plausibilitätsdeckel —
+    +250 kWh auf der PV-Achse (10 kWp) zählen wie am Netzbezug als Menge der Stunde. Bis K7: PV ``[0, 4, 4, 8]`` und eine
+    gezählte verworfene Stunde (``deckel_verworfen``, mit dem Deckel entfernt)."""
     sitzungen, aid = await datei()
     pv = await _investition(sitzungen, aid, "pv-module", leistung_kwp=10.0)
     folge = {0: 100.0, 1: 104.0, 2: 354.0, 3: 358.0}
@@ -325,9 +326,9 @@ async def test_deckel_bleibt_schreibfilter_und_wird_gezaehlt(datei):
     erg = await nachfuellen_eigene_summe(sitzungen, aid, jetzt=JETZT)
     _, pvz, _ = await _kanal(sitzungen, aid, f"inv:{pv}:pv_erzeugung_kwh")
     _, netz, _ = await _kanal(sitzungen, aid, "basis:netzbezug")
-    assert [z.sum for z in pvz] == [0.0, 4.0, 4.0, 8.0] and [z.state for z in pvz] == list(folge.values())
+    assert [z.sum for z in pvz] == [0.0, 4.0, 254.0, 258.0] and [z.state for z in pvz] == list(folge.values())
     assert [z.sum for z in netz] == [0.0, 4.0, 254.0, 258.0]
-    assert erg.deckel_verworfen == 1
+    assert "deckel_verworfen" not in erg.als_dict()
 
 
 # ── Naht an die erste Kanal-Zeile (der Stundenlauf war zuerst da) ───────────
@@ -419,7 +420,7 @@ async def test_ha_staende_woertlich_ohne_reset_regel_und_herkunftswechsel(datei)
     w = _werte(zeilen, quellen)
     assert w[4][1] == pytest.approx(w[3][1])                                          # Quellgrenze ohne Zuwachs
     assert [b[1] - a[1] for a, b in zip(w[4:], w[5:])] == pytest.approx([2.0, 1.0])   # Reset < 90 % ⇒ der neue Stand
-    assert erg.deckel_verworfen == 0 and (erg.gefuellt, erg.zeilen) == (1, 7)
+    assert (erg.gefuellt, erg.zeilen) == (1, 7)
 
 
 # ── Blockweise, abgebrochen, fortgesetzt ────────────────────────────────────

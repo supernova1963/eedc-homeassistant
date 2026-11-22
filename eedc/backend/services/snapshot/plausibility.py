@@ -13,6 +13,10 @@ war idempotent gegen Roh-Snapshots und konnte den Spike nicht heilen.
 Dieser SoT-Helper teilt eine einzige Schwellen-Definition zwischen Aggregator
 (präventiver Cap) und Daten-Checker (Detektor). Damit gilt: was der Aggregator
 nicht kappt, sieht der Checker nicht — und umgekehrt.
+
+Wo der Cap gilt: nur im Bestands-Tagespfad (``snapshot/tages_tabelle.py``, Tage ohne Kanal-Deckung). Die Eigene Summe
+der Kanäle (MQTT, ``services/kanal/schreiber.py``) deckelt seit der Korrekturrunde WEGB-K (K7, Entscheid Gernot
+22.11.2026) nicht mehr — ein Sprung zählt dort als Menge und nennt der Befund ``mqtt_zaehlerstand_springt``.
 """
 
 from __future__ import annotations

@@ -4818,7 +4818,7 @@ nach denselben Regeln wie die Tagessummen:
   gezählt, nicht übernommen), aber nur vor `min(erste Kanal-Zeile, gueltig_ab der ersten Quelle)`: keine inneren Lücken,
   eine verworfene Zeit bleibt leer, und ein später auftauchender HA-Spiegel ersetzt diese Zeilen nicht. Stände mit Herkunft
   `ha_statistics` gehen **wörtlich** ein (Mitschrift `sensor_snapshots:<key>`, kein Deckel, keine Reset-Regel), MQTT-Stände
-  über die Eigene Summe des Stundenlaufs (90-%-Regel, Deckel als Schreibfilter). **Tagesstand-Reihen** jeder Taktung: ein
+  über die Eigene Summe des Stundenlaufs (90-%-Regel, kein Deckel). **Tagesstand-Reihen** jeder Taktung: ein
   Stand um 00:00 ist die Zeile 23:00 und liegt mit dem Kalendertag auf der Tagesgrenze ⇒ das Tages-Δ ist exakt, die
   Stundenansicht zeigt eine Spanne von 24 Stunden; Paare 23:00/00:00 ergeben Stunde 22 (Tag minus eine Stunde) und Stunde
   23 (die letzte Stunde), je als Spanne sichtbar.
@@ -4828,17 +4828,18 @@ nach denselben Regeln wie die Tagessummen:
   | --- | --- |
   | Kanal-Tag, Kanal-Monat, Kanal-Stunde (HA-Spiegel, Lese-Schicht) | **nein** — HAs Zahl wörtlich (seit S1/S3) |
   | HA-Monatsleser `get_sensor_monatswert` an *Cockpit → Monat* (HA-Weg), „Aus HA laden", alle Monatswerte, Import-Vorschau, Sammelimport, Monatsabschluss-Vorschlag | **nein** (S4, E-S5-4: kein Deckel im Monatsleser, auch kein Parameter dafür) |
-  | Kanal-Schreiber, Eigene Summe aus MQTT-Rohständen (Stundenlauf und Nachfüllen) | **ja, als Schreibfilter** (`schreiber._deckel_achse`, Achse PV/Einspeisung, kWp der Anlage) |
+  | Kanal-Schreiber, Eigene Summe aus MQTT-Rohständen (Stundenlauf und Nachfüllen) | **nein** — HAs Regel (`ha_summe.py`) ist die ganze Regel; ein Sprung zählt als Menge der Stunde, bis «Zähler getauscht» eingetragen ist, der Befund `mqtt_zaehlerstand_springt` nennt ihn (Korrekturrunde WEGB-K, K7, Entscheid Gernot 22.11.2026). Zeilen, die der frühere Schreibfilter geschrieben hat (Summe steht, Stand steigt), bleiben, wie sie sind — keine Migration |
   | Bestands-Tagespfad `snapshot/tages_tabelle.py` (Stundenzeilen, Bestandstage, HA wie MQTT) | **ja** (R3, Lesart 1 — an Kanal-Tagen schreibt der Lauf keine Mengen, S5b) |
 
   Ein Sprung in HAs Statistik steht damit in Tag und Monat wie im HA-Energie-Dashboard; der Daten-Checker
-  `ha_zaehlersprung` benennt das Phantom-Muster (Reset und Rückkehr).
+  `ha_zaehlersprung` benennt das Phantom-Muster (Reset und Rückkehr). Ein Sprung in den MQTT-Rohständen steht ebenso in Tag und
+  Monat (Kanal-Tag); nur an einem Bestandstag (ohne Kanal-Deckung) deckelt der Tagespfad ihn weiter.
 * **Stand der HA-Bauform nach S5 (abgeschlossen)** (Konzept §5, Regel → Stand):
 
   | Regel | Stand |
   | --- | --- |
   | R-3 Kalendertag, Stunde = Beginn | gebaut für die Kanal-Schicht (Kanal-Tage, -Monate, -Stunden); Bestandstage und Lesart-1-Monate bleiben im Bestands-Raster (Lesart 1, S5-E2) |
-  | R-5 kein Deckel auf HA-Werten | gebaut im Lesepfad (Kanäle und die fünf HA-Monatsleser-Aufrufer); Bestands-Tagespfad deckelt an Lesart-1-Tagen weiter (R3), MQTT-Schreibfilter bleibt |
+  | R-5 kein Deckel auf HA-Werten | gebaut im Lesepfad (Kanäle und die fünf HA-Monatsleser-Aufrufer); Bestands-Tagespfad deckelt an Lesart-1-Tagen weiter (R3); der MQTT-Schreibfilter der Eigenen Summe ist seit WEGB-K (K7) gestrichen |
   | R-6 HAs Reset-Regel | gebaut am Kanal (Eigene Summe, `core/berechnungen/ha_summe.py`, 90-%-Regel) |
   | R-7 Tagesreset-Zähler | Kanal ja (Tag, Monat, Jahr); Live, Monatsabschluss-Vorschlag und Geräte-Tageswerte vor dem Kanal nein (benannte Grenze, S5-E4: Live ist nicht Teil der Bauform) — der Daten-Checker sagt es |
   | R-8 Komposition als Konfiguration | Weg 2 (W2-R1…R5) für Kanal-Zeiträume plus Checker-Hinweis „PV gesamt neben Balkonkraftwerk" (#428), seit S1/S2 |
@@ -5122,9 +5123,8 @@ Zählerstand springt (MQTT) (G4; Erzeuger services/daten_checker/datenquelle/mqt
   unterscheidet (SATZ_SPRUNG_EINZELSCHRITT mit Zeit, Ständen und Menge des Schritts, zwei Nachkommastellen;
   SATZ_WARUM_EINZELSCHRITT: «War es gezählte Menge, stimmt der Wert, und es ist nichts zu tun.»); Schwere, Code, Knopf gleich
   zaehler_ruecksprung lässt einen Rücksprung aus, dessen Kanal-Stunde (Stand − 1 h … Stand) G4 als Neubeginn/Rückgang nennt
-  Grenze PV-/Einspeise-Feld: der Deckel (Schreibfilter der Eigenen Summe, schwelle_pv_einspeisung_stunde_kwh) lässt die Summe
-  einer Stunde mit Sprung stehen (Δ sum = 0, Δ state = Sprung + Menge) — G4 liest Δ sum und nennt sie nicht (benannte Grenze 15
-  im Abschnitt «Benannte Grenzen des Sensorwechsels»)
+  PV-/Einspeise-Feld wie jedes andere: seit WEGB-K (K7) deckelt die Eigene Summe nicht mehr — G4 nennt den Sprung
+  (Δ sum = Sprung + Menge); eine schon gedeckelt geschriebene Stunde aus der Zeit davor (Δ sum = 0) nennt G4 nicht
 ```
 
 **Gemessen** (Saat des Rechenwegs, `golden-master/sensorwechsel-saat/u3b/`; Netzbezug 12,0 je Tag, Ereignis 10:20): «Zähler
@@ -5633,7 +5633,9 @@ gespeichertem Monatswert vom ersten eigenen Wert bis zur Änderung (benannte Gre
 trägt) und den Weg zur Handkorrektur; Auskunft danach: `daten_vor_aenderung_geloescht`. Die Werkbank «Werte vor dem Sensorbeginn
 verwerfen» markiert reale Quellen (kein Platzhalter) — für sie holt kein Lauf etwas vor `t` zurück; sie hebt die verzeichneten
 Wechsel des Schlüssels mit `ab_ts ≤ t + 1 h` auf (`feld_loeschen.loesche_wechsel(…, bis=t + 1 h)`; ein Wechsel «bleiben» gilt ab
-der vollen Stunde nach seiner Kanal-Quelle), danach liest B-0 wie ohne Zeile; ein späterer Wechsel bleibt.
+der vollen Stunde nach seiner Kanal-Quelle), einen «Zähler getauscht» (dieselbe Quelle vorher und nachher) nur mit `ab_ts ≤ t`
+(`gleiche_quelle_bis=t`) — an einem MQTT-Feld ist die Vorgabe-Zeit die Stunde des jüngsten Tauschs, dessen `ab_ts` = `t + 1 h`; er
+bleibt verzeichnet, sein Sprung zählt nicht (Korrekturrunde WEGB-K). Danach liest B-0 wie ohne Zeile; ein späterer Wechsel bleibt.
 
 #### Beginn einer Statistik und «löschen»: so rechnet eedc, so rechnet Home Assistant
 
@@ -5643,12 +5645,13 @@ Geschätzt, verteilt oder überbrückt wird nichts. Eine Regel für jede Zuordnu
 
 | Lage | Home Assistant | eedc | Stelle |
 | --- | --- | --- | --- |
-| erste Zeile einer Statistik (HA führt keine Zeile davor) | Anfangsstand 0: die erste Stunde zählt ihren `sum` | ebenso — Regel «Anfangsstand 0» (Abschnitt 1) | Kanal `kanal/lesen._ha_beginn_sql` (Beginn = erste Zeile der Spiegel-Quelle, deren Vorgeschichte das Nachfüllen ohne Grund abgeschlossen hat); «Aus HA laden» und Monatsabschluss-Vorschlag `ha_statistics_service.get_sensor_fensterwert`; LTS-Tag `get_hourly_slots_for_day` (nur am echten Beginn, nicht hinter einer Polster-Zeile vor dem Fenster) |
-| der Tag, an dem die Statistik beginnt | zählt ab der ersten Stunde | ebenso; der Tag bleibt Kanal-Tag der Anlage (die übrigen Felder unverändert, auch während des Tages); «Tage ohne Kanal-Deckung» nennt ihn nicht | Auskunft nur nach «löschen»: `daten_vor_aenderung_geloescht` («Der … ist für dieses Feld deshalb nicht vollständig: eedc zählt ihn, wie Home Assistant, erst ab … Uhr.») |
+| erste Zeile einer Statistik (HA führt keine Zeile davor) | Anfangsstand 0: die erste Stunde zählt ihren `sum` | ebenso — Regel «Anfangsstand 0» (Abschnitt 1) | Kanal `kanal/lesen._ha_beginn_sql`: die erste Zeile des Kanals gehört zur **ersten Quelle des Kanals** (ein Platzhalter von «löschen» zählt nicht), einer Spiegel-Quelle, deren Beginn die Nachfüll-Marke bestätigt — ohne Grund für diese Entity, oder nach einem Wechsel «bleiben» als `ergebnis.beginn` weitergetragen (`nachfuellen._bestaetigter_beginn`); im Zweifel gilt die Regel nicht (die erste Stunde fehlt wie in v4.3.1), nie zählt ein Zählerstand als Menge. «Aus HA laden» und Monatsabschluss-Vorschlag `ha_statistics_service.get_sensor_fensterwert`; LTS-Tag `get_hourly_slots_for_day` (nur am echten Beginn, nicht hinter einer Polster-Zeile vor dem Fenster); über WebSocket fragen beide erst gestuft nach einer älteren Zeile, wenn die Fenster-Leiter nichts findet (`_ws_letzte_summe`) |
+| der Tag, an dem die Statistik beginnt | zählt ab der ersten Stunde | ebenso; der Tag bleibt Kanal-Tag der Anlage (die übrigen Felder unverändert, auch während des Tages), auch nachdem das Feld mit «Bisherige Werte bleiben» die Quelle gewechselt hat; «Tage ohne Kanal-Deckung» nennt ihn nicht. Ausnahme abgeleiteter Kanal (Wallbox, Grenze 4) | Auskunft nur nach «löschen»: `daten_vor_aenderung_geloescht` («Der … ist für dieses Feld deshalb nicht vollständig: eedc zählt ihn, wie Home Assistant, erst ab … Uhr.») |
 | der Monat dieses Tags | Summe ab der ersten Stunde | ebenso in Monatssicht, «Aus HA laden» und Vorschlag | — |
 | vor der ersten Zeile | kein Wert | «—»; ein Feld, dessen Quellen dort alle verworfen sind (Platzhalter von «löschen», Marke der Werkbank), nimmt der Anlage die Kanal-Deckung nicht (`kanal/bilanz_leser.GRUND_BEWUSST_LEER`, `bilanz_adapter.BewusstLeer`) | — |
+| erste Zeile einer späteren Quelle derselben Entity (A → B → A mit «bleiben», danach Werkbank «Werte vor dem Sensorbeginn verwerfen») | die Statistik von A beginnt früher; die Stunde zählt gegen die Zeile davor | kein Beginn: die erste Stunde nach dem Verwerfen zeigt «—», Tag und Monat ohne sie (wie v4.3.1); nie der laufende `sum` von A als Menge | `test_sensorwechsel_wegb_k_proben.py` (R1, Lagen-Tabelle) |
 | Lücke mitten in der Statistik | die Zeile nach der Lücke trägt die Menge der Lücke | Zählerlücke wie HA — gegen die Zeile vor der Lücke, kein Anfangsstand 0 | `test_kanal_lesen.py::test_anfangsstand_null_nur_am_beginn_der_statistik_luecke_mitten_drin_bleibt_zaehlerluecke` |
-| erste Zeile mit großem `sum` (importierte Statistik) | zählt ganz | zählt ganz (Tag, Monat, «Aus HA laden» = HA); kein Sprung-Befund, `drift_tag` nennt den Tag (sein Tagesweg verwirft die Stunde als unplausibel) | Bericht B1, Lage (a): 1 006,4 bzw. 1 007,6 ×3 = HA |
+| erste Zeile mit großem `sum` (importierte Statistik) | zählt ganz | zählt ganz (Tag, Monat, «Aus HA laden» = HA); kein Sprung-Befund; an einem PV-Feld nennt `drift_tag` den Tag (sein Tagesweg verwirft die Stunde als unplausibel), an einer Wallbox kein Befund (der Tag zählt dort ohne die erste Stunde, Grenze 4) | Bericht B1, Lage (a): 1 006,4 bzw. 1 007,6 ×3 = HA; Wallbox: Nachmessung Weg B, C3 (Tag 5 004,66, HA 5 005,98) |
 | der erste Wert eines neuen Zählers springt | zählt ganz | zählt ganz; nach «Summe anpassen» in HA nennt `drift_komponente` den Tag, «Aus Home Assistant neu übernehmen» übernimmt ihn; «Tag neu aggregieren» nicht | `test_n791_reparatur_zaehler_ohne_leistungskurve.py` (123 923,3 → 13,7) |
 | «Daten vor der Änderung löschen» | unverändert (eedc schreibt nicht nach Home Assistant) | das Feld wie «erst jetzt zugeordnet» (Abschnitt oben); Geschichte des neuen Sensors, soweit HA sie führt | `services/feld_loeschen.py` |
 | «Bisherige Werte bleiben» zwischen zwei Sensoren | zwei Statistiken | je Geltungsabschnitt die Zeilen des jeweiligen Sensors (Rand-Werte oben); die Stunde des ersten Werts des neuen zählt beide | `zuordnung_wechsel/ansatz.py`, `monat.py` |
@@ -5657,9 +5660,13 @@ Geschätzt, verteilt oder überbrückt wird nichts. Eine Regel für jede Zuordnu
 **Gemessen** (Stufe A2 und B1, `golden-master/sensorwechsel-saat/wegb/b1/`, acht Lagen, Folgetag und mittags): Tag der ersten
 HA-Zeile 6,4 = HA (laufende Stunde 5,6), Monat in drei Sichten 7,6 = HA, andere Felder Zahl für Zahl wie ohne Wechsel, Kanal-Deckung
 45 von 45, gespeicherter Oktober unverändert; nur dieses Feld zugeordnet: Grund `bewusst_leer`, kein Befund. Reichweite der Regel am
-Bestand: Golden Master 0 Unterschiede; Saat `mqtt_zu_ha_*` Vormonat Netzbezug 47,5 → 48,0 (die erste HA-Stunde, wie HA);
-Produktiv-Kopie Zahlen gleich, «2 Tage ohne Kanal-Deckung» → «1 Tag» (31.10.2024 = Beginn einer Statistik). Proben:
-`test_sensorwechsel_wegb_loeschen_proben.py`, `test_kanal_lesen.py`, `test_zaehlerluecken_slots.py`,
+Bestand: **die Golden-Master-Kopien belegen sie nicht** — die drei Demo-Datenbanken tragen keine Kanäle und keine Nachfüll-Marken
+(ihre 0 Unterschiede sagen nur, dass die übrigen Sichten gleich bleiben). Beleg sind die Saat (`mqtt_zu_ha_*` Vormonat Netzbezug
+47,5 → 48,0, die erste HA-Stunde wie HA) und die Produktiv-Kopie (9 Mengen-Kanäle, die Regel gilt an 8 — der neunte, die Wallbox
+mit dem Wechsel vom 18.10. aus der Zeit vor der Frage, trägt eine überschriebene Marke ohne `beginn` und rechnet wie v4.3.1;
+Zahlen gleich, «2 Tage ohne Kanal-Deckung» → «1 Tag», 31.10.2024 = Beginn einer Statistik). Korrekturrunde WEGB-K: Saat 27 und
+Produktiv-Kopie zwischen `5ee9400fe` und der Runde Wert für Wert gleich. Proben: `test_sensorwechsel_wegb_loeschen_proben.py`,
+`test_sensorwechsel_wegb_k_proben.py` (Lagen-Tabelle der Abgrenzung, R1, R2), `test_kanal_lesen.py`, `test_zaehlerluecken_slots.py`,
 `test_zaehlerluecken_n563_monatswert.py`; Handbuch Einstellungen §7.7c («Was passiert, wenn …»).
 
 #### Benannte Grenzen des Sensorwechsels (Endstand Weg B)
@@ -5667,15 +5674,23 @@ Produktiv-Kopie Zahlen gleich, «2 Tage ohne Kanal-Deckung» → «1 Tag» (31.1
 Je Grenze die Stelle, an der sie am Stand nach Sitzung B3b geprüft ist (Code, Test oder Messung). Die Grenzen der Befunde «Zählerstand
 springt» (a)–(d) und der MQTT-Regeln (a)–(l) stehen bei ihren Abschnitten oben; hier die übrigen und die, die der Anwender trifft.
 
-1. **Drift am ersten Tag einer Statistik:** der Vergleich mit Home Assistant liest das Fenster `[Vortag 23:00, 23:00)` und kann
-   den Tag nennen, wenn seine Stunde ab 23 Uhr mindestens 2 kWh und 5 % trägt (Lösungsweg `drift_tag`; Bericht B1-Abschluss,
-   Aufgabe 3; Code der Prüfung unverändert).
-2. **Importierte Statistik mit großem erstem `sum`:** zählt wie in Home Assistant ganz; kein Sprung-Befund, nur `drift_tag`
-   (Bericht B1, Lage (a)).
+1. **Drift am ersten Tag einer Statistik:** die Prüfung (Tageszeilen der letzten 90 Tage bis gestern) liest den Vergleichswert
+   aus Home Assistant im Fenster `[Vortag 23:00, 23:00)`, eedc zählt am Kanal-Tag den Kalendertag. Am ersten Tag einer Statistik
+   fehlt dem Vergleichswert deshalb die Stunde ab 23 Uhr: trägt sie mindestens 2 kWh und 5 %, nennen `drift_tag` (PV) und
+   `drift_komponente` (je Gerät, etwa eine Wärmepumpe: 12,5 → 10,0, Tag = HA = 12,5) den Tag, obwohl eedc und Home Assistant gleich
+   sind; «Aus Home Assistant neu übernehmen» ändert nichts. Beide Lösungswege sagen es. Nicht gebaut (Korrekturrunde WEGB-K):
+   die Prüfung bräuchte je Gerät den Beginn der Statistik und den Wert des Kalendertags — keine kleine Änderung an einer Stelle,
+   und die importierte Statistik (Grenze 2) hat eine zweite Ursache. Ein Tag, an dem eine Statistik vor mehr als 90 Tagen begann,
+   erscheint nicht.
+2. **Importierte Statistik mit großem erstem `sum`:** zählt wie in Home Assistant ganz; kein Sprung-Befund. An einem PV-Feld nennt
+   `drift_tag` den Tag (der Vergleichswert lässt die Stunde über der Plausibilitätsgrenze aus, Tagesansicht und Home Assistant
+   zählen sie — Bericht B1, Lage (a)); an einer Wallbox nennt ihn kein Befund (Nachmessung Weg B, C3).
 3. **Erster Wert eines neuen Zählers springt (N-791):** nur «Aus Home Assistant neu übernehmen» behebt die Drift nach der
    Berichtigung in HA, «Tag neu aggregieren» nicht (Probe N-791).
 4. **Abgeleiteter Kanal** (PV-Anteil der Heimladung) beginnt ohne Anfangsstand 0 — beginnt er am selben Tag wie die
-   Wallbox-Statistik, liest die Gruppe E-Mobilität diesen Tag aus dem Bestand (Abschnitt 1, Naht S4-R-3c).
+   Wallbox-Statistik, liest die Gruppe E-Mobilität diesen Tag aus dem Bestand (Abschnitt 1, Naht S4-R-3c): der erste Tag einer
+   Wallbox zeigt Home Assistant **minus die erste Stunde** (gemessen 12,0 statt 15,0, Monatssicht 165,0 statt 168,0, «Aus HA
+   laden» 168,0 = HA; Nachmessung Weg B, C2). Wie v4.3.1.
 5. **Auskunft zum unvollständigen ersten Tag nur nach «löschen»:** eine erste Zuordnung ohne «löschen» zählt den Tag ebenso ab
    der ersten Stunde, ohne Daten-Checker-Satz (`datenquelle/geloescht.py` liest nur den Platzhalter).
 6. **Gespeicherte Monate:** der Dialog nennt Monate mit gespeichertem Monatswert vom ersten eigenen Wert bis zur Änderung — eedc
@@ -5686,8 +5701,11 @@ springt» (a)–(d) und der MQTT-Regeln (a)–(l) stehen bei ihren Abschnitten o
    vollen Stunde zählen nicht, wie bei jeder neuen MQTT-Zuordnung (Bericht B1, Lage (c): Wechsel 10:20, Tag 10,8 = 12 Stunden ab 11:00).
 8. **Tage neu gebildet** werden nach «löschen» nur die Tage, deren Tageszeile das Feld trug, und der Tag der Änderung
    (`feld_loeschen._tage_mit_feld`).
-9. **WS-Anker:** der Monatsleser über WebSocket sucht den Anker 1 · 8 · 32 · 128 · 1 024 Tage zurück; eine ältere Statistik ohne
-   Zeile in diesem Fenster gilt als Beginn (`ha_statistics_service._WS_ANKER_FENSTER_TAGE`).
+9. **WS-Anker (behoben in der Korrekturrunde WEGB-K):** Monats- und Tagesleser über WebSocket suchen den Anker 1 · 8 · 32 · 128 ·
+   1 024 Tage zurück; findet die Leiter nichts, fragen sie gestuft month → day → hour (`ha_statistik_rand.letzte_zeile_bis`), bevor
+   die erste Zeile als Beginn gilt — eine Statistik, die länger ruhte, zählt ihren Stand nicht als Menge (Lücke 1 100 Tage: Monat
+   43,5, Tag 13,0 wie SQL und Home Assistant). Kosten: nur, wenn die Leiter leer bleibt (Beginn einer Statistik), eine bis wenige
+   Anfragen mehr je Sensor; an Monaten und Tagen mit Geschichte keine.
 10. **Ein Wechsel aus der Zeit vor dieser Fassung** (ohne Zeile in `zuordnung_wechsel`, wie jede Datenbank aus v4.3.1) bleibt
     unverzeichnet: eedc rechnet über ihn wie bisher, kein Befund (Bericht B2, Produktiv-Kopie). Zeilen unveröffentlichter
     Zwischenstände mit `grund = korrektur` oder `herkunft = nachtrag`/`altbestand` lesen wie ein Wechsel ohne Grund (Bericht B3a, DB (b)).
@@ -5695,17 +5713,27 @@ springt» (a)–(d) und der MQTT-Regeln (a)–(l) stehen bei ihren Abschnitten o
     nächsten Stundenlauf, :05) liest die Zeile wie eine Naht ohne Rand-Stände, der Stundenlauf spiegelt den Schlüssel nicht, und
     die Werte des Felds ab dem Wechsel können unvollständig sein (`bleiben.SATZ_WARTET`, Wartegrund an der Fläche).
 12. **Werkbank nach «bleiben»:** «Werte vor dem Sensorbeginn verwerfen» hebt die Wechsel des Schlüssels mit `ab_ts ≤ t + 1 h`
-    auf — auch ein «Zähler getauscht», der in der ersten Stunde ab `t` eingetragen ist; sie holt keine Geschichte nach
-    (`verwerfen_vor_quellbeginn.fuehre_aus`; Probe `test_sensorwechsel_wegb_werkbank_nach_bleiben.py`; die Lage «Zähler getauscht
-    in der ersten Stunde» ist am Code abgeleitet, nicht gemessen).
+    auf, einen «Zähler getauscht» nur mit `ab_ts ≤ t` — ein Tausch in der ersten Stunde ab `t` (an einem MQTT-Feld die
+    Vorgabe-Zeit) bleibt verzeichnet, die Tagesansicht nach der Neubildung des Tags zeigt 11,958 statt 2 012,0 (Korrekturrunde
+    WEGB-K); sie holt keine Geschichte nach (`verwerfen_vor_quellbeginn.fuehre_aus`; Probe
+    `test_sensorwechsel_wegb_werkbank_nach_bleiben.py`, drei Fälle).
 13. **Je Stunde und Feld ein Eintrag:** ein zweiter «Zähler getauscht» und «Zähler getauscht» nach «bleiben» in derselben Stunde
     sagen «Dieser Tausch ist schon eingetragen.» (`zaehler_getauscht._schon` vergleicht `ab_ts`; MQTT-Grenze (j) oben).
-14. **«bleiben» sofort, wenn der neue Zähler schon vor dem verzeichneten Wechsel auf demselben MQTT-Schlüssel sendet** (K4-B3):
+14. **«bleiben» sofort, wenn der neue Zähler schon vor dem verzeichneten Wechsel auf demselben MQTT-Schlüssel sendet** (K4-B3) —
+    über die Oberfläche entsteht die Lage nicht: das Gateway abonniert nur zugeordnete Topics, Stände eines noch nicht zugeordneten
+    Topics gibt es nicht (`mqtt_gateway_service`); erreichbar nur, wenn ein zweites Gerät schon auf dem zugeordneten Topic sendet
+    und in derselben Stunde die Quelle des Felds wechselt. Gemessen an einer von Hand geschriebenen Welt:
     der Stundenlauf nimmt die Spanne nur, wenn sie genau am Zeitpunkt endet — +2 000 ⇒ Tag 2 014,35, kein Befund; ab 0 ⇒ Kanal
     14,3, Reihe «—» (am Stand nach B3b nachgemessen, `nm-u3k4/test_nm_k4_r2.py::test_8_…[sofort]`; MQTT-Grenze (k) oben).
-15. **MQTT-Sprung an einem PV- oder Einspeise-Feld** (Lab F7): der Deckel lässt die Summe der Stunde stehen, die Stunde zählt 0 —
-    auch ihre echte Menge —, und «Zählerstand springt (MQTT)» nennt sie nicht (Δ sum = 0; am reinen Kern nachgemessen B3b).
-    «Zähler getauscht» am Feld liest die Rohstände und trägt ein (Lab 2b).
+15. **MQTT-Sprung an einem PV- oder Einspeise-Feld** (Lab F7) — seit der Korrekturrunde WEGB-K (K7, Entscheid Gernot 22.11.2026)
+    ohne Plausibilitätsdeckel in der Eigenen Summe: der Sprung zählt an einem Kanal-Tag als Menge der Stunde (gemessen +2 000 bei
+    0,6 kWh/h: Tag 2 014,4 in Kanal, Reihe und Tagesansicht, Monat 2 071,4), «Zählerstand springt (MQTT)» nennt die Stunde mit dem
+    Knopf «Zähler getauscht»; nach dem Eintrag 14,35 bzw. 71,35, der Befund ist weg — wie am Netzbezug; kein Spike-Befund an
+    dieser Stunde. Benannt bleibt: (a) an einem **Bestandstag** (Tag ohne Kanal-Deckung) deckelt der Tagespfad
+    (`snapshot/tages_tabelle.py`) weiter — die Tagesansicht zeigt 13,2 (die Stunde des Sprungs zählt 0, auch ihre Menge; Reihe
+    2 014,4), der Befund nennt die Stunde, nach dem Eintrag 13,75; (b) **schon geschriebene gedeckelte Kanal-Zeilen** (Summe
+    steht, Stand steigt) bleiben, wie sie sind, ihre Stunde zählt 0 und kein Befund nennt sie (gemessen 0 solche Stunden in den
+    Golden-Master-Kopien und der Produktiv-Kopie).
 16. **Live** rechnet bei MQTT aus den Rohständen und zeigt einen Sprung am Tag des Tauschs unter «heute» und am Tag danach unter
     «gestern» weiter (MQTT-Grenze G6 oben); der Dialog «Zähler getauscht» nennt das nur, wenn er einen Sprung sieht (B3b, W13).
 17. **Fester Tageswert am Tag des Tauschs:** ein Eintrag «Zähler getauscht» vor dem laufenden Tag bildet keinen Tag neu; liest die
