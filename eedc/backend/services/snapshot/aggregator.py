@@ -324,7 +324,7 @@ async def get_hourly_kwh_by_category(
 
 
 async def _snapshot_eintraege(
-    db: AsyncSession, anlage, investitionen_by_id: dict, datum: date,
+    db: AsyncSession, anlage, investitionen_by_id: dict, datum: date, *, mqtt_keys: Optional[set[str]] = None,
 ) -> tuple[list[TabellenEintrag], dict[str, Optional[str]], dict]:
     """Die zugeordneten Zähler des Tages — HA-Sensor **oder** MQTT, eine Auswahl.
 
@@ -335,6 +335,9 @@ async def _snapshot_eintraege(
     Stunde eine zweite Liste (`*_hourly_eintraege`, MQTT nur der letzten
     7 Tage) — dieselbe Auswahl zweimal, mit zwei Grenzen.
 
+    ``mqtt_keys``: die MQTT-Schlüssel, wenn der Aufrufer sie schon gelesen hat (Fund-Päckchen D: der Kanal-Leser liest sie
+    einmal je Lauf statt je Tag, ``kanal/bilanz_adapter.zaehler_eintraege``); sonst EINE Abfrage hier.
+
     Returns:
         ``(eintraege, entity_je_key, quellen_energy)`` — ``entity_je_key`` ist
         die HA-Entity je ``sensor_key`` (``None`` für MQTT-only) für den
@@ -342,7 +345,8 @@ async def _snapshot_eintraege(
     """
     sensor_mapping = anlage.sensor_mapping or {}
     quellen_energy = extract_quellen_energy(anlage)  # C2b-Read-Through
-    mqtt_keys = await mqtt_zaehler_keys(db, anlage.id)  # N-328b, jede Historie
+    if mqtt_keys is None:
+        mqtt_keys = await mqtt_zaehler_keys(db, anlage.id)  # N-328b, jede Historie
     eintraege: list[TabellenEintrag] = []
     entity_je_key: dict[str, Optional[str]] = {}
 

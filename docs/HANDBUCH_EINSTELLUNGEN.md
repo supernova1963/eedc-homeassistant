@@ -945,6 +945,16 @@ Je Fall: was eedc danach zeigt · was Home Assistant zeigt · was du tun kannst.
 - *Home Assistant:* dieselbe Zahl — seine Statistik beginnt in dieser Stunde.
 - *Du kannst:* nichts tun; die Zahl ist die von Home Assistant. Kennst du die Menge des ganzen Monats aus einer anderen Quelle (etwa der Abrechnung), trägst du sie im Monatsabschluss ein.
 
+**… du einem Feld zum ersten Mal einen Sensor zuordnest, dessen Statistik später beginnt als die der übrigen Felder**
+- *eedc:* vor dem Beginn seiner Statistik (bei MQTT: vor seinem ersten Zählerstand) hat das neue Feld keinen Wert («—»; in Summen zählt es nicht mit), alle anderen Felder zeigen ihre Zahlen weiter — auch gleich nach der Zuordnung, bevor der nächste Stundenlauf die Geschichte des Sensors geholt hat. Ab der ersten Stunde seiner Statistik zählt es wie oben. Liegt an einem Tag jedes Feld vor seinem Beginn, kommt der Tag wie bisher aus den gespeicherten Werten.
+- *Home Assistant:* zeigt den Sensor vor dem Beginn seiner Statistik ebenso nicht, die übrigen unverändert.
+- *Du kannst:* nichts tun. Kennst du die Menge für die Zeit davor aus einer anderen Quelle, trägst du sie im Monatsabschluss ein.
+
+**… ein Feld über MQTT kommt und die übrigen aus Home Assistant**
+- *eedc:* liest an Tagen mit Stundenwerten jedes Feld aus seiner Quelle — das MQTT-Feld aus seinen Zählerständen, die übrigen aus Home Assistant. Der Tag, an dem die MQTT-Quelle beginnt, zählt ab ihrem ersten gespeicherten Zählerstand. An Tagen ohne Stundenwerte (Tageswerte aus den gespeicherten Werten) zählt nur, was der Tag damals gespeichert hat — dort fehlt das MQTT-Feld.
+- *Home Assistant:* führt MQTT-Werte nicht.
+- *Du kannst:* nichts weiter tun.
+
 **… für Monate schon ein Monatswert gespeichert ist (Monatsabschluss, von Hand, Import)**
 - *eedc:* gespeicherte Monatswerte bleiben bei beiden Antworten, wie sie sind; ein abgeschlossener Monat zeigt den gespeicherten Wert. Der Dialog nennt die Monate unter „Was danach geschieht“. Nach „Bisherige Werte bleiben“ nennt der Daten-Checker einen Monat, dessen gespeicherter Wert um mindestens 1 kWh von den Stundenwerten abweicht ([Daten-Checker §4.8j](HANDBUCH_DATEN_CHECKER.md#48j-zaehlerstaende--gespeicherter-monatswert-passt-nicht-mehr)).
 - *Home Assistant:* führt die Monate des Sensors in seiner Statistik; für einen Monat, den es nur teilweise führt, nur diesen Teil.

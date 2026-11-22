@@ -86,9 +86,34 @@ Felder erfasst.
 >   `bewusst_leer` (`kanal/bilanz_leser`): Zahlen «—», kein Tag «ohne Kanal-Deckung». Benannte Grenzen: der Drift-Vergleich
 >   mit Home Assistant liest für den ersten Tag einer Statistik das Fenster `[Vortag 23:00, 23:00)` und kann den Tag nennen,
 >   wenn dessen Stunde 23:00 mindestens 2 kWh und 5 % trägt (Lösungsweg `drift_tag`; eine Ausnahme je Feld unterdrückte auch
->   den echten Fall N-791 — Spiegel mit Erstwert-Sprung gegen die in HA berichtigte Statistik); ein abgeleiteter Kanal
+>   den echten Fall N-791 — Spiegel mit Erstwert-Sprung gegen die in HA berichtigte Statistik; an gewöhnlichen Tagen dieselbe
+>   Grenze, wenn die Stunde 23–24 Uhr zweier Folgetage deutlich verschieden ist, N-815 — Grenze 1 im Abschnitt «Benannte Grenzen
+>   des Sensorwechsels»); ein abgeleiteter Kanal
 >   (PV-Anteil der Heimladung) beginnt ohne Anfangsstand 0 — beginnt er am selben Tag wie die Wallbox-Statistik, liest die
 >   Gruppe E-Mobilität diesen Tag aus dem Bestand (Naht S4-R-3c).
+> * **Vor dem Beginn seiner Quelle trägt ein Feld nichts** (R-D1, Entscheid Gernot 22.11.2026, N-816 — wie Home Assistant):
+>   beginnt die Quelle eines Felds erst bei oder nach dem Ende eines Zeitraums — die erste Zeile seines Kanals ist der Beginn
+>   der HA-Statistik (dieselbe Bedingung wie «Anfangsstand 0») bzw. der erste MQTT-Stand seiner ersten Quelle
+>   (`kanal/lesen._mqtt_beginn_sql`) —, oder hat das Feld noch keinen Kanal mit Zeile (zugeordnet, der nächste Stundenlauf hat
+>   noch nicht geschrieben; nur in einer Anlage, die schon Kanäle führt), ist es in diesem Zeitraum nicht benötigt: es steht
+>   dort ohne Wert («—», in Summen trägt es nichts bei, keine gemessene 0), die übrigen Felder behalten ihre Kanal-Deckung.
+>   Home Assistant zeigt einen Sensor vor dem Beginn seiner Statistik ebenso nicht und die übrigen unverändert. Eine Stelle:
+>   `kanal/bilanz_adapter.BewusstLeer` (`vor_beginn`), gerufen am Bedarf jeder Gruppenwahl (Bilanz, E-Mobilität, Sonstiges,
+>   Wärmepumpe) — dieselbe Stelle wie «verworfen». Anders als «verworfen» ist «vor Beginn» kein bewusstes Leer: liegt an einem
+>   Tag **jedes** Feld der Gruppe vor seinem Beginn, bleibt er ein Bestandstag (gespeicherte Werte, Befund
+>   `tage_ohne_kanal_deckung`). Am **Tag des Beginns** einer MQTT-Quelle gilt ihr erster Stand als Anfangsstand (die Quelle
+>   führt davor keinen Stand; die Stunde des ersten Stands trägt keine Menge) — der Zeitraum ist gedeckt, wie am ersten Tag
+>   einer HA-Statistik. Nicht berührt: eine Lücke mitten in einer laufenden Quelle (Zählerlücke wie HA, die Menge steht in der
+>   ersten Stunde danach) und eine Quelle, die endet (der Zeitraum nach ihrem letzten Stand bleibt ohne Kanal-Deckung, wie
+>   bisher). Im Zweifel (erste Zeile nicht als Beginn bestätigt, etwa Nachfüllen mit Grund) gilt die Regel nicht.
+> * **Quelle je Feld** (R-D2, Entscheid Gernot 22.11.2026, N-813): an Kanal-Tagen liest eedc jedes Feld aus der Quelle, der es
+>   zugeordnet ist — ein HA-Feld aus dem HA-Spiegel, ein MQTT-Feld aus seiner Mitschrift. Die Kanäle tragen je Feld ihre
+>   Quelle; die Auswahl der Felder (`kanal/bilanz_adapter.zaehler_eintraege`) ist die HA-Auswahl, solange kein Feld allein über
+>   MQTT kommt, sonst die EINE Auswahl über beide Quellen (`snapshot/aggregator._snapshot_eintraege`: Entweder-oder,
+>   Wallbox-Regel, K3 einmal). Ein Feld mit HA-Sensor und MQTT-Ständen steht einmal darin (ein Schlüssel, ein Kanal). Reine
+>   HA- und reine MQTT-Anlagen wählen wie bisher; die MQTT-Schlüssel liest der Kanal-Leser einmal je Anfrage. ⚑ **Benannte
+>   Grenze:** an Tagen ohne Stundenwerte (Bestandstage, `snapshot/lts_aggregator`, `kanal/bilanz_leser._bilanz_sensoren`)
+>   bleibt es bei einer Auswahl je Anlage — ein MQTT-Feld neben HA-Feldern fehlt dort.
 > * **Quellenwahl je Zeitraum** (ADR-002/**P14**): je Tag bzw. Monat und Gruppe EINE Wahl — die Kanäle nur, wenn
 >   **jeder** Eingang der Formel deckt (in einer Entweder-oder-Gruppe der erste deckende); sonst rechnet der bisherige
 >   Leser den **ganzen** Zeitraum aus Stunden-, Tages- und Monatszeilen (*Lesart 1*). Gruppen: Bilanz (Netz ·
@@ -4505,6 +4530,19 @@ snap[h] = snap[a] + (snap[b] − snap[a]) × (h − a) / (b − a)      a < h < 
 Ränder (h0 fehlend am Tagesanfang, h24 am Tagesende) werden **nicht** extrapoliert — der Wert bleibt None und die betroffene Stunde fällt aus der Delta-Bildung. Tagessumme bleibt in jedem Fall korrekt (`snap[24] − snap[0]`).
 
 > ⚠ **Die Interpolation gilt nur innen und nur im Zählerstands-Pfad** („Zählerlücken wie HA", v4.0.51) (Standalone/MQTT ohne HA-Statistik, `snapshot/aggregator.py`). Im HA-Pfad wird nichts aufgefüllt: die Energie einer fehlenden Stunde steht wie im HA-Energie-Dashboard in der Stunde danach (Bündel mit Spanne `n`), und der Rand am Tagesanfang wird über den letzten vorhandenen Stand davor verankert — auch in diesem Pfad, statt die erste Stunde auszulassen. Regeln und Leser: Abschnitt *Zählerlücken wie HA* weiter unten.
+>
+> ⚑ **Benannte Grenze N-817 (gemessen 22.11.2026, Fund-Päckchen D):** `_fill_gaps_linear` verteilt die Menge zwischen zwei
+> Zählerständen gleichmäßig auf die Stunden dazwischen — Stundenwerte, die keine Quelle führt; die Tagessumme bleibt (die
+> Randstände sind fest). Sie läuft nur im Zählerstands-Pfad: (a) beim Lesen in `snapshot/stunden_leser.lade_stundenformen` für
+> einen Wärmepumpen-Zähler ohne Kanal-Tag (`kanal_stunden.wp_stundenformen` → *Cockpit → Tag*, Wärme-Verlauf je Stunde und
+> Wärme-Verteilung am Tag); (b) beim Schreiben eines Tags in `snapshot_tagestabelle`, wenn die HA-Langzeitstatistik für den Tag
+> nichts liefert (Standalone/MQTT, HA nicht erreichbar) — die gespeicherten Stunden des Bestandstags (Tagesverlauf,
+> Überschuss/Defizit, Spitzen) tragen dann die Gerade. Gemessen an der Kopie `devbox-r28-demo.db` ohne HA (alle Tage mit
+> Tageszeile, die Lese-Sichten `stunden`, `tag-detail`, `waerme-verlauf-stunden`): Anlage «Prüfstand Wärme/Klima» an allen
+> 159 Tagen im Wärme-Verlauf je Stunde gefüllt (Demo-Stände nur um 23:00/00:00, z. B. 08.04.2026: Slots 1–22 linear),
+> Anlage «Demo-Anlage» an keinem Tag; `stunden` und `tag-detail` füllen beim Lesen nicht (sie lesen gespeicherte Stunden). Den
+> Schreibweg (b) konnte die Kopie nicht zeigen (ohne Leistungskurve bleibt ein gespeicherter Tag stehen). An einem Kanal-Tag
+> (HA-Spiegel oder MQTT-Mitschrift des Zählers) läuft keiner der beiden Wege.
 
 **HA-Statistics-Toleranz (v3.20.0, #145):** **10 min**. Wenn die Zielstunde in HA-Statistics noch nicht vorhanden ist, schreibt der Job nichts (statt einen Nachbar-Wert zu liefern, der Slot N als 0 und Slot N+1 als 2-Stunden-Delta entstehen ließ). Der nächste `aggregate_day`-Lauf 15 Min später holt den Wert via Self-Healing nach.
 
@@ -5167,7 +5205,7 @@ den Tag des Sprungs («heute», am Tag danach «gestern») weiter (Saat: 2 012,0
 doppelten Herbststunde — die Rohstände tragen örtliche Zeit ohne Zone, beide Durchläufe der Stunde mischen sich (Saat: Kanal
 7 025,9, am HEAD 7 025,5; am selben Tag außerhalb der Stunde 12,458 = 25 Stunden); (d) «bleiben» sofort, wenn die neue Quelle schon
 vor dem verzeichneten Zeitpunkt sendet: der Stundenlauf teilt am Zeitpunkt, Kanal und Reihe zählen den Sprung (wie vor U3 der
-Kanal); (e) Mischform HA/MQTT in der Bilanz (`kanal/bilanz_adapter.zaehler_eintraege`, Bestandsmessung); (f) die Reihen-Leser
+Kanal); (e) Mischform HA/MQTT in der Bilanz an Tagen ohne Stundenwerte (an Kanal-Tagen seit Fund-Päckchen D «Quelle je Feld», `kanal/bilanz_adapter.zaehler_eintraege`); (f) die Reihen-Leser
 (`reader.delta`) zeigen an den Tagen einer verworfenen Zeit keinen Wert (wie am HEAD; die Tagesansicht liest den Kanal);
 (g) entfällt seit U3-K4 (Bauplan Nr. 166) — «zwei vergleichbare Schritte in einer Stunde» und «ein kleiner Sprung nach oben ist
 nicht eintragbar» (U3-K B7 bis U3-K4): der Dialog trägt auf das Wort des Anwenders ein und sagt, ob er einen Sprung sieht. Neu
@@ -5711,7 +5749,10 @@ springt» (a)–(d) und der MQTT-Regeln (a)–(l) stehen bei ihren Abschnitten o
    sind; «Aus Home Assistant neu übernehmen» ändert nichts. Beide Lösungswege sagen es. Nicht gebaut (Korrekturrunde WEGB-K):
    die Prüfung bräuchte je Gerät den Beginn der Statistik und den Wert des Kalendertags — keine kleine Änderung an einer Stelle,
    und die importierte Statistik (Grenze 2) hat eine zweite Ursache. Ein Tag, an dem eine Statistik vor mehr als 90 Tagen begann,
-   erscheint nicht.
+   erscheint nicht. **Allgemein (N-815, Entscheid Gernot 22.11.2026: Text, kein Bau):** dieselbe Fenster-Ursache trifft jeden
+   gewöhnlichen Kanal-Tag, wenn die Stunde 23–24 Uhr zweier Folgetage um mindestens 2 kWh und 5 % verschieden ist (gemessen
+   `golden-master/funde-b-2026-11-22/test_mess_m2.py`: Wärmepumpe 67,5 → 60,0, Tag = HA = 67,5); der erste Tag einer Statistik
+   ist ein Fall davon. Die gezeigte Zahl ist die von Home Assistant, ungenau ist allein der Vergleichswert; beide Lösungswege sagen es.
 2. **Importierte Statistik mit großem erstem `sum`:** zählt wie in Home Assistant ganz. Seit Fund-Päckchen B (22.11.2026) nennt
    «Zählerstand springt» die erste Stunde an jedem Feld, wenn ihr Wert über der Grenze (b) liegt (`test_funde_b.py`). An einem
    PV-Feld nennt zusätzlich `drift_tag` den Tag (der Vergleichswert lässt die Stunde über der Plausibilitätsgrenze aus,

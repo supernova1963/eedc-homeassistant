@@ -251,7 +251,7 @@ async def tage_bilanz(
     if not tage:
         return {}
     stamm = await _stamm(db, anlage_id)
-    leer = await bewusst_leer(db, anlage_id)       # S4-R-V4: ein vor dem Tag verworfenes Feld ist nicht benötigt
+    leer = await bewusst_leer(db, anlage_id)       # S4-R-V4 + R-D1: verworfen bzw. vor dem Beginn seiner Quelle ⇒ nicht benötigt
     roh = {t: await stamm.eintraege(db, lambda i, t=t: i.ist_aktiv_an(t), t) for t in tage}
     je_tag = {t: leer.ohne(roh[t], *tagesfenster(t)) for t in tage}
     keys = {e.schluessel for lst in je_tag.values() for e in lst}
@@ -264,7 +264,7 @@ async def tage_bilanz(
         aktiv_an = (lambda inv, t=t: inv.ist_aktiv_an(t))
         out[t] = waehle_und_komponiere(je_tag[t], ergebnisse, _traeger(stamm.invs, aktiv_an),
                                        lueckentag=True, dc_grund=_dc_grund(stamm.invs, aktiv_an),
-                                       alle_bewusst_leer=bool(roh[t]) and not je_tag[t])
+                                       alle_bewusst_leer=leer.alle_verworfen(roh[t], *tagesfenster(t)))
     return out
 
 

@@ -281,7 +281,10 @@ async def abgeleitete_nachziehen(sitzungen: Sitzungen, anlage_id: int, *, jetzt:
     schreiben — dieselben drei Schreiber in derselben Reihenfolge wie der Stundenlauf (``schreiber.
     schreibe_kanaele_im_stundenlauf``: PV-Anteil der Heimladung, Strom je Betriebsart, Kosten), jeder ab seiner letzten
     Zeile bzw. ``aufbaubar_ab``. Gerufen von «HA-Spiegel jetzt abgleichen» und «Aus Home Assistant neu übernehmen»
-    (``api/routes/energie_profil/repair._kanal_abgleich_lauf``), NICHT vom Nachtjob (dort folgt der Stundenlauf).
+    (``api/routes/energie_profil/repair._kanal_abgleich_lauf``) und von «Zähler getauscht (gleiche Quelle)» nach dem
+    Nachtrag einer Fortsetzung (``api/routes/sensorwechsel.zaehler_getauscht``; ``kanal/naht.nachtrag_fortsetzung`` verwirft
+    die abhängigen abgeleiteten Kanäle ab der Stunde des Tauschs — Fund-Päckchen D), NICHT vom Nachtjob (dort folgt der
+    Stundenlauf).
 
     **Warum (N-814, gemessen Funde C):** ``konsistenz_anlage`` verwirft die abgeleiteten Kanäle ab der ersten korrigierten
     Stunde. Bis zum nächsten Stundenlauf deckten die Kanäle die E-Mobilität (Wallbox, E-Auto) ab dieser Stunde nicht —

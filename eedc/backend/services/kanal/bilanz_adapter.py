@@ -43,6 +43,8 @@ Ohne Sprung und ohne Rücksprung sind (a) und (b) gleich (Probe ``test_kanal_bil
 
 **Auswahl der Zähler** (dieselbe wie der Tagespfad, keine eigene): die HA-Auswahl ``lts_aggregator._lts_eintraege``,
 wenn die Anlage HA-Zähler zugeordnet hat; sonst die MQTT-/Snapshot-Auswahl ``snapshot.aggregator._snapshot_eintraege``.
+Kommt neben HA-Feldern ein Feld allein über MQTT, gilt die Snapshot-Auswahl über beide Quellen (R-D2, «Quelle je Feld»,
+``zaehler_eintraege``).
 Filter (aktiv · Anschaffung · Stilllegung) je Tag über ``Investition.ist_aktiv_an`` — dieselbe Grenze wie
 ``aktiv_am_tag`` im Tagespfad (``utils/investition_filter.py`` nennt die Gleichheit).
 
@@ -174,17 +176,41 @@ async def _zeilen_laden(
 # ── Auswahl der Zähler (dieselbe wie der Tagespfad) ─────────────────────────
 
 
+async def _mqtt_schluessel(db: AsyncSession, anlage_id: int) -> frozenset[str]:
+    """Die Schlüssel mit MQTT-Zählerständen (``snapshot/reader.mqtt_zaehler_keys``) — im Lade-Kontext einer Anfrage EINMAL
+    (Fund-Päckchen D: einmal je Lauf statt je Tag; Abfrage-Budget ``test_kanal_stundentage_bereich``)."""
+    from backend.services.kanal.lade_kontext import gemerkt
+    from backend.services.snapshot.reader import mqtt_zaehler_keys
+
+    async def _laden() -> frozenset[str]:
+        return frozenset(await mqtt_zaehler_keys(db, anlage_id))
+
+    return await gemerkt(db, ("mqtt_zaehler_keys", anlage_id), _laden)
+
+
 async def zaehler_eintraege(db: AsyncSession, anlage, invs_by_id: dict, datum: date) -> list[TabellenEintrag]:
     """Die zugeordneten Zähler des Tages, mit ``schluessel`` = Kanal-Schlüssel (``sensor_key``).
 
-    HA-Auswahl (``_lts_eintraege``), wenn die Anlage HA-Zähler zugeordnet hat — so wählt der Tagespfad bei
-    erreichbarem HA; sonst die Snapshot-/MQTT-Auswahl (``_snapshot_eintraege``)."""
+    **Quelle je Feld (R-D2, Entscheid Gernot 22.11.2026, N-813):** jedes Feld wird aus der Quelle gelesen, der es zugeordnet
+    ist — die Kanäle tragen je Feld-Schlüssel ihre Quelle (HA-Spiegel oder MQTT-Mitschrift), die Auswahl sagt nur, WELCHE
+    Felder zählen. Die HA-Auswahl (``_lts_eintraege``) kennt nur HA-Felder; kommt neben HA-Feldern ein Feld allein über MQTT
+    (MQTT-Stände angekommen, kein HA-Sensor — ``keys.feld_hat_zaehler``), gilt die EINE Auswahl über beide Quellen
+    (``_snapshot_eintraege``: dieselbe Feldliste, Entweder-oder, Wallbox-Regel und K3 einmal über HA und MQTT). Ein Feld, das
+    beiden zugeordnet ist, steht einmal darin (ein Schlüssel, ein Kanal; Vorrang der Quelle im Kanal). Reine HA-Anlagen
+    (keine MQTT-Stände bzw. jedes MQTT-Feld auch in der HA-Auswahl) und reine MQTT-Anlagen wählen wie bisher. Die MQTT-
+    Schlüssel liest der Kanal-Leser einmal je Anfrage (``_mqtt_schluessel``). Tage ohne Stundenwerte (Bestand,
+    ``snapshot/lts_aggregator``) bleiben, wie sie sind (benannte Grenze)."""
     from backend.services.snapshot.aggregator import _snapshot_eintraege
     from backend.services.snapshot.lts_aggregator import _lts_eintraege
 
     roh = _lts_eintraege(anlage, invs_by_id, datum)
+    mqtt = await _mqtt_schluessel(db, anlage.id)
     if not roh:
-        roh, _entity, _quellen = await _snapshot_eintraege(db, anlage, invs_by_id, datum)
+        roh, _entity, _quellen = await _snapshot_eintraege(db, anlage, invs_by_id, datum, mqtt_keys=set(mqtt))
+    elif mqtt - {e.sensor_key for e in roh}:
+        beide, _entity, _quellen = await _snapshot_eintraege(db, anlage, invs_by_id, datum, mqtt_keys=set(mqtt))
+        if {e.sensor_key for e in beide} - {e.sensor_key for e in roh}:
+            roh = beide
     return [dataclasses.replace(e, schluessel=e.sensor_key) for e in roh]
 
 
@@ -209,11 +235,33 @@ class BewusstLeer:
     (vor dem ersten ``gueltig_ab``) gilt die Regel nicht — die Zeit vor dem Kanal bleibt, was sie war (S3-R1). Folge:
     ein Tag, den nur die Kanäle tragen, behält nach dem Verwerfen EINES Felds seine Gruppe; das Feld fehlt dort wie ein
     nie zugeordnetes (Netz ⇒ N-585/N-734: «nicht erfasst»). Die Schreiber (abgeleitete Kanäle, Kosten) und die Preis-Leser
-    fragen die Regel nicht (Entscheid Master E-S4-3 H-1 B)."""
+    fragen die Regel nicht (Entscheid Master E-S4-3 H-1 B).
+
+    **Vor dem Beginn seiner Quelle (R-D1, Entscheid Gernot 22.11.2026, N-816 — wie Home Assistant):** ein zugeordnetes Feld
+    zählt in ``[von, bis)`` ebenso nicht als benötigt, wenn seine Quelle erst bei oder nach ``bis`` beginnt — die erste Zeile
+    seines Kanals ist der Beginn der Quelle (``beginn``: HA-Statistik nach ``lesen._ha_beginn_sql``, dieselbe Bedingung wie
+    die Regel «Anfangsstand 0»; MQTT: erster Stand der ersten Quelle des Kanals, ``lesen._mqtt_beginn_sql``) — oder das Feld noch
+    gar keinen Kanal mit Zeile hat, während die Anlage schon Kanäle führt (``kanal_aera``: unmittelbar nach der Zuordnung,
+    vor dem ersten Stundenlauf). HA zeigt einen Sensor vor dem Beginn seiner Statistik nicht und die übrigen unverändert;
+    hier steht das Feld dort ohne Wert (keine gemessene 0), die übrigen Felder behalten ihre Kanal-Deckung. Eine Lücke in
+    einer laufenden Quelle ist davon nicht berührt (Zeilen davor ⇒ benötigt, Zählerlücke wie HA). Im Zweifel (erste Zeile
+    nicht als Beginn bestätigt) gilt die Regel nicht. Anders als «verworfen» ist «vor Beginn» kein bewusstes Leer: ein Tag,
+    an dem jedes Feld der Gruppe vor seinem Beginn liegt, bleibt ein Bestandstag mit Befund ``tage_ohne_kanal_deckung``
+    (``alle_verworfen``)."""
 
     kanaele: dict = field(default_factory=dict)
+    #: R-D1: je Kanal-Schlüssel, dessen erste Zeile der Beginn seiner Quelle ist, deren ``start_ts``.
+    beginn: dict = field(default_factory=dict)
+    #: R-D1: die Schlüssel mit mindestens einer Zeile (Mengen und Stände).
+    mit_zeile: frozenset = frozenset()
 
-    def leer(self, key: str, von: int, bis: int) -> bool:
+    @property
+    def kanal_aera(self) -> bool:
+        """Die Anlage führt Kanäle mit Zeilen — erst dann heißt «noch kein Kanal» «Quelle noch nicht begonnen»."""
+        return bool(self.mit_zeile)
+
+    def verworfen(self, key: str, von: int, bis: int) -> bool:
+        """Der Teil «vor dem Zeitraum verworfen» der Regel (Werkbank bzw. «Daten vor der Änderung löschen»)."""
         k = self.kanaele.get(key)
         if k is None:
             return False
@@ -223,24 +271,62 @@ class BewusstLeer:
         gelten = [v for ab, b, v in abschnitte if ab < bis and (b is None or b > von)]
         return bool(gelten) and all(gelten)
 
+    def vor_beginn(self, key: str, von: int, bis: int) -> bool:
+        """R-D1: die Quelle des Felds beginnt erst bei oder nach ``bis`` (oder es hat noch keinen Kanal mit Zeile)."""
+        b = self.beginn.get(key)
+        if b is not None:
+            return b >= bis
+        return self.kanal_aera and key not in self.mit_zeile
+
+    def leer(self, key: str, von: int, bis: int) -> bool:
+        return self.verworfen(key, von, bis) or self.vor_beginn(key, von, bis)
+
     def ohne(self, eintraege: list, von: int, bis: int) -> list:
-        """Die Einträge (``TabellenEintrag``) ohne die in ``[von, bis)`` bewusst leeren Felder."""
-        if not self.kanaele:
+        """Die Einträge (``TabellenEintrag``) ohne die in ``[von, bis)`` nicht benötigten Felder."""
+        if not self.kanaele and not self.mit_zeile:
             return eintraege
         return [e for e in eintraege if not self.leer(e.schluessel, von, bis)]
 
+    def alle_verworfen(self, eintraege: list, von: int, bis: int) -> bool:
+        """Jeder Eintrag ist in ``[von, bis)`` bewusst leer (verworfen) — Weg B F2: der Tag zählt nicht als «ohne
+        Kanal-Deckung». Liegen Felder nur vor ihrem Beginn (R-D1), ist der Tag ein gewöhnlicher Bestandstag."""
+        return bool(eintraege) and all(self.verworfen(e.schluessel, von, bis) for e in eintraege)
+
+
+def _anfang_sql() -> str:
+    """EINE Anweisung je Anlage: je Mengen-/Stand-Kanal mit Zeile die erste Zeile, ob sie der Beginn ihrer Quelle ist
+    (HA oder MQTT, R-D1) und ob der Kanal eine verworfene Quelle hat (S4-R-V4)."""
+    from backend.services.kanal.lesen import _quellbeginn_sql
+
+    return f"""
+    SELECT x.key, x.erste, {_quellbeginn_sql('x.kid', 'x.erste')},
+        EXISTS (SELECT 1 FROM kanal_quelle q WHERE q.kanal_id = x.kid AND q.verworfen_ts IS NOT NULL)
+    FROM (SELECT k.id AS kid, k.key AS key,
+              (SELECT MIN(s.start_ts) FROM kanal_statistik s WHERE s.kanal_id = k.id
+                  AND (CASE k.art WHEN 'stand' THEN s.state ELSE s.sum END) IS NOT NULL) AS erste
+          FROM kanal k WHERE k.anlage_id = :a AND k.art IN ('sum', 'stand')) x
+    WHERE x.erste IS NOT NULL
+    """
+
 
 async def bewusst_leer(db: AsyncSession, anlage_id: int) -> BewusstLeer:
-    """``BewusstLeer`` einer Anlage — zwei kleine Abfragen, nur die Kanäle mit verworfener Quelle (meist keine). Im
-    Lade-Kontext einer Anfrage einmal."""
+    """``BewusstLeer`` einer Anlage — eine Abfrage für Beginn und Zeilen aller Kanäle (R-D1), zwei weitere nur für die
+    Kanäle mit verworfener Quelle (meist keine). Im Lade-Kontext einer Anfrage einmal."""
+    from sqlalchemy import text
+
     from backend.models.kanal import KanalStatistik
     from backend.services.kanal.lade_kontext import gemerkt
 
     async def _laden() -> BewusstLeer:
+        anfang = (await db.execute(text(_anfang_sql()), {"a": anlage_id})).all()
+        beginn = {key: int(erste) for key, erste, ist_beginn, _v in anfang if ist_beginn}
+        mit_zeile = frozenset(key for key, *_r in anfang)
+        if not any(v for *_r, v in anfang):
+            return BewusstLeer(beginn=beginn, mit_zeile=mit_zeile)
         ids = list((await db.execute(select(KanalQuelle.kanal_id).join(Kanal, Kanal.id == KanalQuelle.kanal_id).where(
             and_(Kanal.anlage_id == anlage_id, KanalQuelle.verworfen_ts.is_not(None))).distinct())).scalars().all())
         if not ids:
-            return BewusstLeer()
+            return BewusstLeer(beginn=beginn, mit_zeile=mit_zeile)
         keys = dict((await db.execute(select(Kanal.id, Kanal.key).where(Kanal.id.in_(ids)))).all())
         quellen: dict[int, list] = {}
         for q in (await db.execute(select(KanalQuelle).where(KanalQuelle.kanal_id.in_(ids))
@@ -253,7 +339,7 @@ async def bewusst_leer(db: AsyncSession, anlage_id: int) -> BewusstLeer:
             abschnitte = tuple((q.gueltig_ab, qs[i + 1].gueltig_ab if i + 1 < len(qs) else None, q.verworfen_ts is not None)
                                for i, q in enumerate(qs))
             out[keys[kid]] = (erste.get(kid), abschnitte)
-        return BewusstLeer(out)
+        return BewusstLeer(out, beginn=beginn, mit_zeile=mit_zeile)
 
     return await gemerkt(db, ("bewusst_leer", anlage_id), _laden)
 

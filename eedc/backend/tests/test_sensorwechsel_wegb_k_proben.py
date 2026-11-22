@@ -86,9 +86,10 @@ LAGEN = {
     #: weitergetragener Beginn einer Quelle, die die Werkbank inzwischen verworfen hat
     "beginn_verworfen": ([(0, "sensor.a", _V, FAMILIE_SPIEGEL), (20, "sensor.b", None, FAMILIE_SPIEGEL)], 0,
                          ("sensor.b", {"zeilen": 0, "grund": "vorgeschichte_andere_quelle", "beginn": "sensor.a"}), False),
-    #: MQTT → HA «bleiben»: die erste Zeile ist eine eigene Summe (Mitschrift), kein Beginn einer HA-Statistik
+    #: MQTT → HA «bleiben»: die erste Zeile ist eine eigene Summe (Mitschrift), kein Beginn einer HA-Statistik — seit Fund-
+    #: Päckchen D (R-D1) der erste MQTT-Stand: er ist der Anfangsstand (``MQTT``, kein Anfangsstand 0)
     "mqtt_dann_ha": ([(0, "netzbezug_kwh", None, FAMILIE_MITSCHRIFT), (20, "sensor.a", None, FAMILIE_SPIEGEL)], 0,
-                     ("sensor.a", {"zeilen": 0, "grund": "vorgeschichte_andere_quelle"}), False),
+                     ("sensor.a", {"zeilen": 0, "grund": "vorgeschichte_andere_quelle"}), "MQTT"),
     #: HA → MQTT «bleiben»: die Marke der eigenen Summe trägt den Beginn der HA-Statistik weiter
     "ha_dann_mqtt": ([(0, "sensor.a", None, FAMILIE_SPIEGEL), (20, "netzbezug_kwh", None, FAMILIE_MITSCHRIFT)], 0,
                      ("netzbezug_kwh", {"zeilen": 0, "grund": "vorgeschichte_andere_quelle", "beginn": "sensor.a"}), True),
@@ -124,7 +125,12 @@ async def test_lagen_der_regel_an_der_ersten_zeile(db, lage):
     z = await zeitraum(db, k, h(0), h(3), jetzt=JETZT)
     st = await stunden(db, k, h(0), h(3), jetzt=JETZT)
     de = (await deltas_stapel(db, [k], h(0), h(3)))[k.key]
-    if gilt:
+    if gilt == "MQTT":
+        # Fund-Päckchen D (R-D1): bis dahin wie «gilt nicht» (beginnt nach von); jetzt ist der Zeitraum gedeckt, gezählt ab dem
+        # ersten Stand — die erste Stunde trägt keinen Zuwachs (kein Stand davor, kein Anfangsstand 0)
+        assert (z.voll, z.grund, z.delta, z.teil_delta) == (True, None, pytest.approx(1.0), None), lage
+        assert st.voll and st.werte[0].change is None and de[0][1] is None, lage
+    elif gilt:
         assert (z.voll, z.delta) == (True, pytest.approx(S0 + 1.0)), lage
         assert st.werte[0].change == pytest.approx(S0) and de[0][1] == pytest.approx(S0), lage
     else:

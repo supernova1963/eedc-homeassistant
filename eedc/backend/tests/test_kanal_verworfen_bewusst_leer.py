@@ -34,6 +34,8 @@ TAGE = 12
 T = datetime(2026, 6, 4, 0)                 # Sensortausch: neue Quelle ab hier, Verwerfen vor t
 JETZT = datetime(2026, 6, 6, 0, 30)
 EINSP, NETZ = "basis:einspeisung", "basis:netzbezug"
+#: Netzbezug Mai aus dem Kanal (Stände 100 + 0,5 je Stunde ab dem 25.05.; Anfangsstand = erster Stand, R-D1) — gemessen 22.11.2026.
+MAI_NETZ = 84.0
 
 
 # ── die Regel, rein ─────────────────────────────────────────────────────────
@@ -104,9 +106,11 @@ async def test_tag_vor_t_behaelt_die_bilanz_feld_fehlt(datei):
     assert EINSP not in k.komposition.komponenten and k.komposition.bilanz.eigenverbrauch_kwh is None
     # Der Tag mit t: Zeilen vor seinem Ende ⇒ benötigt, der Anker ist verworfen ⇒ Bestand.
     assert tb[tag_t].wahl.quelle == "bestand" and EINSP in tb[tag_t].wahl.gruende
-    # Der Mai (ganz vor t, die Reihe beginnt am 25.05. ⇒ Bestand): die Einspeisung ist kein Grund mehr, nur der Netzbezug;
-    # die Werkbank-Auskunft fragt dieselbe Regel.
-    assert mb[(2026, 5)].wahl.quelle == "bestand" and set(mb[(2026, 5)].wahl.gruende) == {NETZ}
+    # Der Mai (ganz vor t): die Einspeisung ist nicht benötigt. Die Reihe des Netzbezugs beginnt am 25.05. — bis Fund-Päckchen
+    # D (22.11.2026) ⇒ «beginnt nach von» ⇒ Bestand mit Grund Netzbezug; seit R-D1 ist ihr erster MQTT-Stand der Anfangsstand,
+    # der Mai kommt aus den Kanälen (Netzbezug ab dem ersten Stand). Die Werkbank-Auskunft fragt dieselbe Regel.
+    assert mb[(2026, 5)].wahl.quelle == "kanal" and EINSP not in mb[(2026, 5)].wahl.ergebnisse
+    assert mb[(2026, 5)].komposition.bilanz.netzbezug_kwh == MAI_NETZ
     assert EINSP not in benoetigt[vor_t] and EINSP in benoetigt[tag_t] and NETZ in benoetigt[vor_t]
     assert leer.leer(EINSP, *tagesfenster(vor_t)) and not leer.leer(EINSP, *tagesfenster(tag_t))
     assert leer.leer(EINSP, *monatsfenster(2026, 5)) and not leer.leer(NETZ, *tagesfenster(vor_t))

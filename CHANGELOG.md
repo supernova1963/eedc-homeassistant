@@ -42,7 +42,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Am ersten Tag einer Statistik können „Abweichung zu Home Assistant an einem Tag (PV)“ und „Ein Gerät weicht an Tagen von
   Home Assistant ab“ (etwa an einer Wärmepumpe, die nachts läuft) den Tag nennen, obwohl eedc und Home Assistant dieselbe Zahl
   zeigen — der Vergleichswert endet an diesem Tag um 23 Uhr, bei einer importierten Statistik mit großem ersten Wert lässt er
-  die erste Stunde aus; nichts zu tun, beide Lösungswege sagen es. Die Werte der ersten Stunde nach „Werte vor dem
+  die erste Stunde aus; nichts zu tun, beide Lösungswege sagen es (auch für einen gewöhnlichen Tag, an dem das Gerät zwischen 23
+  und 24 Uhr an zwei Folgetagen deutlich verschieden lief). Die Werte der ersten Stunde nach „Werte vor dem
   Sensorbeginn verwerfen“ und der erste Tag einer Wallbox bleiben, wie sie bisher waren (ohne die erste Stunde). Gespeicherte Monatswerte und gespeicherte Tageswerte ändern sich nicht von selbst. Ein leerer Tag sagt
   jetzt nur „Zähler zugeordnet, aber für diesen Tag liegen keine Zählerstände vor — eedc bildet für diesen Tag deshalb keinen
   Tageswert.“ (bisher versprach der Satz ein Nachrechnen in der Reparatur-Werkbank). **MQTT:** springt der Zählerstand eines PV- oder Einspeise-Felds,
@@ -190,7 +191,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   dieser Knöpfe gedrückt, zeigten Wallbox und E-Auto bis zum nächsten stündlichen Lauf an den Tagen ab der berichtigten
   Stunde „—“ und im Monat nur einen Teil (gemessen: Monat 36,96 statt 72,6 kWh) — auch wenn die Berichtigung an der PV
   oder am Netzzähler lag, denn aus deren Stunden rechnet eedc den PV-Anteil der Heimladung. eedc rechnet diesen Anteil
-  jetzt gleich nach dem Abgleich neu, Tag und Monat stimmen sofort.
+  jetzt gleich nach dem Abgleich neu, Tag und Monat stimmen sofort. Dasselbe gilt jetzt nach „Zähler getauscht (gleiche
+  Quelle)“ an einem MQTT-Feld: Wallbox und E-Auto zeigten bis zum nächsten stündlichen Lauf an den Tagen ab dem Tausch „—“.
+- **Ein neu zugeordneter Sensor nimmt den Tagen vor seinem Beginn nicht mehr die Zahlen der übrigen Felder.** Ordnest du
+  einem Feld (etwa einem neuen PV-Modul, einem Speicher oder einem Netzzähler) einen Sensor zu, dessen Statistik in Home
+  Assistant erst später beginnt als die der übrigen, zeigten die Tage davor für die ganze Anlage „—“ — Erzeugung, Netz,
+  Monatssicht auch eines unberührten PV-Felds (gemessen: Erzeugung „—“ statt 62,4 kWh, Oktober des unberührten PV-Felds „—“
+  statt 75,0 kWh); unmittelbar nach der Zuordnung bis zum nächsten stündlichen Lauf sogar an allen Tagen. Das war schon in
+  v4.3.1 so. Jetzt gilt wie in Home Assistant: vor dem Beginn seiner Statistik (bei MQTT: vor seinem ersten Zählerstand)
+  hat das neue Feld keinen Wert, alle anderen Felder zählen weiter. Der Tag, an dem eine MQTT-Quelle beginnt, zählt ab ihrem
+  ersten Zählerstand. **Was sich an bestehenden Zahlen ändern kann:** Tage und Monate, die bisher aus den gespeicherten
+  Stundenwerten kamen, weil ein später begonnener Zähler fehlte, kommen jetzt aus den Kanälen — sie zeigen dann den
+  Kalendertag wie Home Assistant (Abweichungen meist in der zweiten Nachkommastelle; was zwischen 23 und 24 Uhr gemessen
+  wurde, steht jetzt an diesem Tag statt am Folgetag). Grenzt ein solcher Tag an einen Tag, der weiter aus den gespeicherten
+  Werten kommt (etwa weil ein Zähler dort eine Lücke hat), kann die Stunde 23–24 Uhr an dieser Grenze in Tag und Monat
+  fehlen (gemessen an einer echten Anlage: eine Wallbox im März 2025 3,47 kWh unter Home Assistant). Die Auskunft „… Tage
+  ohne Kanal-Deckung …“ nennt entsprechend weniger Tage.
+- **Ein Feld über MQTT neben Feldern aus Home Assistant zählt wieder mit.** Kam bei einer Anlage mit Home-Assistant-Feldern
+  ein Feld allein über MQTT — etwa der Netzbezug nach „Bisherige Werte bleiben“ beim Wechsel von Home Assistant zu MQTT,
+  oder die Ladung einer Wallbox über MQTT —, zeigten die Tageswerte dieses Feld an allen Tagen „—“ und der Monat 0 bzw. gar
+  nichts (gemessen: Netzbezug Monat 0,0 statt 71,33 kWh; Kosten und Autarkie des Monats rechneten mit 0). Das betraf auch
+  v4.3.1. Jetzt liest eedc an Tagen mit Stundenwerten jedes Feld aus der Quelle, der es zugeordnet ist. An Tagen ohne
+  Stundenwerte (Tageswerte aus den gespeicherten Werten) bleibt es wie bisher.
 - **Daten-Checker: eine Statistik, die mit einem großen Stand beginnt, nennt „Zählerstand springt“.** Beginnt die
   Statistik eines Sensors in Home Assistant nicht bei 0, sondern mit einem großen Stand (etwa nach einem Import), zählen
   Home Assistant und eedc diesen Stand als Menge der ersten Stunde — im gemessenen Beispiel 5 004,66 kWh Ladung an einem

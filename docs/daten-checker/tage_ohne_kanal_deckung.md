@@ -4,7 +4,9 @@
 An diesen Tagen kommen PV, Netz und Speicher weder aus der Langzeitstatistik von Home Assistant noch aus eigenen
 Zählerständen. eedc liest ihre Mengen deshalb aus den gespeicherten Stunden- und Tageswerten — so wie vor der Umstellung.
 Typisch sind Tage vor dem ersten gespeicherten Zählerstand. Die Details nennen auch die Zahl der Tage mit der neuen
-Deckung.
+Deckung. Ein Feld, dessen Statistik in Home Assistant (bei MQTT: dessen erster Zählerstand) erst später beginnt, macht
+einen Tag nicht mehr zu einem solchen Tag: vor seinem Beginn hat dieses Feld keinen Wert, die übrigen zählen aus den
+Kanälen weiter — wie in Home Assistant.
 
 ## Lösungsweg
 1. Nichts zu tun — das ist kein Fehler. Der Knopf **«Was gilt»** am Befund öffnet diesen Text.

@@ -86,6 +86,13 @@ async def zaehler_getauscht(
             anlage_id=anlage_id, db=db,
         )
     await db.commit()
+    if row is not None and la.nachtrag_ts is not None:
+        # Fund-Päckchen D (Nachbar von N-814): der Nachtrag verwirft die abgeleiteten Kanäle, die aus dem Feld rechnen, ab der
+        # Stunde des Tauschs — sofort nachziehen, nicht erst im nächsten Stundenlauf (sonst E-Mobilität bis dahin «—»).
+        from backend.core.database import get_session
+        from backend.services.kanal.konsistenz import abgeleitete_nachziehen
+
+        await abgeleitete_nachziehen(get_session, anlage_id)
     return {**zg.antwort(la), "eingetragen": row is not None}
 
 

@@ -674,14 +674,18 @@ async def test_mqtt_feld_beginnt_mit_dem_ersten_stand_danach(db, monkeypatch, st
 async def test_c_mqtt_feld_allein_sichtbare_netz_tageswerte(db, monkeypatch, stehende_uhr):
     """(c) Nur das MQTT-Feld ist zugeordnet (die Tagesansicht zeigt den Netzbezug): nach «löschen» zeigen die Tage davor «—»,
     der Tag des Wechsels zählt ab dem ersten gespeicherten Stand der neuen Quelle (wie jede neue MQTT-Zuordnung: Rohstände
-    ab 10:20 von 0, gespeicherte Stände ab 11:00 ⇒ 11:00 … 23:00 = 12 × 0,9), der Folgetag bis 03:00 wie ohne Wechsel."""
+    ab 10:20 von 0, gespeicherte Stände ab 11:00 ⇒ seit Fund-Päckchen D 11:00 … 24:00 = 13 × 0,9, Kalendertag aus dem Kanal),
+    der Folgetag bis 03:00 wie ohne Wechsel."""
     w = await mach_welt(db, monkeypatch, {}, {}, mqtt=True, live=False, mqtt_neu=T0)
     await _bis_zum_wechsel(w, T0)
     tage = [T0.date() - timedelta(days=1), T0.date(), T0.date() + timedelta(days=1)]
     assert (await netz_tage(w, tage))[tage[0]] == 21.6
     await loeschen(w, T0, NETZ_FID, quelle="mqtt_gateway", quell_topic="neu/zaehler/netz")
     await _nach_dem_wechsel(w, T0)
-    assert await netz_tage(w, tage) == {tage[0]: None, tage[1]: 10.8, tage[2]: 2.7}
+    # Fund-Päckchen D (R-D1, 22.11.2026): der Tag des Wechsels ist seitdem ein Kanal-Tag — der erste gespeicherte Stand der
+    # neuen Quelle (11:00) ist der Anfangsstand, gezählt bis zum Ende des Kalendertags: 11:00 … 24:00 = 13 × 0,9 = 11,7. Bis
+    # dahin las der Tag den Bestand mit dem Fenster bis 23:00 (12 × 0,9 = 10,8).
+    assert await netz_tage(w, tage) == {tage[0]: None, tage[1]: 11.7, tage[2]: 2.7}
     b = await befunde(w)
     meldung, details = b["daten_vor_aenderung_geloescht"][0].split(" || ")
     assert meldung == "Netzbezug: Daten vor dem 04.11.2026 10:20 Uhr gelöscht"

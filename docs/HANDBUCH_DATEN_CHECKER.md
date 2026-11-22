@@ -2733,7 +2733,9 @@ Eine automatische Umrechnung beim Start gibt es bewusst nicht.
 An diesen Tagen kommen PV, Netz und Speicher weder aus der Langzeitstatistik von Home Assistant noch aus eigenen
 Zählerständen. eedc liest ihre Mengen deshalb aus den gespeicherten Stunden- und Tageswerten — so wie vor der Umstellung.
 Typisch sind Tage vor dem ersten gespeicherten Zählerstand. Die Details nennen auch die Zahl der Tage mit der neuen
-Deckung.
+Deckung. Ein Feld, dessen Statistik in Home Assistant (bei MQTT: dessen erster Zählerstand) erst später beginnt, macht
+einen Tag nicht mehr zu einem solchen Tag: vor seinem Beginn hat dieses Feld keinen Wert, die übrigen zählen aus den
+Kanälen weiter — wie in Home Assistant.
 
 **Lösungsweg**
 1. Nichts zu tun — das ist kein Fehler. Der Knopf **«Was gilt»** am Befund öffnet diesen Text.
@@ -4377,12 +4379,15 @@ Für diesen Tag steht in eedc eine andere PV-Erzeugung als in der Langzeitstatis
 5 % Unterschied). Mehrere solche Tage stehen als eine Zeile «n Tage weichen von Home Assistant ab» mit einem Glied je Tag,
 die größten Abweichungen vorn. Geprüft werden die Tage der letzten 90 Tage bis gestern.
 
-**Benannte Grenze — der erste Tag einer Statistik:** am Tag, an dem die Statistik eines Sensors in Home Assistant beginnt, kann
-die Prüfung den Tag nennen, obwohl eedc und Home Assistant für ihn dieselbe Zahl zeigen. Dann ist nichts zu tun;
-«Aus Home Assistant neu übernehmen» ändert daran nichts. Zwei Gründe: eedc zählt den Kalendertag ab der ersten Stunde wie
-Home Assistant, der Vergleichswert der Prüfung reicht für diesen Tag aber nur bis 23 Uhr (die Stunde 23–24 Uhr zählt er zum
-Folgetag) — trägt diese letzte Stunde mindestens 2 kWh und 5 %, erscheint der Tag; und beginnt die Statistik mit einem großen
-ersten Wert (etwa eine importierte Statistik), lässt der Vergleichswert diese Stunde als unplausibel aus, Tagesansicht und Home
+**Benannte Grenze — die Stunde 23–24 Uhr:** die Prüfung kann einen Tag nennen, obwohl eedc und Home Assistant für ihn
+dieselbe Zahl zeigen. Der Grund: eedc zeigt den Kalendertag wie Home Assistant; der Vergleichswert der Prüfung reicht aber von
+23 Uhr des Vortags bis 23 Uhr. Unterscheidet sich die Erzeugung in der Stunde 23–24 Uhr an zwei aufeinanderfolgenden Tagen um
+mindestens 2 kWh und 5 % des Tages, weicht nur dieser Vergleichswert ab — bei PV selten, weil sie nachts kaum erzeugt
+(dieselbe Grenze an einer Wärmepumpe, gemessen: «67,5 → 60,0 kWh», Tagesansicht und Home Assistant 67,5). Erkennen: zeigen die
+Tagesansicht in eedc und Home Assistant für den genannten Tag dieselbe Zahl, ist die gezeigte Zahl die von Home Assistant und
+ungenau allein der Vergleichswert. Dann ist nichts zu tun; «Aus Home Assistant neu übernehmen» ändert daran nichts. Am **ersten
+Tag einer Statistik** gibt es zwei Fälle derselben Grenze: dem Vergleichswert fehlt die Stunde 23–24 Uhr (trägt sie mindestens
+2 kWh und 5 %, erscheint der Tag); und beginnt die Statistik mit einem großen ersten Wert (etwa eine importierte Statistik), lässt der Vergleichswert diese Stunde als unplausibel aus, Tagesansicht und Home
 Assistant zählen sie. Im zweiten Fall zeigt der Tag den großen ersten Wert wie Home Assistant, und „Zählerstand springt“
 nennt diese erste Stunde — ist er dort falsch, berichtige ihn dort (Schritt 1).
 
@@ -4411,12 +4416,15 @@ Es gibt eine Zeile je Gerät, nicht je Tag; sie nennt den Tag mit der größten 
 tragen Wirtschaftlichkeit und CO₂-Bilanz mit — eine Abweichung an der Wallbox kostet genauso wie eine an der PV. Geprüft werden
 die Tage der letzten 90 Tage bis gestern.
 
-**Benannte Grenze — der erste Tag einer Statistik:** am Tag, an dem die Statistik eines Sensors in Home Assistant beginnt, kann
-die Prüfung den Tag nennen, obwohl eedc und Home Assistant für ihn dieselbe Zahl zeigen. Dann ist nichts zu tun;
-«Aus Home Assistant neu übernehmen» ändert daran nichts. Der Grund: eedc zählt den Kalendertag ab der ersten Stunde wie Home
-Assistant, der Vergleichswert der Prüfung reicht für diesen Tag aber nur bis 23 Uhr (die Stunde 23–24 Uhr zählt er zum
-Folgetag). Läuft das Gerät in dieser letzten Stunde — etwa eine Wärmepumpe nachts — mit mindestens 2 kWh und 5 % des Tages,
-erscheint der Tag (gemessen: «12,5 → 10,0 kWh», Tagesansicht und Home Assistant 12,5).
+**Benannte Grenze — die Stunde 23–24 Uhr:** die Prüfung kann einen Tag nennen, obwohl eedc und Home Assistant für ihn
+dieselbe Zahl zeigen. Der Grund: eedc zeigt den Kalendertag wie Home Assistant; der Vergleichswert der Prüfung reicht aber von
+23 Uhr des Vortags bis 23 Uhr. Lief das Gerät in der Stunde 23–24 Uhr an zwei aufeinanderfolgenden Tagen deutlich verschieden
+— mindestens 2 kWh und 5 % des Tages, typisch eine Wärmepumpe oder Wallbox nachts —, weicht nur dieser Vergleichswert ab
+(gemessen: «67,5 → 60,0 kWh», Tagesansicht und Home Assistant 67,5). Ein Fall derselben Grenze ist der erste Tag einer
+Statistik: beginnt sie an diesem Tag, fehlt dem Vergleichswert die Stunde 23–24 Uhr (gemessen: «12,5 → 10,0 kWh»,
+Tagesansicht und Home Assistant 12,5). Erkennen: zeigen die Tagesansicht in eedc und Home Assistant für den genannten Tag
+dieselbe Zahl, ist die gezeigte Zahl die von Home Assistant und ungenau allein der Vergleichswert. Dann ist nichts zu tun;
+«Aus Home Assistant neu übernehmen» ändert daran nichts.
 
 **Lösungsweg**
 1. In Home Assistant prüfen, welcher Wert stimmt. Ist die Statistik dort falsch (etwa ein Zählersprung), sie unter

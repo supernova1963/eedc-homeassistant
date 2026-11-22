@@ -213,9 +213,15 @@ async def test_bestand_bitgleich_mit_und_ohne_kanal_schreiber(fid, ha):
     form = am.FORMEN[fid]
     mit = await _lauf(form, ha=ha, mit_kanal=True)
     ohne = await _lauf(form, ha=ha, mit_kanal=False, mitschrift=False)
-    for t in _BESTAND:
-        assert mit[t] == ohne[t], f"{fid}: {t} weicht ab"
-        assert mit[t], f"{fid}: {t} ist leer — die Probe hätte nichts verglichen"
+    if ha:
+        for t in _BESTAND:
+            assert mit[t] == ohne[t], f"{fid}: {t} weicht ab"
+            assert mit[t], f"{fid}: {t} ist leer — die Probe hätte nichts verglichen"
+    else:
+        # Fund-Päckchen D (R-D1, 22.11.2026): der erste Stand einer MQTT-Quelle ist ihr Anfangsstand — der Tag, an dem die
+        # Kanäle beginnen (10.06.), ist seitdem ein Kanal-Tag (bis dahin «beginnt nach von» ⇒ Bestandstag). Dort gilt das
+        # S5b-Soll (Mengen leer, Bahnen bitgleich), an den übrigen Tagen bleibt alles bitgleich.
+        _bitgleich_s5b(fid, mit, ohne)
     assert mit["kanal_statistik"], f"{fid}: der neue Teil hat nichts geschrieben"
     assert not ohne["kanal_statistik"]
     assert not [a for a in mit["aktivitaet"] if a[0] == "Kanalstatistik nicht geschrieben"]
@@ -355,6 +361,27 @@ async def _zeilen(db, tabelle: str) -> list[dict]:
     return [{s: _ohne_uhr(w) for s, w in zip(spalten, r)} for r in rows]
 
 
+def _bitgleich_s5b(fid: str, mit: dict, ohne: dict) -> None:
+    """Bitgleich mit dem S5b-Soll: ``sensor_snapshots`` und jeder Bestandstag bitgleich; an einem Kanal-Tag die Bahnen
+    bitgleich und die Mengen-Spalten leer (Modul-Docstring)."""
+    from backend.services.snapshot.boundary_range import TZ_QUELLE_KANAL
+
+    assert mit["sensor_snapshots"] == ohne["sensor_snapshots"] and mit["sensor_snapshots"], f"{fid}: sensor_snapshots"
+    kanal_tage = {z["datum"] for z in mit["tz_zeilen"] if TZ_QUELLE_KANAL in (z["source_provenance"] or "")}
+    assert kanal_tage, f"{fid}: kein Kanal-Tag — die S5b-Probe hätte nichts geprüft"
+    for t in ("tages_energie_profil", "tages_zusammenfassung"):
+        a, b = mit["zeilen"][t], ohne["zeilen"][t]
+        assert len(a) == len(b) and a, f"{fid}: {t}"
+        for za, zb in zip(a, b):
+            if za["datum"] not in kanal_tage:
+                assert za == zb, f"{fid}: {t} Bestandstag {za['datum']} weicht ab"
+                continue
+            weg = _KANAL_SPALTEN[t]
+            assert {k: v for k, v in za.items() if k not in weg} == {k: v for k, v in zb.items() if k not in weg}, \
+                f"{fid}: {t} Bahnen am Kanal-Tag {za['datum']} weichen ab"
+            assert all(za[s] is None for s in _KANAL_LEER[t]), f"{fid}: {t} Kanal-Tag {za['datum']} trägt Mengen"
+
+
 @pytest.mark.parametrize("fid", ["M04", "M05", "M06"])
 async def test_bestand_bitgleich_mit_nachfuellen_und_konsistenzlauf(fid):
     """E2 (Auftrag „Bestand bitgleich, um das Nachfüllen erweitert"): Nachfüllen aus HA und ein
@@ -390,8 +417,6 @@ async def test_bestand_bitgleich_mit_nachfuellen_der_eigenen_summe(fid):
     form = am.FORMEN[fid]
     mit = await _lauf(form, ha=False, mit_kanal=True, kanal_ab=15, es_nachfuellen=True)
     ohne = await _lauf(form, ha=False, mit_kanal=False, mitschrift=False)
-    for t in _BESTAND:
-        assert mit[t] == ohne[t], f"{fid}: {t} weicht ab"
-        assert mit[t], f"{fid}: {t} ist leer — die Probe hätte nichts verglichen"
+    _bitgleich_s5b(fid, mit, ohne)      # Fund-Päckchen D: der Tag des ersten MQTT-Stands ist ein Kanal-Tag (s. oben)
     assert mit["es"]["fehler"] == 0 and mit["es"]["kanaele"] > 0, mit["es"]
     assert mit["es"]["zeilen"] == 14 * mit["es"]["kanaele"], mit["es"]

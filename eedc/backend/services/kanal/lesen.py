@@ -39,6 +39,10 @@ deckt ``[von, bis)`` voll, wenn
   Kanal ⇒ ``beginnt_nach_von``. **Ausnahme — Beginn einer HA-Statistik** (``_ha_beginn_sql``, Entscheid Gernot 21.11.2026):
   ist diese erste Zeile die erste, die Home Assistant für den Sensor führt, gilt davor der Stand 0 wie in HA
   (Anfangsstand 0, ``recorder_statistics.py:1720f.``) — der Zeitraum ist gedeckt, die erste Stunde zählt mit ihrem ``sum``.
+  **Ebenso der erste Stand einer MQTT-Quelle** (``_mqtt_beginn_sql``, R-D1, Entscheid Gernot 22.11.2026): der Zeitraum ist
+  gedeckt, gezählt ab diesem Stand (die Quelle führt davor keinen; die Stunde des ersten Stands trägt keinen Zuwachs).
+  Liegt der Beginn der Quelle erst bei oder nach ``bis``, ist das Feld im Zeitraum gar nicht benötigt — das entscheidet
+  die Gruppenwahl (``bilanz_adapter.BewusstLeer.vor_beginn``), nicht diese Schicht.
 * (b) sein letzter Stand das Ende erreicht: es gibt eine Zeile mit ``start_ts ≥ ende − 3600``, wobei ``ende`` =
   ``min(bis, soll_ende(jetzt))``. Für einen abgeschlossenen Zeitraum ist das die Zeile der letzten Stunde vor ``bis``
   oder eine spätere; für den laufenden reicht der Stand, den der Stundenlauf schon geschrieben haben muss
@@ -280,6 +284,33 @@ def _ha_beginn_sql(kid: str, ts: str) -> str:
             f"AND NOT EXISTS (SELECT 1 FROM kanal_statistik s0 WHERE s0.kanal_id = {kid} AND s0.start_ts < {ts}))")
 
 
+#: **Erster Stand einer MQTT-Quelle** (R-D1, Entscheid Gernot 22.11.2026, N-816/N-813 — bei MQTT zählt die Quelle): die erste
+#: Zeile eines Kanals ist der erste Stand seiner Quelle, wenn die für sie geltende Quelle eine Mitschrift mit MQTT-Kennung ist (nicht
+#: die HA-Stände von damals, ``nachfuellen.STAENDE_HA_PRAEFIX``), nicht verworfen, und vor ihr keine Quelle liegt außer einem
+#: Platzhalter von «löschen» (wie ``_ha_beginn_sql``). Vor diesem Stand führt eedc aus keiner Quelle einen Wert für das Feld;
+#: ab ihm zählt der Kanal (Anfangsstand = dieser Stand — anders als HA gibt eine MQTT-Quelle keine Menge vor ihrem ersten
+#: Stand an). Leser: ``_zeitraum_aus``/``stunden_stapel`` (Rand-Tag) und ``bilanz_adapter.BewusstLeer`` (Tage davor).
+def _mqtt_beginn_sql(kid: str, ts: str) -> str:
+    return (f"(SELECT 1 FROM kanal_quelle q WHERE q.kanal_id = {kid} AND q.familie = 'mitschrift' "
+            f"AND q.verworfen_ts IS NULL AND q.statistic_id IS NOT NULL AND q.statistic_id NOT LIKE 'sensor_snapshots:%' "
+            f"AND q.gueltig_ab = (SELECT MAX(q2.gueltig_ab) FROM kanal_quelle q2 WHERE q2.kanal_id = {kid} "
+            f"AND q2.gueltig_ab <= {ts}) "
+            f"AND NOT EXISTS (SELECT 1 FROM kanal_quelle q3 WHERE q3.kanal_id = {kid} AND q3.gueltig_ab < q.gueltig_ab "
+            f"AND (q3.verworfen_ts IS NULL OR q3.statistic_id IS NOT NULL)) "
+            f"AND NOT EXISTS (SELECT 1 FROM kanal_statistik s0 WHERE s0.kanal_id = {kid} AND s0.start_ts < {ts}))")
+
+
+#: Art des Quellbeginns an der ersten Zeile eines Kanals (``_quellbeginn_sql``): HA-Statistik (Anfangsstand 0) bzw. erster
+#: MQTT-Stand (Anfangsstand = dieser Stand); sonst keiner.
+BEGINN_HA = "ha"
+BEGINN_MQTT = "mqtt"
+
+
+def _quellbeginn_sql(kid: str, ts: str) -> str:
+    return (f"(CASE WHEN {_ha_beginn_sql(kid, ts)} = 1 THEN '{BEGINN_HA}' "
+            f"WHEN {_mqtt_beginn_sql(kid, ts)} = 1 THEN '{BEGINN_MQTT}' END)")
+
+
 # ── Randstände je Kanal und Grenze (die eine Anweisung von zeitraum/reihe) ──
 
 _RAND_SQL = f"""
@@ -298,7 +329,7 @@ WITH k(kid, art) AS (
 SELECT p.kid, p.j,
     v.start_ts, {_wert_sql('v', 'p.art')}, {_offset_sql('p.kid', 'v.start_ts')},
     n.start_ts, {_wert_sql('n', 'p.art')}, {_offset_sql('p.kid', 'n.start_ts')},
-    CASE WHEN p.vor_rid IS NULL AND p.art = 'sum' AND n.start_ts IS NOT NULL THEN {_ha_beginn_sql('p.kid', 'n.start_ts')} END
+    CASE WHEN p.vor_rid IS NULL AND p.art = 'sum' AND n.start_ts IS NOT NULL THEN {_quellbeginn_sql('p.kid', 'n.start_ts')} END
 FROM p
 LEFT JOIN kanal_statistik v ON v.rowid = p.vor_rid
 LEFT JOIN kanal_statistik n ON n.rowid = p.nach_rid
@@ -311,16 +342,18 @@ class _Stand:
     offset: float
     #: Nur am «nach»-Stand: diese Zeile ist die erste der HA-Statistik (``_ha_beginn_sql``) — davor gilt Anfangsstand 0.
     ha_beginn: bool = False
+    #: Nur am «nach»-Stand: diese Zeile ist der erste Stand einer MQTT-Quelle (``_mqtt_beginn_sql``) — sie ist der Anfangsstand.
+    mqtt_beginn: bool = False
 
     @property
     def ende(self) -> int:
         return self.start_ts + _STUNDE
 
 
-def _stand(ts, roh, offset, ha_beginn=None) -> Optional[_Stand]:
+def _stand(ts, roh, offset, beginn=None) -> Optional[_Stand]:
     if ts is None or roh is None:
         return None
-    return _Stand(int(ts), float(roh), float(offset or 0.0), bool(ha_beginn))
+    return _Stand(int(ts), float(roh), float(offset or 0.0), beginn == BEGINN_HA, beginn == BEGINN_MQTT)
 
 
 def _anfangsstand(f: _Stand) -> _Stand:
@@ -344,9 +377,9 @@ async def _randstaende_laden(db: AsyncSession, kanaele: Sequence[Kanal], grenzen
     res = await db.execute(text(_RAND_SQL), {"kanaele": _kanal_json(kanaele), "grenzen": json.dumps(list(grenzen))})
     vor: dict[tuple[int, int], Optional[_Stand]] = {}
     nach: dict[tuple[int, int], Optional[_Stand]] = {}
-    for kid, j, v_ts, v_roh, v_off, n_ts, n_roh, n_off, ha_beginn in res.all():
+    for kid, j, v_ts, v_roh, v_off, n_ts, n_roh, n_off, beginn in res.all():
         vor[(kid, grenzen[j])] = _stand(v_ts, v_roh, v_off)
-        nach[(kid, grenzen[j])] = _stand(n_ts, n_roh, n_off, ha_beginn)
+        nach[(kid, grenzen[j])] = _stand(n_ts, n_roh, n_off, beginn)
     return vor, nach
 
 
@@ -409,6 +442,8 @@ def _zeitraum_aus(k: Kanal, von: int, bis: int, a: Optional[_Stand], f: Optional
     ab_beginn = a is None and f is not None and f.ha_beginn and f.start_ts < bis
     if ab_beginn:
         a = _anfangsstand(f)               # die HA-Statistik beginnt im Zeitraum: Anfangsstand 0 wie HA
+    elif a is None and f is not None and f.mqtt_beginn and f.start_ts < bis:
+        a = f                              # R-D1: die MQTT-Quelle beginnt im Zeitraum — ihr erster Stand ist der Anfangsstand
 
     # Spannen über die beiden Ränder: die, in der `von` liegt, und die, in der das Ende (bis bzw. Soll-Ende) liegt.
     spannen: list[int] = []
@@ -531,7 +566,7 @@ WITH k(kid, art) AS (
     FROM k
 )
 SELECT r.kid, r.nach_ts, s.start_ts, {_wert_sql('s', 'r.art')}, s.familie, {_offset_sql('r.kid', 's.start_ts')},
-    CASE WHEN r.vor_ts IS NULL AND r.art = 'sum' AND s.start_ts IS NOT NULL THEN {_ha_beginn_sql('r.kid', 's.start_ts')} END
+    CASE WHEN r.vor_ts IS NULL AND r.art = 'sum' AND s.start_ts IS NOT NULL THEN {_quellbeginn_sql('r.kid', 's.start_ts')} END
 FROM r LEFT JOIN kanal_statistik s ON s.kanal_id = r.kid AND s.start_ts >= COALESCE(r.vor_ts, :von)
     AND s.start_ts < :bis AND {_wert_sql('s', 'r.art')} IS NOT NULL
 ORDER BY r.kid, s.start_ts
@@ -577,12 +612,15 @@ async def stunden_stapel(
     zeilen: dict[int, list] = {k.id: [] for k in kanaele}
     nach_ts: dict[int, Optional[int]] = {}
     beginn: dict[int, int] = {}
-    for kid, n_ts, ts, roh, familie, off, ha_beginn in res.all():
+    mqtt_beginn: dict[int, int] = {}
+    for kid, n_ts, ts, roh, familie, off, art_beginn in res.all():
         nach_ts[kid] = n_ts
         if ts is not None:
             zeilen[kid].append((int(ts), float(roh), familie, float(off or 0.0)))
-            if ha_beginn:
+            if art_beginn == BEGINN_HA:
                 beginn[kid] = int(ts)
+            elif art_beginn == BEGINN_MQTT:
+                mqtt_beginn[kid] = int(ts)
     out: dict[str, Stunden] = {}
     for k in kanaele:
         z = zeilen[k.id]
@@ -598,9 +636,10 @@ async def stunden_stapel(
         spannen = [w.spanne for w in werte if w.spanne is not None]
         if letzte is not None and nach_ts.get(k.id) is not None and letzte + _STUNDE < bis:
             spannen.append(nach_ts[k.id] - letzte)
+        ab_mqtt_beginn = vor is None and im and mqtt_beginn.get(k.id) == im[0][0]   # R-D1: erster MQTT-Stand im Bereich
         if vor is None and not im:
             grund = GRUND_KEINE_ZEILE
-        elif vor is None:
+        elif vor is None and not ab_mqtt_beginn:
             grund = GRUND_BEGINNT_NACH_VON
         elif not erreicht:
             grund = GRUND_ENDET_VOR_BIS

@@ -7,12 +7,15 @@ Es gibt eine Zeile je Gerät, nicht je Tag; sie nennt den Tag mit der größten 
 tragen Wirtschaftlichkeit und CO₂-Bilanz mit — eine Abweichung an der Wallbox kostet genauso wie eine an der PV. Geprüft werden
 die Tage der letzten 90 Tage bis gestern.
 
-**Benannte Grenze — der erste Tag einer Statistik:** am Tag, an dem die Statistik eines Sensors in Home Assistant beginnt, kann
-die Prüfung den Tag nennen, obwohl eedc und Home Assistant für ihn dieselbe Zahl zeigen. Dann ist nichts zu tun;
-«Aus Home Assistant neu übernehmen» ändert daran nichts. Der Grund: eedc zählt den Kalendertag ab der ersten Stunde wie Home
-Assistant, der Vergleichswert der Prüfung reicht für diesen Tag aber nur bis 23 Uhr (die Stunde 23–24 Uhr zählt er zum
-Folgetag). Läuft das Gerät in dieser letzten Stunde — etwa eine Wärmepumpe nachts — mit mindestens 2 kWh und 5 % des Tages,
-erscheint der Tag (gemessen: «12,5 → 10,0 kWh», Tagesansicht und Home Assistant 12,5).
+**Benannte Grenze — die Stunde 23–24 Uhr:** die Prüfung kann einen Tag nennen, obwohl eedc und Home Assistant für ihn
+dieselbe Zahl zeigen. Der Grund: eedc zeigt den Kalendertag wie Home Assistant; der Vergleichswert der Prüfung reicht aber von
+23 Uhr des Vortags bis 23 Uhr. Lief das Gerät in der Stunde 23–24 Uhr an zwei aufeinanderfolgenden Tagen deutlich verschieden
+— mindestens 2 kWh und 5 % des Tages, typisch eine Wärmepumpe oder Wallbox nachts —, weicht nur dieser Vergleichswert ab
+(gemessen: «67,5 → 60,0 kWh», Tagesansicht und Home Assistant 67,5). Ein Fall derselben Grenze ist der erste Tag einer
+Statistik: beginnt sie an diesem Tag, fehlt dem Vergleichswert die Stunde 23–24 Uhr (gemessen: «12,5 → 10,0 kWh»,
+Tagesansicht und Home Assistant 12,5). Erkennen: zeigen die Tagesansicht in eedc und Home Assistant für den genannten Tag
+dieselbe Zahl, ist die gezeigte Zahl die von Home Assistant und ungenau allein der Vergleichswert. Dann ist nichts zu tun;
+«Aus Home Assistant neu übernehmen» ändert daran nichts.
 
 ## Lösungsweg
 1. In Home Assistant prüfen, welcher Wert stimmt. Ist die Statistik dort falsch (etwa ein Zählersprung), sie unter
