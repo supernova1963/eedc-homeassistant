@@ -44,6 +44,7 @@ import asyncio
 import bisect
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import and_, select
@@ -266,12 +267,50 @@ async def konsistenz_anlage(sitzungen: Sitzungen, anlage_id: int, *, ha_svc=None
                                kanal.key, anlage_id, type(e).__name__, e)
     if erg.korrigiert:
         # HA-Bauform E4c: der abgeleitete Kanal rechnet aus dem Spiegel — ab der ersten korrigierten Stunde neu
-        # (nie vor seinem `aufbaubar_ab`); der nächste Stundenlauf schreibt ihn aus dem neuen Spiegel fort.
+        # (nie vor seinem `aufbaubar_ab`); der nächste Stundenlauf schreibt ihn aus dem neuen Spiegel fort. Die beiden
+        # Knöpfe der Oberfläche warten darauf nicht: sie rufen danach ``abgeleitete_nachziehen`` (N-814).
         from backend.services.kanal.abgeleitet import verwerfe_ab
 
         async with sitzungen() as db:
             await verwerfe_ab(db, anlage_id, min(int(k["ab_ts"]) for k in erg.korrigiert))
     return erg
+
+
+async def abgeleitete_nachziehen(sitzungen: Sitzungen, anlage_id: int, *, jetzt: Optional[datetime] = None) -> Optional[int]:
+    """Die abgeleiteten Kanäle nach einem Abgleich mit Korrektur sofort bis zur letzten abgeschlossenen Stunde neu
+    schreiben — dieselben drei Schreiber in derselben Reihenfolge wie der Stundenlauf (``schreiber.
+    schreibe_kanaele_im_stundenlauf``: PV-Anteil der Heimladung, Strom je Betriebsart, Kosten), jeder ab seiner letzten
+    Zeile bzw. ``aufbaubar_ab``. Gerufen von «HA-Spiegel jetzt abgleichen» und «Aus Home Assistant neu übernehmen»
+    (``api/routes/energie_profil/repair._kanal_abgleich_lauf``), NICHT vom Nachtjob (dort folgt der Stundenlauf).
+
+    **Warum (N-814, gemessen Funde C):** ``konsistenz_anlage`` verwirft die abgeleiteten Kanäle ab der ersten korrigierten
+    Stunde. Bis zum nächsten Stundenlauf deckten die Kanäle die E-Mobilität (Wallbox, E-Auto) ab dieser Stunde nicht —
+    die Gruppe fiel auf die Tageszeile zurück, die an Kanal-Tagen keine E-Mob-Werte trägt: nach dem Knopf zeigten die
+    Tage nach dem neu aufgebauten Tag «—», der Monat nur einen Teil (auch nach einer Korrektur an PV oder Netz, aus deren
+    Stunden der PV-Anteil rechnet). Returns: Zahl der geschriebenen Zeilen, ``None`` bei Fehler (vermerkt wie im
+    Stundenlauf; der nächste Stundenlauf schreibt dann wie bisher)."""
+    from backend.models.anlage import Anlage
+    from backend.models.investition import Investition
+    from backend.services.kanal.abgeleitet import schreibe_abgeleitete
+    from backend.services.kanal.kosten import schreibe_kosten
+    from backend.services.kanal.modus_strom import schreibe_modus_strom
+    from backend.services.kanal.schreiber import _fehler_vermerken
+
+    zeitpunkt = jetzt or datetime.now()
+    async with sitzungen() as db:
+        anlage = (await db.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one_or_none()
+        if anlage is None:
+            return 0
+        invs = list((await db.execute(select(Investition).where(Investition.anlage_id == anlage_id))).scalars().all())
+        try:
+            async with db.begin_nested():
+                n = await schreibe_abgeleitete(db, anlage, zeitpunkt, invs=invs)
+                n += await schreibe_modus_strom(db, anlage, zeitpunkt, invs=invs)
+                n += await schreibe_kosten(db, anlage, zeitpunkt)
+            return n
+        except Exception as e:  # noqa: BLE001 — der Abgleich selbst ist gelaufen; der Stundenlauf holt es nach
+            await _fehler_vermerken(db, anlage_id, "Abgleich", e)
+            return None
 
 
 async def spiegel_quellen_anzahl(db, anlage_id: int) -> int:

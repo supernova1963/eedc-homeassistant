@@ -148,6 +148,7 @@ async def test_b2_nach_summe_anpassen_in_ha_und_uebernahme_ist_der_befund_weg(db
     p = await plan(RepairOperationRequest(anlage_id=w.a.id, operation=RepairOperationType(befund_op(e)),
                                           params=befund_params(e)), w.db)
     r = await execute(p.plan_id, w.db)
+    await w.db.commit()          # wie ``get_db`` nach der Route (Funde C: ohne Commit nahm der Rollback des Checkers den Tag zurück)
     assert r.operation_summary.get("fehlgeschlagen", 0) == 0, r.operation_summary
     assert await _springt(w) == []
     s = await P.sichten(w, feld, [P.WELTBEGINN], (2026, 10))
@@ -156,9 +157,12 @@ async def test_b2_nach_summe_anpassen_in_ha_und_uebernahme_ist_der_befund_weg(db
     assert s["aus_ha_laden"] == ha_okt and ha_okt < 200.0
     if feld != "wb":
         assert (s["tage"][P.WELTBEGINN], s["monatssicht"]) == (ha_tag, ha_okt), s
-    # Wallbox: Tag und Monatssicht folgen der Übernahme NICHT (Tag 5 004,66, Monat 5 004,66 gegen HA 6,6/73,92) — dieselbe
-    # Lage wie bei einem Sprung mitten in der Reihe am HEAD (Bericht Funde B, offener Punkt «Übernahme an der Wallbox»);
-    # hier bewusst nicht festgeschrieben.
+    else:
+        # Fund-Päckchen C (N-814): seit die Knöpfe die abgeleiteten Kanäle sofort nachziehen, folgt auch die Wallbox — bis
+        # auf den Weltrand am 26.10. (die E-Mob-Gruppe liest den ersten Tag der Welt aus dem Bestand: − 1,32, benannte
+        # Grenze der Welt, ``test_sensorwechsel_wegb_loeschen_proben._pruefe_soll``). Am HEAD 9e0b2bd71 (mit Commit): Tag
+        # 5,28, Monat 5,28 (27./28.10. «—»); die frühere Zahl 5 004,66 am 26.10. kam aus dem fehlenden Commit dieser Probe.
+        assert (s["tage"][P.WELTBEGINN], s["monatssicht"]) == (P.r3(ha_tag - 1.32), P.r3(ha_okt - 1.32)), s
 
 
 # ── B3: «Strom gemessen 0 bei Wärme > 0» ──────────────────────────────────────────────────────────────────────────────

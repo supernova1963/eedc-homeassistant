@@ -14,6 +14,8 @@
   Wärmepumpen in die Zukunft (vorher 600 €/Jahr einer stillgelegten WP in ``wp_alternativ_ersparnis_euro``).
 
 Messtest vor/nach: ``~/.claude/plans/golden-master/funde-a-2026-11-22/test_mess_funde_a.py``.
+
+Schwesterdateien: test_funde_b.py, test_funde_c.py (die Päckchen B und C desselben Tags).
 """
 
 from __future__ import annotations

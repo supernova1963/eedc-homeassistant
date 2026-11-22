@@ -5716,8 +5716,13 @@ springt» (a)–(d) und der MQTT-Regeln (a)–(l) stehen bei ihren Abschnitten o
    «Zählerstand springt» die erste Stunde an jedem Feld, wenn ihr Wert über der Grenze (b) liegt (`test_funde_b.py`). An einem
    PV-Feld nennt zusätzlich `drift_tag` den Tag (der Vergleichswert lässt die Stunde über der Plausibilitätsgrenze aus,
    Tagesansicht und Home Assistant zählen sie — Bericht B1, Lage (a)). Nach «Summe anpassen» in Home Assistant und «Aus Home
-   Assistant neu übernehmen» folgen an PV und Wärmepumpe Tag und Monat; an einer Wallbox nur «Aus HA laden» — Tag und
-   Monatssicht der Wallbox behalten den alten Wert (gemessen, offen, Bericht Funde B).
+   Assistant neu übernehmen» folgen an jedem Feld Tag, Monat und «Aus HA laden» (an einer Wallbox der erste Tag ohne die erste
+   Stunde, Grenze 4). Seit Fund-Päckchen C (N-814) zieht der Knopf die abgeleiteten Kanäle sofort nach
+   (`kanal/konsistenz.abgeleitete_nachziehen`, gerufen von `repair._kanal_abgleich_lauf` für «Aus Home Assistant neu
+   übernehmen» und «HA-Spiegel jetzt abgleichen»): der Abgleich verwirft sie ab der ersten korrigierten Stunde
+   (`verwerfe_ab`), und bis zum nächsten Stundenlauf deckten die Kanäle die E-Mobilität dort nicht — Wallbox und E-Auto
+   zeigten an den Tagen danach «—» (gemessen am HEAD `9e0b2bd71`: Monat 36,96 statt 72,6), auch nach einer Korrektur an PV
+   oder Netz. Der Nachtjob (02:45) zieht nicht nach; dort folgt der Stundenlauf um 03:05 (`test_funde_c.py`).
 3. **Erster Wert eines neuen Zählers springt (N-791):** nur «Aus Home Assistant neu übernehmen» behebt die Drift nach der
    Berichtigung in HA, «Tag neu aggregieren» nicht (Probe N-791).
 4. **Abgeleiteter Kanal** (PV-Anteil der Heimladung) beginnt ohne Anfangsstand 0 — beginnt er am selben Tag wie die

@@ -636,6 +636,12 @@ async def _kanal_abgleich_lauf(db: AsyncSession, anlage_id: int) -> tuple[dict, 
             status_code=503,
             detail="Home Assistant ist nicht erreichbar — der Abgleich braucht die HA-Langzeitstatistik.",
         )
+    if erg.korrigiert:
+        # N-814: die verworfenen abgeleiteten Kanäle sofort nachziehen, nicht erst im nächsten Stundenlauf — sonst
+        # zeigt die E-Mobilität nach dem Knopf an den Tagen ab der Korrektur «—».
+        from backend.services.kanal.konsistenz import abgeleitete_nachziehen
+
+        await abgeleitete_nachziehen(get_session, anlage_id)
     return {
         "anlage_id": anlage_id, "hat_spiegel": True,
         "kanaele": erg.kanaele, "abschnitte": erg.abschnitte, "gleich": erg.gleich,

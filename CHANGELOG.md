@@ -185,6 +185,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   „database is locked“ ab: die Stunde ab 02:00 Uhr fehlte bis zum nächsten Lauf um 04:05 Uhr, und ein Sensorwechsel in
   dieser Stunde wurde eine Stunde später angesetzt. Das Aufräumen läuft jetzt um 03:18 Uhr, in einer Minute, in der kein
   anderer Job mit fester Uhrzeit startet.
+- **„Aus Home Assistant neu übernehmen“ und „HA-Spiegel jetzt abgleichen“: Wallbox und E-Auto zeigen danach sofort,
+  was Home Assistant führt.** Hattest du in Home Assistant eine Statistik berichtigt („Summe anpassen“) und danach einen
+  dieser Knöpfe gedrückt, zeigten Wallbox und E-Auto bis zum nächsten stündlichen Lauf an den Tagen ab der berichtigten
+  Stunde „—“ und im Monat nur einen Teil (gemessen: Monat 36,96 statt 72,6 kWh) — auch wenn die Berichtigung an der PV
+  oder am Netzzähler lag, denn aus deren Stunden rechnet eedc den PV-Anteil der Heimladung. eedc rechnet diesen Anteil
+  jetzt gleich nach dem Abgleich neu, Tag und Monat stimmen sofort.
 - **Daten-Checker: eine Statistik, die mit einem großen Stand beginnt, nennt „Zählerstand springt“.** Beginnt die
   Statistik eines Sensors in Home Assistant nicht bei 0, sondern mit einem großen Stand (etwa nach einem Import), zählen
   Home Assistant und eedc diesen Stand als Menge der ersten Stunde — im gemessenen Beispiel 5 004,66 kWh Ladung an einem
