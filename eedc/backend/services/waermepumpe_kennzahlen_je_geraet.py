@@ -63,6 +63,7 @@ from backend.core.berechnungen.waermepumpe_kennzahl import (
     Arbeitszahl,
     ArbeitszahlJeFunktion,
     GRUND_JE_ABGRENZUNG,
+    GRUND_ZEITRAUM,
     abgrenzungs_grund,
     arbeitszahl,
     arbeitszahl_je_funktion,
@@ -123,6 +124,9 @@ class GeraetMengen:
     #: Ein Zeitraum trägt Wärme ohne Strom, ein anderer trägt Strom (N-441).
     #: Nur ein Aufrufer, der über mehrere Zeiträume faltet, kann die Lage sehen.
     perioden_versetzt: bool = False
+    #: Fund-Päckchen A (A1): Wärme und Strom dieses Geräts decken an EINEM Tag verschiedene Zeiträume (Tagesränder aus
+    #: Zählerständen, ``waermepumpe_kennzahl.zeitraum_versetzt``) — die Zahl bleibt «—» mit ``GRUND_ZEITRAUM``.
+    zeitraum_versetzt: bool = False
     #: Die Anwender-Angabe am Gerät (``fremdstrom``/``fremdwaerme``).
     abgrenzung_stoerung: Optional[str] = None
     #: Gibt es die Warmwasser-Größe an diesem Gerät überhaupt? (**R1**, N-379)
@@ -248,7 +252,8 @@ def kennzahlen_aus_mengen(m: GeraetMengen) -> GeraetKennzahlen:
     keine Wärme, ist ``waerme_kwh`` bereits 0. Dieselbe Begründung wie im
     HA-Export-Sensor, der ebenfalls **eine** Investition faltet.
     """
-    _stoerung = GRUND_JE_ABGRENZUNG.get(m.abgrenzung_stoerung or "")
+    # A1: versetzte Zeiträume am Tag treffen jede Zahl des Geräts (wie die Anwender-Angabe, ``abgrenzung_je_funktion``).
+    _stoerung = GRUND_JE_ABGRENZUNG.get(m.abgrenzung_stoerung or "") or (GRUND_ZEITRAUM if m.zeitraum_versetzt else None)
     gesamt = arbeitszahl(
         # Gegenfall (§8a, Nachtrag): Strom gemessen 0, Wärme nicht erfasst ⇒ die Wärme geht als ``None`` in den Layer,
         # der nennt Stufe 5 „kein Wärmemengenzähler zugeordnet" statt Stufe 1.
@@ -264,6 +269,7 @@ def kennzahlen_aus_mengen(m: GeraetMengen) -> GeraetKennzahlen:
         # abgetragen hat.
         abgrenzung_verletzt=abgrenzungs_grund(
             abgrenzung_stoerung=m.abgrenzung_stoerung,
+            zeitraum_versetzt=m.zeitraum_versetzt,
             perioden_versetzt=m.perioden_versetzt,
         ),
     )
@@ -590,6 +596,7 @@ def mengen_aus_tageswerten(
     strom_warmwasser_gemessen: bool = False,
     heizung_gemessen: bool = False,
     warmwasser_gemessen: bool = False,
+    zeitraum_versetzt: bool = False,
 ) -> GeraetMengen:
     """Die Mengen **eines Tages** je Gerät — die zweite Herkunft (s. Modulkopf).
 
@@ -635,6 +642,7 @@ def mengen_aus_tageswerten(
         funktionsfremd_abzug_kwh=funktionsfremd_abzug_kwh,
         waerme_abgeleitet=False,
         perioden_versetzt=False,
+        zeitraum_versetzt=zeitraum_versetzt,
         abgrenzung_stoerung=abgrenzung_stoerung(wp),
         hat_warmwasser_groesse=groesse_gibt_es_am_geraet(
             "waermepumpe", "warmwasser_kwh", wp.parameter,

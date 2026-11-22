@@ -950,7 +950,9 @@ async def _wp_ersparnis_sensor(
         # summieren 0. Bis hierher stand nur „beide 0 ⇒ überspringen": ein Monat mit Strom ohne Wärme
         # ging mit `wp_kosten` in `alte − WP` ein und senkte den Sensor um seinen Strom (gemessen
         # 20 kWh × 30 ct: 19 statt 25 €).
-        if m_waerme <= 0:
+        # Fund-Päckchen A (A2, 22.11.2026): ein Monat mit Wärme ohne gemessenen Strom hat keine Gerätezeile
+        # (Entscheid H-2) und trägt hier ebenfalls nichts — wie die Jahresformel (`alternativkosten.py`).
+        if m_waerme <= 0 or m_strom <= 0:
             continue
         m_preis = wp_monatspreis[(md.jahr, md.monat)].wp_preis_cent
         amd = anlage_md_dict.get((md.jahr, md.monat))

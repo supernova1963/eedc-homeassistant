@@ -117,6 +117,7 @@ from backend.core.berechnungen.pv_verteilung import verluste_grund_zeitraum, wan
 from backend.core.berechnungen.speicher_wirkungsgrad import speicher_wirkungsgrad
 from backend.core.berechnungen.ust_eigenverbrauch import (
     UstJahresanteil,
+    UstKomponente,
     berechne_ust_eigenverbrauch,
 )
 
@@ -273,6 +274,7 @@ def ust_satz_euro_je_kwh(
     bemessungsgrundlage_euro: float,
     betriebskosten_jahr_euro: float,
     ust_satz_prozent: float,
+    komponenten: Optional[Sequence[UstKomponente]] = None,
 ) -> float:
     """USt je kWh Eigenverbrauch eines Kalenderjahres (€/kWh).
 
@@ -285,6 +287,7 @@ def ust_satz_euro_je_kwh(
         bemessungsgrundlage_euro=bemessungsgrundlage_euro,
         betriebskosten_jahr_euro=betriebskosten_jahr_euro,
         ust_satz_prozent=ust_satz_prozent,
+        komponenten=komponenten,
     )
 
 

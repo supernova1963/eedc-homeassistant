@@ -14,4 +14,4 @@ Verbrauch der Wärmepumpe und ihre Arbeitszahl in diesen Monaten.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die nachgetragenen Monate sind aus der Zeile verschwunden.
 
 ## Was ohne Handlung gilt
-Die Monate bleiben ohne Wärmepumpen-Strom; Verbrauch, Kosten und Arbeitszahl des Geräts rechnen für sie nicht.
+Die Monate bleiben ohne Wärmepumpen-Strom; Verbrauch, Kosten und Arbeitszahl des Geräts rechnen für sie nicht. Trägt ein solcher Monat Wärme, zählt er so lange auch keine Ersparnis gegenüber der alten Heizung (ohne Strom ist sie nicht bestimmbar).

@@ -1124,6 +1124,10 @@ class TagesDetail:
     #: frühestes ``bis``) — sie warnt damit eher zu viel als zu wenig (P4).
     abdeckung_von: Optional[datetime] = None
     abdeckung_bis: Optional[datetime] = None
+    #: Fund-Päckchen A (A1): je Gerät und gelesenem Feld der gemessene Zeitraum ``(von, bis)`` — ``None`` heißt
+    #: Tagesrand. Die Arbeitszahl des Tages fragt damit, ob Wärme und Strom eines Geräts denselben Zeitraum decken
+    #: (``waermepumpe_kennzahl.zeitraum_versetzt``); die Marke oben beantwortet nur den Block.
+    fenster_je_inv: dict[str, dict[str, tuple]] = dc_field(default_factory=dict)
 
 
 #: **(typ, mapping-feld) → semantischer Ausgabe-Key** — die Feldmenge, die
@@ -1234,6 +1238,7 @@ class _TagesDetailKontext:
     felder_je: dict = dc_field(default_factory=dict)
     abdeckung_von: Optional[datetime] = None
     abdeckung_bis: Optional[datetime] = None
+    fenster_je: dict = dc_field(default_factory=dict)
 
     async def diff(
         self, sensor_key: str, sensor_id: Optional[str], *, rng: BoundaryRange,
@@ -1318,8 +1323,12 @@ def _wallbox_deckt(ctx: _TagesDetailKontext, sensor_mapping: dict, investitionen
     )
 
 
-def _abdeckung(ctx: _TagesDetailKontext, menge: "TagesRandMenge") -> None:
-    """R-4: die weiteste Einschränkung über alle gelesenen Felder (RF-72: Teil von ``_geraet_oder_innengeraete``)."""
+def _abdeckung(ctx: _TagesDetailKontext, menge: "TagesRandMenge", inv_id_str: str, feld: str) -> None:
+    """R-4: die weiteste Einschränkung über alle gelesenen Felder (RF-72: Teil von ``_geraet_oder_innengeraete``); dazu
+    der Zeitraum dieses Felds (A1, ``TagesDetail.fenster_je_inv``)."""
+    ctx.fenster_je.setdefault(inv_id_str, {})[feld] = (
+        None if menge.ab_tagesbeginn else menge.seit, None if menge.bis_tagesende else menge.bis,
+    )
     if not menge.ab_tagesbeginn:
         ctx.abdeckung_von = (
             menge.seit if ctx.abdeckung_von is None
@@ -1377,7 +1386,7 @@ async def _geraet_oder_innengeraete(
             continue
         if sensor_key in kanal:
             werte_geraet[k] = kanal[sensor_key].delta
-            _abdeckung(ctx, _kanal_rand_menge(kanal[sensor_key]))      # die Marke folgt der Quelle des Werts (§9 Nr. 24)
+            _abdeckung(ctx, _kanal_rand_menge(kanal[sensor_key]), inv_id_str, k)  # die Marke folgt der Quelle (§9 Nr. 24)
             continue
         menge, grund = await ctx.diff(
             sensor_key, cfg.get("sensor_id") if isinstance(cfg, dict) else None,
@@ -1388,7 +1397,7 @@ async def _geraet_oder_innengeraete(
             continue
         werte_geraet[k] = menge.wert_kwh
         # R-4: die weiteste Einschränkung über alle gelesenen Felder.
-        _abdeckung(ctx, menge)
+        _abdeckung(ctx, menge, inv_id_str, k)
     # Die EINE Regel für Gerät vs. Innengeräte — dieselbe, mit der der
     # Monat und der Nenner (Zweig 1, `modus_strom_zeile`) auflösen.
     return geraetefeld_oder_innengeraete(werte_geraet, feld), werte_geraet
@@ -1487,6 +1496,7 @@ async def get_tagesdetail_kwh(
         felder_je_inv=ctx.felder_je,
         abdeckung_von=ctx.abdeckung_von,
         abdeckung_bis=ctx.abdeckung_bis,
+        fenster_je_inv=ctx.fenster_je,
     )
 
 

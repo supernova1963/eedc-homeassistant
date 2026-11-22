@@ -24,6 +24,7 @@ importieren darf (Layer-Regel). Er wird im Caller resolved.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Iterable, Optional
 
 from backend.core.berechnungen.betriebsart_gemessen import modus_strom_zeile
@@ -249,7 +250,10 @@ def berechne_wp_alternativkosten_ersparnis(
             # Zusatzkosten. Bis hierher zählte er es (gemessen 55,19 € bei 662,28 €/Jahr gegen 0 € der Zeile).
             # Damit gilt für jeden Monat ohne Wärme dieselbe Regel wie im Export-Sensor je Gerät
             # (`ha_export/investition_sensoren.py::_wp_ersparnis_sensor`: `m_waerme <= 0` ⇒ übersprungen).
-            if thermisch <= 0:
+            # Fund-Päckchen A (A2, 22.11.2026): ein Monat mit Wärme, aber ohne gemessenen Strom (0 oder nicht erfasst)
+            # trägt ebenfalls nichts — ohne Strom ist die Ersparnis nicht bestimmbar, die Gerätezeile hat keine Zeile
+            # (Entscheid H-2). Bis hierher zählte er Gas-Ersparnis und Zwölftel (gemessen 109,10 € bei 400 kWh Wärme).
+            if thermisch <= 0 or strom <= 0:
                 continue
             # B5/X-5 (05.09.2026, Entscheid E-B 18.08.): Kühlen ersetzt keine
             # Heizung — sein Strom gehört nicht in den Vergleich. Der Monats-
@@ -278,3 +282,24 @@ def berechne_wp_alternativkosten_ersparnis(
         # `(inv_id, jahr, monat)` steht ein Monat genau einmal).
         ersparnis += wp_agg["zusatzkosten_jahr"] * monate_wp / 12
     return ersparnis
+
+
+def wp_zusatzkosten_jahr_heute(waermepumpen: Iterable, heute: date) -> float:
+    """Σ der fixen Zusatzkosten der Altheizung je Jahr über die Wärmepumpen, die **heute** in Betrieb sind — der Eingang
+    der Aussichten-Prognose (``aussichten/finanz_prognose.py``, ``gas_kosten_jahr``).
+
+    Regel wie N-228 an den Betriebskosten: in die Zukunft trägt nur, was im Monat von ``heute`` aktiv ist
+    (``ist_aktiv_im_monat``); eine stillgelegte Wärmepumpe ersetzt keine Heizung mehr. Eine Wärmepumpe, die nichts ersetzt
+    hat (N-88/F2b), trägt nichts.
+
+    ⛔ **Fund-Päckchen A (A4, 22.11.2026):** bis hierher summierte die Route die Zusatzkosten ALLER Wärmepumpen mit
+    Ersatz, auch stillgelegter — gemessen (A bis 30.06.2025 stillgelegt, B ab 07/2025, je 600 €/Jahr): 1 200 € statt 600 €
+    je Prognosejahr in ``wp_alternativ_ersparnis_euro`` und ``jahres_netto_ertrag_euro``.
+    """
+    return sum(
+        (_wp_aggregate(wp.parameter)["zusatzkosten_jahr"]
+         for wp in waermepumpen
+         if not ersetzt_keine_heizung((wp.parameter or {}).get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]))
+         and wp.ist_aktiv_im_monat(heute.year, heute.month)),
+        0,
+    )

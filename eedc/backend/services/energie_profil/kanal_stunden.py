@@ -814,6 +814,9 @@ class TagesEingaenge:
     #: Die WP-Gruppe des Tages kommt aus den Kanälen (Stunden im Beginn-Raster).
     wp_aus_kanal: bool = False
     emob_aus_kanal: bool = False
+    #: Fund-Päckchen A (A1): an einem WP-Kanal-Tag die WP-Ausgabe-Schlüssel je Gerät mit der Nutzenergie nur aus den
+    #: Stunden, in denen Strom desselben Geräts gemessen ist (``mengen_im_stromfenster``) — Eingang der Arbeitszahl.
+    werte_der_arbeitszahl: Optional[dict] = None
 
     @property
     def wp_kwh_je_inv(self) -> dict[str, float]:
@@ -986,6 +989,10 @@ async def _wp_aus_kanaelen(db: AsyncSession, anlage, invs_by_id, datum: date, wp
     delta = _tages_delta(wp)
     e.tz_komp = {**(e.tz_komp or {}), **_wp_komponenten(wp, delta)}
     e.detail = detail_aus_kanaelen(e.detail, delta, invs_by_id, datum, frozenset({"waermepumpe"}), False)
+    from backend.core.berechnungen.waermepumpe_kennzahl import mengen_im_stromfenster
+
+    e.werte_der_arbeitszahl = kanal_werte_je_inv({**delta, **mengen_im_stromfenster(wp.mengen, wp.spannen)}, invs_by_id,
+                                                 datum, frozenset({"waermepumpe"}), False)[0]
     e.gemessen_je_inv = _gemessen_aus_delta(delta)
     # Der Modus-Split des Tages aus den abgeleiteten Kanälen «Strom je Betriebsart» (alle erfassten Betriebsarten, Σ der
     # Stunden) und ihrer Abdeckung ``modus_abdeckung_h`` — wie der Kanal-Monat (``kanal_split_ohne_abschluss``); Bezug

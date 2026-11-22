@@ -30,6 +30,8 @@ sieben Betriebsmonaten zwölf Monate Abschreibung gegen sieben Monate Ertrag und
 die Selbstkosten je kWh steigen künstlich. Dieselbe Gewichtung gilt für die
 Betriebskosten des Zeitraums in Übersicht, Aussichten und Jahresbericht — dort je
 Komponente über ihre aktiven Monate (`core/berechnungen/betriebskosten.py`, N-228/N-699).
+Seit Fund-Päckchen A (A3/K-1, 22.11.2026) gilt das auch hier je Komponente: ``anteilige_jahreskosten`` gewichtet AfA und
+Betriebskosten jeder Komponente mit IHREN aktiven Monaten des Jahresanteils (``UstKomponente``).
 
 **Welche Menge als „Eigenverbrauch" eingeht, entscheidet nicht diese Funktion**, sondern der eine Eingang
 `services/ust_satz.py` (G1, N-601): über einen Zeitraum die Σ der Monats-Eigenverbräuche der Monats-Fakten ohne
@@ -41,7 +43,7 @@ Menge (ROI, Aussichten-Prognose) übergibt der Aufrufer sie an `ust_satz.ust_hoc
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Sequence
+from typing import Iterable, Optional, Sequence
 
 from backend.core.berechnungen.investitionskosten import (
     relevante_kosten_aus_investitionen,
@@ -67,6 +69,38 @@ class UstJahresanteil:
 AFA_JAHRE = 20
 
 
+@dataclass(frozen=True)
+class UstKomponente:
+    """Die Kosten EINER Komponente in einem Jahresanteil (Fund-Päckchen A, A3/K-1).
+
+    ``monate`` ist die Zahl der Monate des Jahresanteils, in denen die Komponente aktiv war — ihre AfA und ihre
+    Betriebskosten zählen nur über diese Monate (dieselbe Regel wie die Betriebskosten des Zeitraums, N-228).
+    """
+
+    bemessungsgrundlage_euro: float
+    betriebskosten_jahr_euro: float
+    monate: int
+
+
+def anteilige_jahreskosten(komponenten: Sequence[UstKomponente], monate_anteil: int) -> float:
+    """``Σ (AfA_jahr + Betriebskosten_jahr) × aktive Monate / 12`` über die Komponenten eines Jahresanteils.
+
+    Gruppiert nach der Monatszahl: tragen alle Komponenten alle Monate des Anteils, ist das bitgleich die bisherige
+    Rechnung ``(Σ Bemessung / AFA_JAHRE + Σ Betriebskosten) × monate / 12``.
+
+    ⛔ **Fund-Päckchen A (A3/K-1, 22.11.2026):** bis hierher trug jede im Jahr aktive Komponente ihre Kosten über die
+    Monate der ANLAGE — ein ab Juli betriebener Speicher (6 000 € + 120 €/Jahr) neben einer ganzjährigen PV (20 000 €)
+    ergab 80,94 € USt statt 68,97 € (3 000 kWh Eigenverbrauch, 10 000 kWh PV, 19 %).
+    """
+    gruppen: dict[int, list[float]] = {}
+    for k in komponenten:
+        m = min(k.monate, monate_anteil, 12)
+        g = gruppen.setdefault(m, [0.0, 0.0])
+        g[0] += k.bemessungsgrundlage_euro
+        g[1] += k.betriebskosten_jahr_euro
+    return sum((b / AFA_JAHRE + bk) * m / 12 for m, (b, bk) in gruppen.items() if m > 0)
+
+
 def bemessungsgrundlage_aus_investitionen(investitionen: Iterable) -> float:
     """Kanonische USt-Bemessungsgrundlage: Σ max(0, gesamt − alternativ).
 
@@ -86,6 +120,7 @@ def berechne_ust_eigenverbrauch(
     bemessungsgrundlage_euro: float,
     betriebskosten_jahr_euro: float,
     ust_satz_prozent: float = 19.0,
+    komponenten: Optional[Sequence[UstKomponente]] = None,
 ) -> float:
     """USt auf den Eigenverbrauch über einen beliebig langen Zeitraum.
 
@@ -93,6 +128,10 @@ def berechne_ust_eigenverbrauch(
 
         selbstkosten_kwh = (AfA_jahr + Betriebskosten_jahr) × monate/12 ÷ PV_jahr
         ust_jahr         = Eigenverbrauch_jahr × selbstkosten_kwh × Satz/100
+
+    Mit ``komponenten`` (genau ein Jahresanteil) zählen AfA und Betriebskosten je Komponente über ihre aktiven Monate
+    (``anteilige_jahreskosten``, A3/K-1); ``bemessungsgrundlage_euro``/``betriebskosten_jahr_euro`` sind dann nur noch
+    die Summen für die Anzeige.
 
     Ein Jahr ohne PV-Erzeugung oder ohne Eigenverbrauch trägt 0 bei — nicht
     ``None`` und keinen Fehler: die Sichten liefern auch Monate, in denen noch
@@ -113,7 +152,10 @@ def berechne_ust_eigenverbrauch(
     for anteil in jahresanteile:
         if anteil.pv_kwh <= 0 or anteil.eigenverbrauch_kwh <= 0:
             continue
-        anteilige_kosten = jahreskosten * min(anteil.monate, 12) / 12
+        anteilige_kosten = (
+            jahreskosten * min(anteil.monate, 12) / 12 if komponenten is None
+            else anteilige_jahreskosten(komponenten, anteil.monate)
+        )
         selbstkosten_pro_kwh = anteilige_kosten / anteil.pv_kwh
         summe += anteil.eigenverbrauch_kwh * selbstkosten_pro_kwh * ust_satz_prozent / 100
     return summe

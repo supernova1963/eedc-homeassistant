@@ -147,6 +147,32 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   kleiner werden und die Amortisation später kommen. Anschaffungs- und Stilllegungsmonat zählen weiter als volles
   Zwölftel; weichen deine Kosten dort ab, trägst du die Abweichung als Ausgabe an der Wärmepumpe ein (Handbuch Wärme &
   Klima, #447).
+- **Wärmepumpe: die Arbeitszahl eines Tages rechnet mit Wärme und Strom aus demselben Zeitraum.** Beginnt der Stromzähler
+  einer Wärmepumpe an einem Tag später als ihr Wärmezähler (etwa nach „Daten vor der Änderung löschen“ am Stromfeld oder am
+  Tag, an dem du ihn zuordnest), teilte *Cockpit → Tag* die Wärme des ganzen Tages durch den Strom ab dem ersten Zählerstand —
+  im gemessenen Beispiel 9,0 statt 6,0 (57,6 ÷ 6,4 kWh, Strom ab 08:00 Uhr). Jetzt zählt die Wärme nur in den Stunden, in
+  denen auch Strom gemessen ist (38,4 ÷ 6,4 = 6,0); die Kachel „Wärme“ zeigt weiter die Wärme des ganzen Tages, die Zeile
+  des Geräts unter „Zahlen je Gerät“ die Wärme, mit der die Arbeitszahl rechnet. Hat der Tag keine Stundenwerte, steht „—“
+  mit „Zähler messen verschiedene Zeiträume“ (vorher etwa 4,5 statt keiner Zahl). Monat und Jahr bleiben in dieser Lage wie
+  bisher — Handbuch Wärme & Klima nennt die Grenze.
+- **Wärmepumpe: ein Monat mit Wärme, aber ohne gemessenen Strom zählt keine Ersparnis.** Die bisherige Ersparnis in
+  *Aussichten → Finanzen* und *Auswertungen → ROI*, die Jahres-Ersparnis des HA-Exports und der Sensor „Ersparnis“ je
+  Wärmepumpe zählten für einen solchen Monat die Gas-Ersparnis und ein Zwölftel der Zusatzkosten der Alt-Heizung
+  (im Beispiel 109,10 € bei 400 kWh Wärme), die Gerätezeile unter *Komponenten → Wärmepumpe* und im Cockpit nicht. Ohne
+  Strom ist die Ersparnis nicht bestimmbar — jetzt zählt der Monat in keiner Sicht (0 €); der Sensor entsteht erst, wenn
+  ein Monat Wärme und Strom trägt. Der Daten-Checker nennt fehlenden Wärmepumpen-Strom unter „Stromverbrauch fehlt in …
+  Monat(en)“.
+- **USt auf den Eigenverbrauch (Regelbesteuerung): Anschaffung und Betriebskosten einer Komponente zählen nur über ihre
+  Monate.** Kam eine Komponente im Lauf des Jahres dazu oder wurde stillgelegt, zählten ihre Abschreibung und ihre
+  Betriebskosten über alle Monate der Anlage — im gemessenen Beispiel (PV ganzjährig, Speicher ab Juli) 80,94 € statt
+  68,97 € USt. Jetzt zählt jede Komponente nur über die Monate, in denen sie lief, wie schon die Betriebskosten des
+  Zeitraums. Netto-Ertrag, USt-Anteil des Monats und Jahresbericht können dadurch im Anschaffungs- oder Stilllegungsjahr
+  einer Komponente etwas höher ausfallen. Die Hochrechnung auf zwölf Monate (ROI, Aussichten-Prognose) bleibt, wie sie ist.
+- **Aussichten → Finanzen: eine stillgelegte Wärmepumpe trägt keine Zusatzkosten der Alt-Heizung mehr in die Zukunft.**
+  Die Prognose zählte die *Zusatzkosten Alt-Heizung (€/Jahr)* jeder Wärmepumpe je Prognosejahr als Ersparnis, auch einer
+  stillgelegten — im Beispiel (alte Wärmepumpe bis Juni 2025, neue ab Juli, je 600 €/Jahr) 1 507,85 € statt 907,85 €
+  WP-Ersparnis je Jahr; der Jahres-Netto-Ertrag lag um 600 € zu hoch, die Amortisation zu früh. Jetzt zählen nur die
+  Wärmepumpen, die heute in Betrieb sind — wie schon die Betriebskosten.
 
 ## [4.3.1] - 2026-11-15
 

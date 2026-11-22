@@ -2216,7 +2216,7 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 > ⭐ **Warum Teilsummen und keine Sperre.** Die *Arbeitszahl* wird bei gemischten Bauarten gesperrt, weil ein Quotient über zwei Maßstäbe keine Aussage hat. Eine *CO₂-Menge* dagegen ist additiv — für sie genügt die Teilsumme. **Kennzahlen trennen wir je Bauart, Mengen summieren wir.**
 
 
-> **Alternativ-Zusatzkosten (#141):** `alternativ_zusatzkosten_jahr` (€/Jahr) deckt laufende Fixkosten der Vergleichsheizung (Schornsteinfeger, Wartung, Gaszähler-Grundpreis) ab. Berücksichtigt in Aussichten (historisch und Prognose), im HA-Sensor-Export inkl. WP-Sensor, im PDF-Jahresbericht, in der Investitions-Vorschau und im Monats-Layer (`berechne_wp_ersparnis`: Komponenten-Hub, Cockpit → Monat/Jahr, Vorjahresvergleich, Komponenten-Zeitreihe) — überall dieselbe Ersparnis. In historischen Aggregaten anteilig `alternativ_zusatzkosten_jahr / 12` **je Wärmepumpe über ihre eigenen Monate mit Wärme** — die Summe über mehrere Geräte ist die Summe der Gerätezeilen (N-806; bis 21.11.2026 rechnete die Jahresformel in Aussichten die Zusatzkosten aller Geräte über die Vereinigung ihrer Monate). Ein Monat ohne Wärme (Strom und Wärme 0, nicht erfasst oder Standby nach N-670) trägt kein Zwölftel. **Anschaffungs- und Stilllegungsmonat zählen als volles Zwölftel** (keine Rechnung nach Tagen); eine tatsächliche Abweichung trägt der Anwender als Ausgabe an der Wärmepumpe ein (*Einstellungen → Daten → Monatsdaten*, *+ Sonstige Erträge & Ausgaben erfassen*, Typ *Ausgabe*; #447).
+> **Alternativ-Zusatzkosten (#141):** `alternativ_zusatzkosten_jahr` (€/Jahr) deckt laufende Fixkosten der Vergleichsheizung (Schornsteinfeger, Wartung, Gaszähler-Grundpreis) ab. Berücksichtigt in Aussichten (historisch und Prognose), im HA-Sensor-Export inkl. WP-Sensor, im PDF-Jahresbericht, in der Investitions-Vorschau und im Monats-Layer (`berechne_wp_ersparnis`: Komponenten-Hub, Cockpit → Monat/Jahr, Vorjahresvergleich, Komponenten-Zeitreihe) — überall dieselbe Ersparnis. In historischen Aggregaten anteilig `alternativ_zusatzkosten_jahr / 12` **je Wärmepumpe über ihre eigenen Monate mit Wärme** — die Summe über mehrere Geräte ist die Summe der Gerätezeilen (N-806; bis 21.11.2026 rechnete die Jahresformel in Aussichten die Zusatzkosten aller Geräte über die Vereinigung ihrer Monate). Ein Monat ohne Wärme (Strom und Wärme 0, nicht erfasst oder Standby nach N-670) trägt kein Zwölftel, ebenso ein Monat mit Wärme, aber ohne gemessenen Strom (0 oder nicht erfasst; Fund-Päckchen A, 22.11.2026 — die Gerätezeile hat dort keine Zeile). **In der Prognose** (Aussichten, Jahres-Netto-Ertrag) zählen die Zusatzkosten nur der Wärmepumpen, die **heute** aktiv sind (`alternativkosten.wp_zusatzkosten_jahr_heute`, Regel N-228; bis 22.11.2026 auch stillgelegte: 1 507,85 statt 907,85 € im Beispiel A bis 06/2025, B ab 07/2025, je 600 €/Jahr). **Anschaffungs- und Stilllegungsmonat zählen als volles Zwölftel** (keine Rechnung nach Tagen); eine tatsächliche Abweichung trägt der Anwender als Ausgabe an der Wärmepumpe ein (*Einstellungen → Daten → Monatsdaten*, *+ Sonstige Erträge & Ausgaben erfassen*, Typ *Ausgabe*; #447).
 
 #### Eingabefelder
 
@@ -3078,7 +3078,9 @@ Bemessungsgrundlage  = Σ max(0, anschaffungskosten_gesamt − anschaffungskoste
 Abschreibung_Jahr    = Bemessungsgrundlage / 20        (20 Jahre lineare AfA)
 
 je Kalenderjahr j:
-  Jahreskosten_j     = (Abschreibung_Jahr + Betriebskosten_Jahr) × Monate_j / 12
+  Jahreskosten_j     = Σ je Investition i (Mehrkosten_i / 20 + Betriebskosten_i) × Monate_i,j / 12
+                       (Monate_i,j = Monate_j, in denen i aktiv war; alle Investitionen ganzjährig ⇒
+                        (Abschreibung_Jahr + Betriebskosten_Jahr) × Monate_j / 12)
   Selbstkosten_kWh_j = Jahreskosten_j / PV_Erzeugung_j
   USt_j              = Eigenverbrauch_j × Selbstkosten_kWh_j × USt_Satz / 100
 
@@ -3090,6 +3092,7 @@ USt_Eigenverbrauch   = Σ USt_j
 | `Bemessungsgrundlage` | **Mehrkosten** je Investition, geklemmt bei 0 — nicht die Vollkosten (N-129). Der volle Kaufpreis eines E-Autos gehört nicht in die Selbstkosten des PV-Stroms; maßgeblich ist, was er gegenüber der Alternative gekostet hat. Es zählen die im Jahr `j` aktiven Investitionen (`ist_aktiv_im_zeitraum`, N-601) |
 | `Betriebskosten_Jahr` | Σ(Investition.betriebskosten_jahr) derselben im Jahr `j` aktiven Investitionen (N-601) |
 | `Monate_j` | Monate des Jahres `j` im ausgewerteten Zeitraum, die eine Zählerzeile mit erfassten Netzfeldern (N-736) und einen aktiven Erzeuger tragen (1–12). Ein angeschnittenes Jahr trägt anteilig AfA — sonst stünden zwölf Monate Abschreibung gegen sieben Monate Ertrag |
+| `Monate_i,j` | Die Monate unter `Monate_j`, in denen Investition `i` aktiv war (`ist_aktiv_im_zeitraum` des Kalendermonats; Anschaffungs- und Stilllegungsmonat zählen ganz). Code: `ust_satz.kosten_je_komponente` → `ust_eigenverbrauch.anteilige_jahreskosten`. **Fund-Päckchen A (A3, 22.11.2026):** bis dahin trug jede im Jahr aktive Investition ihre Kosten über alle `Monate_j` — PV 20 000 € ganzjährig, Speicher 6 000 € + 120 €/Jahr ab Juli, EV 3 000 / PV 10 000 kWh: 80,94 € statt 68,97 €. Die Hochrechnung auf zwölf Monate (`ust_hochrechnung`: ROI, Aussichten-Prognose) zählt weiter jede im Jahr aktive Investition ganz |
 | `PV_Erzeugung_j` | PV-Erzeugung derselben Monate aus den Monats-Fakten |
 | `Eigenverbrauch_j` | Σ der Monats-Eigenverbräuche derselben Monate, ohne bewertbare Wandlungsverluste (N-588) |
 | `USt_Satz` | `Anlage.ust_satz_prozent` (DE: 19, AT: 20, CH: 8.1) |
@@ -4224,6 +4227,9 @@ Je Wärmepumpe, die eine Heizung ersetzt (N-88: Energieträger „keiner" bringt
     Strom         = WP-Strom − Kühlstrom (modus_strom_zeile, gemessen vor abgeleitet)   # Kühlen ersetzt keine Heizung
     Wärme ≤ 0             ⇒  der Monat zählt nicht — weder Stromkosten noch Zwölftel (N-670: Standby;
                              N-806: Strom und Wärme 0 bzw. nicht erfasst, wie die Gerätezeile 0 €)
+    Strom ≤ 0 (vor dem Kühl-Abzug) ⇒  der Monat zählt nicht — Wärme ohne gemessenen Strom: keine Gerätezeile (H-2),
+                             keine Ersparnis, kein Zwölftel (Fund-Päckchen A; bis 22.11.2026 Gas-Ersparnis + Zwölftel,
+                             109,10 € bei 400 kWh); ebenso der Export-Sensor je Gerät (`investition_sensoren.py`)
     Gas_Preis     = Monatsdaten.gaspreis_cent_kwh                  # Monatswert, wenn gepflegt (#141)
                   ∨ Investition.parameter.alter_preis_cent_kwh     # sonst der Wert an der WP
                   ∨ 12 ct                                          # sonst die Vorgabe (PARAM_WAERMEPUMPE_DEFAULTS = GASPREIS_DEFAULT_CENT)
@@ -4568,6 +4574,27 @@ netto 0,5 kWh); greift die Kappung, nennt der Formel-Tooltip der Zeile „Wirkun
 
 Monats-, Jahres- und Auswertungssichten sind **nicht** betroffen — sie rechnen aus den Monatsdaten
 bzw. den Monats-Fakten und kennen kein Tagesfenster.
+
+> **Die Arbeitszahl des Tages: Wärme und Strom aus demselben Zeitraum (Fund-Päckchen A, A1, 22.11.2026).** Dieselbe Regel
+> gilt innerhalb des Kalendertags: beginnt der Stromzähler einer Wärmepumpe später (oder endet früher) als ihr
+> Wärmezähler — nach «Daten vor der Änderung löschen» am Stromfeld, am Tag einer Erst-Zuordnung —, stand bis dahin die
+> Wärme des ganzen Tages über dem Strom ab dem ersten Stand (gemessen 57,6 ÷ 6,4 = 9,0 mit «gemessen ab 08:00 Uhr»).
+>
+> * **WP-Kanal-Tag:** die Nutzenergie (Heizwärme, Warmwasser, Wärme gesamt, Betriebsart-Nutzenergie, Kälte) zählt für jede
+>   Arbeitszahl nur in den Stunden, in denen Strom **desselben Geräts** gemessen ist (`waermepumpe_kennzahl.mengen_im_stromfenster`,
+>   Eingang `kanal_stunden.TagesEingaenge.werte_der_arbeitszahl`, Phase `tag._waerme_der_arbeitszahl`) — gemessen 38,4 ÷ 6,4 = 6,0,
+>   dieselbe Zahl wie die vollen Tage desselben Sensors. Eine Wärme-Stunde, deren Spanne über das Strom-Fenster hinausreicht,
+>   zählt nicht (nichts wird verteilt); eine Strom-Stunde mit längerer Spanne deckt die Stunden, die sie mitträgt.
+> * **Sonst** (Tagesränder aus Zählerständen, `TagesDetail.fenster_je_inv`): liegt Wärme eines Geräts außerhalb seines
+>   Strom-Zeitraums (`waermepumpe_kennzahl.zeitraum_versetzt`), bleibt die Zahl «—» mit «Zähler messen verschiedene
+>   Zeiträume» — anlagenweit, je Gerät und je Funktion (gemessen vorher 4,5 = 57,6 ÷ 12,8).
+>
+> Die Kacheln «Wärme», «Heizung», «Warmwasser» zeigen weiter die gemessenen Mengen des Tages; Zähler der Herleitung und
+> die Zeile «Zahlen je Gerät» zeigen die Nutzenergie, mit der gerechnet wird. Geprüft wird nur die Richtung «Wärme ohne
+> Strom» (sie hebt die Zahl); Strom ohne Wärme senkt sie und bleibt die Lage der unteren Schranke (§3.5b-E1b).
+> **Benannte Grenze:** Monat und Jahr kennen kein Stundenfenster — im laufenden Monat derselben Lage stand gemessen
+> 31,3 (237,6 ÷ 7,6: Wärme des ganzen Monats, Strom ab dem 04.11. 08:00), und ein so abgeschlossener Monat trägt die Zahl ins
+> Jahr. Proben: `test_funde_a_anzeige.py`.
 
 > **Eine Ausnahme: die Speicher-Netzladung im Tageswert-Rückfall der Monats-Fakten (Entscheid Gernot).**
 > Ein Monat **ohne Speicher-Zeile** (laufend oder vergangen ohne Abschluss), dessen Tage Speicherwerte tragen, bekommt

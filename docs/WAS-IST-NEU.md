@@ -35,6 +35,14 @@
 
 **Wärmepumpe: Zusatzkosten der Alt-Heizung je Gerät.** Die bisherige Ersparnis deiner Wärmepumpen, aus der *Auswertungen → ROI* den Amortisations-Fortschritt rechnet, zählte die *Zusatzkosten Alt-Heizung (€/Jahr)* aller Wärmepumpen über alle Monate, in denen irgendeine von ihnen lief – zwei Wärmepumpen nacheinander (die alte bis Juni, die neue ab Juli, je 600 €/Jahr) trugen 600 € zu viel; auch ein Monat ganz ohne Strom und Wärme zählte ein Zwölftel. Jetzt zählt jede Wärmepumpe ihr Zwölftel nur in ihren eigenen Monaten mit Wärme, wie unter *Komponenten → Wärmepumpe* und im Cockpit. Bei mehreren Wärmepumpen oder Monaten ohne Betrieb kann die Ersparnis kleiner werden und die Amortisation später kommen. Anschaffungs- und Stilllegungsmonat zählen weiter als volles Zwölftel; eine Abweichung trägst du als Ausgabe an der Wärmepumpe ein. → [Wärme & Klima: Voraussetzungen](HANDBUCH_WAERME_KLIMA.md#2-voraussetzungen--welcher-zähler-für-welche-anzeige)
 
+**Wärmepumpe: Arbeitszahl eines Tages aus einem Zeitraum.** Beginnt der Stromzähler deiner Wärmepumpe an einem Tag später als ihr Wärmezähler (etwa nach „Daten vor der Änderung löschen“ am Stromfeld), rechnet *Cockpit → Tag* jetzt nur mit der Wärme der Stunden, in denen auch Strom gemessen ist – im Beispiel 6,0 statt 9,0. Ohne Stundenwerte steht „—“ mit „Zähler messen verschiedene Zeiträume“. Monat und Jahr bleiben in dieser Lage wie bisher (Handbuch Wärme & Klima).
+
+**Wärmepumpe: Wärme ohne Strom zählt keine Ersparnis.** Ein Monat mit Wärme, aber ohne gemessenen Strom zählt in *Aussichten → Finanzen*, *Auswertungen → ROI* und im HA-Export keine Ersparnis mehr (bisher Gas-Ersparnis und ein Zwölftel der Zusatzkosten, im Beispiel 109,10 €) – wie schon unter *Komponenten → Wärmepumpe*.
+
+**USt auf den Eigenverbrauch: je Komponente über ihre Monate.** Bei Regelbesteuerung zählen Abschreibung und Betriebskosten einer Komponente, die im Lauf des Jahres dazukam oder stillgelegt wurde, nur noch über ihre Monate (im Beispiel 68,97 € statt 80,94 €).
+
+**Aussichten → Finanzen: stillgelegte Wärmepumpe ohne Zusatzkosten in der Prognose.** Die Zusatzkosten der Alt-Heizung zählen in der Prognose nur noch für Wärmepumpen, die heute in Betrieb sind (im Beispiel 907,85 € statt 1 507,85 € WP-Ersparnis je Jahr).
+
 **Texte.** Die Reparatur-Werkbank sagt „der laufende Tag ist noch nicht abgeschlossen“; der Lösungsweg „Zählerstand ist gefallen“ sagt genau, wann eedc keine Differenz zeigt; das Handbuch Wärme & Klima sagt, dass „Alternative“ die Heizung ist, die du stattdessen angeschafft hättest – nicht dein Altgerät.
 
 ---

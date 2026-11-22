@@ -139,8 +139,9 @@ async def test_w3_e_ust_summe_der_monate_ist_der_jahreswert_nach_der_einen_regel
     """(e) Σ Monat.ust_eigenverbrauch_euro == Jahreswert (G1) == Handrechnung nach Gernots Regel vom 05.06.2026.
 
     Handrechnung: Bemessung = PV 12 000 + BKW 600 + E-Auto max(0, 30 000 − 25 000) = 17 600 € (Wallbox ``aktiv=False``
-    zählt NICHT); Betriebskosten = PV 120 + E-Auto 600 (im Jahr aktiv) = 720 €; zwölf abgeschlossene Monate.
-    Satz = (17 600 / 20 + 720) / PV_Jahr × 19 %; EV_Jahr = Σ der Monats-EV (nicht die Perioden-EV — Januar klemmt).
+    zählt NICHT); Betriebskosten = PV 120 + E-Auto 600 (im Jahr aktiv) = 720 €; zwölf abgeschlossene Monate; seit A3/K-1
+    (22.11.2026) trägt das E-Auto (ab August) seine Kosten über 5 Monate.
+    Satz = ((12 600 / 20 + 120) + (5 000 / 20 + 600) × 5/12) / PV_Jahr × 19 %; EV_Jahr = Σ der Monats-EV (nicht die Perioden-EV — Januar klemmt).
     """
     anlage_id = await anlage_alle_achsen(db)
     monate = await _monate(db, anlage_id)
@@ -154,7 +155,9 @@ async def test_w3_e_ust_summe_der_monate_ist_der_jahreswert_nach_der_einen_regel
 
     pv_jahr = sum(f.erzeugung.pv_kwh for f in fakten)
     ev_jahr = sum(f.kennzahlen.eigenverbrauch_kwh for f in fakten)
-    hand = ev_jahr * ((17600.0 / AFA_JAHRE + 720.0) / pv_jahr) * 0.19
+    # Fund-Päckchen A (A3/K-1, 22.11.2026): Kosten je Komponente über IHRE aktiven Monate — das E-Auto (ab August) trägt
+    # seine Mehrkosten-AfA und Betriebskosten über 5 von 12 Monaten (vorher ganzjährig: 17 600 / 20 + 720).
+    hand = ev_jahr * (((12000.0 + 600.0) / AFA_JAHRE + 120.0 + (5000.0 / AFA_JAHRE + 600.0) * 5 / 12) / pv_jahr) * 0.19
     assert jahreswert == pytest.approx(hand, rel=1e-9)
     # Gegenprobe der Achse: MIT der inaktiven Wallbox (Lesart „alle Investitionen") käme ein anderer Betrag heraus.
     mit_wallbox = ev_jahr * (((17600.0 + 1000.0) / AFA_JAHRE + 720.0 + 600.0) / pv_jahr) * 0.19
@@ -279,4 +282,5 @@ async def test_w3_ha_herleitung_nennt_negative_sonstige_mit_minus(db):
     sensor = next(s for s in await calculate_anlage_sensors(db, anlage) if s.definition.key == "netto_ertrag_euro")
     assert "− 320,00 (Sonstige Positionen)" in sensor.berechnung, sensor.berechnung
     assert "+ 320,00" not in sensor.berechnung
-    assert "− 126," in sensor.berechnung and "(USt auf Eigenverbrauch)" in sensor.berechnung
+    # A3/K-1 (22.11.2026): das E-Auto (ab August) trägt seine Kosten über 5 Monate — vorher «− 126,…».
+    assert "− 87,31" in sensor.berechnung and "(USt auf Eigenverbrauch)" in sensor.berechnung

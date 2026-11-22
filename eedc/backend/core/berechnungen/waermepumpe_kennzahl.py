@@ -1952,3 +1952,106 @@ def grund_klasse(grund: Optional[str]) -> Optional[str]:
 def ist_ausstattungs_grund(grund: Optional[str]) -> bool:
     """Gehört dieser Grund in den Kasten *„Was noch möglich wäre"*?"""
     return grund_klasse(grund) == GRUND_KLASSE_AUSSTATTUNG
+
+
+# ── Ein Zeitfenster für Zähler und Nenner (Fund-Päckchen A, A1, 22.11.2026) ────────────────────────────────────────────
+#
+# ⛔ **Eine Arbeitszahl entsteht nur aus Wärme und Strom DESSELBEN Zeitfensters** (Fachentscheid Master 22.11.2026).
+# Gemessen nach «Daten vor der Änderung löschen» am Stromfeld einer Wärmepumpe: der erste Teil-Tag trug Wärme von 0 bis
+# 24 Uhr, Strom erst ab 08:00 — *Cockpit → Tag* zeigte 9,0 (57,6 ÷ 6,4) mit dem Satz «gemessen ab 08:00 Uhr». Die Lage
+# ist allgemein: jede Wärmepumpe, deren Stromzähler an einem Tag später beginnt (oder früher endet) als ihr Wärmezähler.
+#
+# * **Kanal-Tag** (beide Größen tragen Stundenwerte): die Wärme zählt nur in den Stunden, in denen Strom DESSELBEN Geräts
+#   gemessen ist (``mengen_im_stromfenster``). Nichts wird verteilt: eine Wärme-Stunde, deren Spanne über das
+#   Strom-Fenster hinausreicht, zählt nicht.
+# * **Sonst** (Tagesränder aus Zählerständen): liegt Wärme außerhalb des Strom-Zeitraums, ist der Zeitraum versetzt
+#   (``zeitraum_versetzt``) — die Zahl bleibt «—» mit ``GRUND_ZEITRAUM``.
+#
+# Nur diese Richtung (Wärme ohne Strom) wird geprüft: sie hebt die Zahl. Strom ohne Wärme senkt sie und ist die Lage
+# einer unteren Schranke (E1b).
+
+_STROM_FELDER_DER_ZAHL = frozenset({"stromverbrauch_kwh", "strom_heizen_kwh", "strom_warmwasser_kwh"})
+_NUTZENERGIE_FELDER_DER_ZAHL = frozenset({"heizenergie_kwh", "warmwasser_kwh", "waerme_kwh"})
+
+
+def _grundfeld(feld: str) -> str:
+    """Das Gerätefeld zu einer Innengerät-Kopie (``betriebsart_strom_kuehlen_kwh-3`` → ``…_kwh``)."""
+    return feld.split("-", 1)[0]
+
+
+def ist_strom_feld_der_zahl(feld: str) -> bool:
+    """Misst dieses Feld einer Wärmepumpe Strom, der im Nenner einer Arbeitszahl steht?"""
+    g = _grundfeld(feld)
+    return g in _STROM_FELDER_DER_ZAHL or g.startswith("betriebsart_strom_")
+
+
+def ist_nutzenergie_feld_der_zahl(feld: str) -> bool:
+    """Misst dieses Feld einer Wärmepumpe Nutzenergie (Wärme, Kälte), die im Zähler einer Arbeitszahl steht?"""
+    g = _grundfeld(feld)
+    return g in _NUTZENERGIE_FELDER_DER_ZAHL or g.startswith("betriebsart_nutzenergie_")
+
+
+def _geraet_und_feld(key: str) -> Optional[tuple[str, str]]:
+    teile = key.split(":", 2)
+    return (teile[1], teile[2]) if len(teile) == 3 and teile[0] == "inv" else None
+
+
+def _abgedeckt(i: int, spanne: Optional[int], slot_s: int) -> range:
+    """Die Slots, die der Zuwachs in Slot ``i`` misst (eine Spanne über eine Stunde trägt die fehlenden davor)."""
+    n = max(1, -(-int(spanne or slot_s) // slot_s))
+    return range(i - n + 1, i + 1)
+
+
+def mengen_im_stromfenster(
+    mengen: Mapping[str, Sequence[Optional[float]]],
+    spannen: Mapping[str, Sequence[Optional[int]]],
+    slot_s: int = 3600,
+) -> dict[str, float]:
+    """Je Nutzenergie-Kanal ``inv:<id>:<feld>`` die Σ seiner Stunden, die ganz im Strom-Fenster desselben Geräts liegen.
+
+    Das Strom-Fenster eines Geräts sind die Slots, in denen einer seiner Strom-Kanäle einen Zuwachs trägt (samt der
+    Stunden, die eine längere Spanne mitträgt). Ein Gerät ohne jede Strom-Stunde fehlt in der Antwort — für seine
+    Wärme gelten die Gründe ohne Strom. Deckt der Strom alle Wärme-Stunden, ist die Summe bitgleich das Tages-Δ.
+    """
+    fenster: dict[str, set[int]] = {}
+    for key, werte in mengen.items():
+        gf = _geraet_und_feld(key)
+        if gf is None or not ist_strom_feld_der_zahl(gf[1]):
+            continue
+        sp = spannen.get(key) or ()
+        for i, w in enumerate(werte):
+            if w is not None:
+                fenster.setdefault(gf[0], set()).update(_abgedeckt(i, sp[i] if i < len(sp) else None, slot_s))
+    out: dict[str, float] = {}
+    for key, werte in mengen.items():
+        gf = _geraet_und_feld(key)
+        if (gf is None or not ist_nutzenergie_feld_der_zahl(gf[1]) or gf[0] not in fenster
+                or all(w is None for w in werte)):
+            continue
+        sp = spannen.get(key) or ()
+        out[key] = sum(w for i, w in enumerate(werte) if w is not None
+                       and fenster[gf[0]].issuperset(_abgedeckt(i, sp[i] if i < len(sp) else None, slot_s)))
+    return out
+
+
+def zeitraum_versetzt(fenster_je_feld: Mapping[str, tuple]) -> bool:
+    """Liegt gemessene Wärme eines Geräts außerhalb des Zeitraums, über den sein Strom gemessen ist?
+
+    ``fenster_je_feld``: Feld → ``(von, bis)`` des gemessenen Zeitraums an EINEM Tag; ``None`` heißt Tagesrand (der
+    Zeitraum reicht bis 0 bzw. 24 Uhr). Ohne Strom- oder ohne Wärmefeld stellt sich die Frage nicht (``False``).
+    """
+    strom = [f for k, f in fenster_je_feld.items() if ist_strom_feld_der_zahl(k)]
+    waerme = [f for k, f in fenster_je_feld.items() if ist_nutzenergie_feld_der_zahl(k)]
+    if not strom or not waerme:
+        return False
+
+    def frueh(fs):
+        return None if any(f[0] is None for f in fs) else min(f[0] for f in fs)
+
+    def spaet(fs):
+        return None if any(f[1] is None for f in fs) else max(f[1] for f in fs)
+
+    s_von, s_bis, w_von, w_bis = frueh(strom), spaet(strom), frueh(waerme), spaet(waerme)
+    beginnt_frueher = s_von is not None and (w_von is None or w_von < s_von)
+    endet_spaeter = s_bis is not None and (w_bis is None or w_bis > s_bis)
+    return beginnt_frueher or endet_spaeter

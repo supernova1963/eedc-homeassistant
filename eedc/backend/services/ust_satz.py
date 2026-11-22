@@ -14,6 +14,10 @@ für dasselbe Jahr. Ohne die inaktive Wallbox nannten alle drei 18,90 €.
   in diesem Jahr. Bis hierhin nahm die Übersicht für die Bemessung **alle** Investitionen („KEIN aktiv-Filter",
   Issue #123 — eine Regel für Mengen, nicht für Kosten) und für die Betriebskosten die **heute** aktiven; die
   Monatsreihe nahm alle für beides.
+  **Je Komponente über ihre aktiven Monate** (Fund-Päckchen A, A3/K-1, 22.11.2026): AfA und Betriebskosten einer
+  Investition zählen nur über die Monate der Grundgesamtheit, in denen sie aktiv war (``kosten_je_komponente`` →
+  ``ust_eigenverbrauch.anteilige_jahreskosten``) — wie die Betriebskosten des Zeitraums (N-228). Bis dahin trug ein ab
+  Juli betriebener Speicher seine Kosten über alle Monate der Anlage (80,94 € statt 68,97 €).
 * **Monate (Grundgesamtheit des Jahres):** die Monats-Fakten des Kalenderjahres mit **Zählerzeile** und **aktivem
   Erzeuger** (``meta.hat_zaehlerzeile and meta.erzeuger_aktiv``) — die abgeschlossenen Monate, in denen die Anlage lief;
   dieselbe Menge, über die die Übersicht ihre Finanz-Zeilen bildet. ``monate`` ist ihre Anzahl (Anteiligkeit N-130).
@@ -43,6 +47,7 @@ from backend.core.berechnungen.ergebnis import MONAT_KURZ, ust_satz_euro_je_kwh
 from backend.core.berechnungen.pv_verteilung import eigenverbrauch_ohne_verluste_kwh
 from backend.core.berechnungen.ust_eigenverbrauch import (
     UstJahresanteil,
+    UstKomponente,
     bemessungsgrundlage_aus_investitionen,
     berechne_ust_eigenverbrauch,
 )
@@ -99,6 +104,27 @@ def kosten_des_jahres(investitionen: Iterable, jahr: int) -> tuple[float, float]
         bemessungsgrundlage_aus_investitionen(invs),
         sum((i.betriebskosten_jahr or 0) for i in invs),
     )
+
+
+def _aktiv_im_monat(inv, jahr: int, monat: int) -> bool:
+    from calendar import monthrange
+
+    return inv.ist_aktiv_im_zeitraum(date(jahr, monat, 1), date(jahr, monat, monthrange(jahr, monat)[1]))
+
+
+def kosten_je_komponente(investitionen: Iterable, jahr: int, monate: Iterable[int]) -> list[UstKomponente]:
+    """Je im Jahr aktiver Investition ihre Kosten und die Zahl ihrer aktiven Monate unter ``monate`` (den Monaten des
+    Jahresanteils) — Fund-Päckchen A (A3/K-1): Kosten einer Komponente zählen nur über ihre aktiven Monate des Jahres,
+    dieselbe Regel wie die Betriebskosten des Zeitraums (N-228)."""
+    monate = sorted(set(monate))
+    return [
+        UstKomponente(
+            bemessungsgrundlage_euro=bemessungsgrundlage_aus_investitionen([i]),
+            betriebskosten_jahr_euro=i.betriebskosten_jahr or 0,
+            monate=sum(1 for m in monate if _aktiv_im_monat(i, jahr, m)),
+        )
+        for i in investitionen_im_jahr(investitionen, jahr)
+    ]
 
 
 @dataclass(frozen=True)
@@ -179,6 +205,7 @@ def ust_satz_des_jahres(anlage, investitionen: Iterable, fakten: Sequence, jahr:
             ust_satz_prozent=prozent,
             euro_je_kwh=ust_satz_euro_je_kwh(
                 anteil, bemessungsgrundlage_euro=bemessung, betriebskosten_jahr_euro=bk, ust_satz_prozent=prozent,
+                komponenten=kosten_je_komponente(investitionen, grund_jahr, (f.monat for f in g)),
             ),
         )
     return UstSatz(
@@ -206,6 +233,7 @@ def ust_eigenverbrauch_zeitraum(anlage, investitionen: Iterable, fakten: Sequenc
         bemessung, bk = kosten_des_jahres(investitionen, jahr)
         summe += berechne_ust_eigenverbrauch(
             [anteil], bemessungsgrundlage_euro=bemessung, betriebskosten_jahr_euro=bk, ust_satz_prozent=prozent,
+            komponenten=kosten_je_komponente(investitionen, jahr, (f.monat for f in grundgesamtheit(fakten, jahr))),
         )
     return summe
 

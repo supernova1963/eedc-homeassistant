@@ -422,9 +422,11 @@ def investitionen_und_parameter(
             ) or 0,
             "thermisch_kwh": 0.0,
         }
-    wp_alternativ_zusatzkosten_jahr = sum(
-        a["zusatzkosten_jahr"] for a in wp_aggregate.values()
-    )
+    # Fund-Päckchen A (A4): in die Zukunft tragen nur die heute aktiven Wärmepumpen (Regel N-228, Layer).
+    from datetime import date as _date
+    from backend.core.berechnungen.alternativkosten import wp_zusatzkosten_jahr_heute
+
+    wp_alternativ_zusatzkosten_jahr = wp_zusatzkosten_jahr_heute(wp_mit_ersatz, _date.today())
     # N-279: derselbe Monats-Ø wie `wp_strom_monat_avg`, aber nur über die
     # Geräte, die etwas ersetzt haben. Er speist AUSSCHLIESSLICH den
     # Alternativkosten-Vergleich; die Anzeige-Felder bleiben beim Gesamt-Ø,
