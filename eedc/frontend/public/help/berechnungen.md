@@ -84,11 +84,11 @@ Felder erfasst.
 >   nennt den Tag an PV (benannte Grenzen 1–3 im Abschnitt «Benannte Grenzen des Sensorwechsels»).
 >   Sind an einem Tag **alle** Felder der Bilanz-Gruppe bewusst leer (vor ihrer ersten Zeile gelöscht), heißt die Wahl
 >   `bewusst_leer` (`kanal/bilanz_leser`): Zahlen «—», kein Tag «ohne Kanal-Deckung». Benannte Grenzen: der Drift-Vergleich
->   mit Home Assistant liest für den ersten Tag einer Statistik das Fenster `[Vortag 23:00, 23:00)` und kann den Tag nennen,
->   wenn dessen Stunde 23:00 mindestens 2 kWh und 5 % trägt (Lösungsweg `drift_tag`; eine Ausnahme je Feld unterdrückte auch
->   den echten Fall N-791 — Spiegel mit Erstwert-Sprung gegen die in HA berichtigte Statistik; an gewöhnlichen Tagen dieselbe
->   Grenze, wenn die Stunde 23–24 Uhr zweier Folgetage deutlich verschieden ist, N-815 — Grenze 1 im Abschnitt «Benannte Grenzen
->   des Sensorwechsels»); ein abgeleiteter Kanal
+>   der PV mit Home Assistant liest für den ersten Tag einer Statistik das Fenster `[Vortag 23:00, 23:00)` und kann den Tag
+>   nennen, wenn dessen Stunde 23:00 mindestens 2 kWh und 5 % trägt (Lösungsweg `drift_tag`; eine Ausnahme je Feld unterdrückte
+>   auch den echten Fall N-791 — Spiegel mit Erstwert-Sprung gegen die in HA berichtigte Statistik; die Geräte, Einspeisung und
+>   Netzbezug vergleicht `drift_komponente` seit Fund-Päckchen E an Kanal-Tagen gegen HAs Kalendertag, N-815 — Grenze 1 im
+>   Abschnitt «Benannte Grenzen des Sensorwechsels»); ein abgeleiteter Kanal
 >   (PV-Anteil der Heimladung) beginnt ohne Anfangsstand 0 — beginnt er am selben Tag wie die Wallbox-Statistik, liest die
 >   Gruppe E-Mobilität diesen Tag aus dem Bestand (Naht S4-R-3c).
 > * **Vor dem Beginn seiner Quelle trägt ein Feld nichts** (R-D1, Entscheid Gernot 22.11.2026, N-816 — wie Home Assistant):
@@ -201,7 +201,9 @@ Felder erfasst.
 > Zählersprung aus HA steht deshalb in Tag und Monat; der Daten-Checker benennt ihn (Kategorie „Zählerstände – Sprung
 > in Home Assistant", Muster Reset und Rückkehr auf den alten Stand). **Lückentag wie HA:** fehlen einem Zähler mehr
 > als 24 Stunden, trägt der erste beendete Tag danach die ganze Lückenmenge; ein Tag ganz in der Lücke trägt 0 (er kommt trotzdem
-> aus den Kanälen, nicht aus dem Bestand).
+> aus den Kanälen, nicht aus dem Bestand). Dieselbe Regel an derselben Stelle (`kanal/bilanz_leser._gedeckt`) gilt seit
+> Fund-Päckchen E (N-818) auch für die Tageswahl der Gerätegruppen E-Mobilität, Sonstiges und Wärmepumpe
+> (`geraete_leser.gedeckt_delta`, `waehle_gruppe`/`waehle_wp` mit `lueckentag=True`); Monate wählen ohne sie.
 > **Quellenwahl:** je Tag und je Monat EINE Wahl für alle Eingänge der Gruppe — die Kanäle nur, wenn jeder benötigte
 > Kanal den Zeitraum voll deckt; sonst rechnet der bisherige Leser den ganzen Zeitraum aus Tages- und Stundenzeilen
 > mit den unten beschriebenen Regeln (**Bestandspfad**, Lesart 1 — für die Mengen nur Tage und Monate ohne volle Kanal-Deckung).
@@ -4802,9 +4804,12 @@ nach denselben Regeln wie die Tagessummen:
 * **Eine Wahl je Tag und Gruppe** (ADR-002/P14): Bilanz (Netz · PV/Balkonkraftwerk samt Anlagenzähler · Speicher ·
   Erzeuger hinter dem Zähler), Geräte (E-Mobilität, Sonstiges), Wärmepumpe. Ein Kanal-Tag einer Gruppe liest auch ihre
   Stunden aus den Kanälen, ein Bestandstag aus den Stundenzeilen; kein Tag halb und halb. ⚑ Die Bilanz-Gruppe hält einen
-  Tag mit einer Lücke über die Tagesgrenze als Kanal-Tag (Lückentag wie HA); die **Geräte- und die WP-Gruppe kennen diese
-  Regel nicht** — ein 25-Stunden-Loch in einem WP-Kanal macht beide berührten Tage zu WP-Bestandstagen. Beide Wege nennen
-  an solchen Tagen dieselbe Zahl aus dem Bestand (Entscheid: so belassen).
+  Tag mit einer Lücke über die Tagesgrenze als Kanal-Tag (Lückentag wie HA); seit Fund-Päckchen E (N-818, Entscheid Master
+  22.11.2026 zu H-D1) mit derselben Regel an derselben Stelle auch die Geräte- und die WP-Gruppe (`bilanz_leser._gedeckt`
+  über `geraete_leser.gedeckt_delta`). Der Tag in der Lücke trägt 0 — auch als Σ seiner Stunden ohne Zeile
+  (`kanal_stunden._tages_delta`), nicht «—» —, die Menge der Lücke die erste Stunde danach. Bis dahin («so belassen») las eine
+  Gerätegruppe solche Tage aus dem Bestand; seit R-D1 (Päckchen D) grenzten sie damit an Kanal-Tage der Gruppe und die
+  Stunde 23–24 Uhr fehlte oder zählte doppelt (Produktiv-Kopie: Wallbox März 2025 184,65 statt 188,12 kWh = HA).
 * **Kalendertag, Stunde = Beginn (seit HA-Bauform S4, R-3):** ein Kanal-Tag ist der Kalendertag `[D 00:00, D+1 00:00)`
   in der Prozesszone (`services/kanal/fenster.py::tagesfenster`), ein Kanal-Monat der Kalendermonat — Σ Kalendertage ≡
   Kalendermonat ≡ Jahr per Konstruktion, eine Monatsgrenze für alle Monatsleser. Stunde `h` ist HAs `change` der Zeile mit
@@ -4816,7 +4821,10 @@ nach denselben Regeln wie die Tagessummen:
   unterscheidet sich ein Kanal-Tag je Kanal um die **Randstunde** `change(D 23:00) − change(D−1 23:00)`.
   **Bestandstage** bleiben, wie sie geschrieben sind (Backward-Slots, Tagesfenster `[Vortag 23:00, 23:00)`); zwischen einem
   Bestandstag D und einem Kanal-Tag D+1 fehlt die Stunde `[D 23:00, D+1 00:00)`, in umgekehrter Reihenfolge zählt sie
-  doppelt (benannte Naht S4-R-3c; sie bleibt, solange ein Bestandstag neben einem Kanal-Tag liegt — Lesart 1). Fehlt eine Stunde, trägt die nächste belegte ihren Zuwachs und ihre Spanne (`spannen`, „enthält n Stunden"); eine
+  doppelt (benannte Naht S4-R-3c; sie bleibt, solange ein Bestandstag neben einem Kanal-Tag liegt — Lesart 1). Ein Tag in
+  einer Zählerlücke ist seit Fund-Päckchen E in jeder Gruppe ein Kanal-Tag (Lückentag wie HA) — dort entsteht die Naht nicht
+  mehr; sie bleibt an den Grenzen echter Bestandstage einer Gruppe: vor ihrem ersten Kanal-Stand, nach dem letzten Stand einer
+  Quelle (`endet_vor_bis`), am ersten Tag eines abgeleiteten Kanals ohne Anfangsstand (Weltrand, Grenze 4 des Sensorwechsels). Fehlt eine Stunde, trägt die nächste belegte ihren Zuwachs und ihre Spanne (`spannen`, „enthält n Stunden"); eine
   Stunde ohne Zeile ist **keine 0**. HA-Kanäle wörtlich: kein Deckel, keine Reset-Regel, keine Lückenfüllung.
 * **Weg 2 je Stunde:** die Bilanz-Gruppe komponiert jede Stunde mit derselben Layer-Funktion wie den Tag
   (`core/berechnungen/bilanz_zeitraum.py::komponiere_bilanz_zeitraum`, W2-R1…R5). Die Entweder-oder-Wahl des Tages gilt
@@ -5310,6 +5318,15 @@ Achse 1 (PV)  Σ_eedc, Σ_HA = Σ der positiven Werte über die PV-/BKW-Keys, di
               eine Seite 0 gegen die andere > 0 IST ein Vergleich
 Achse 2       je übriger Key einzeln (Wallbox, E-Auto, Wärmepumpe, Sonstiges, Einspeisung, Netzbezug; nie batterie_*),
               nur wenn beide Seiten > 0 (sonst Lücke ⇒ «fehlende Tageswerte», N-201)
+              HA-Seite je Key und Tag nach der Wahl seiner Gruppe (N-815, Fund-Päckchen E):
+                Bestandstag der Gruppe ⇒ Fenster [Vortag 23:00, 23:00) wie die gespeicherte Tageszeile
+                Kanal-Tag der Gruppe   ⇒ HAs Kalendertag = Fenster(D) − Slot 0(D) + Slot 0(D+1)
+                                         (slot_konvention.kalendertag_aus_fenster; Slot 0 = Stunde [Vortag 23:00, 00:00),
+                                         lts_aggregator.erste_stunde_je_ziel)
+                Randstunde nicht bekannt (HA führt die Zeile 23:00 nicht, obwohl die Statistik davor läuft; Folgetag
+                nicht lesbar) ⇒ an diesem Tag kein Vergleich (kein Ersatzwert); beginnt die Statistik erst danach ⇒ 0
+              Gruppe: Einspeisung, Netzbezug und Erzeuger hinter dem Zähler ⇒ Bilanz, wallbox_/eauto_ ⇒ E-Mobilität,
+              waermepumpe_ ⇒ Wärmepumpe, übrige sonstige_ ⇒ Sonstiges (drift_kalendertag.gruppe_des_schluessels)
 Δ             = |Σ_eedc − Σ_HA|
 Drift         wenn Δ ≥ 2 kWh ∧ Δ / max(Σ_eedc, Σ_HA) ≥ 5 %          (beide Achsen, beide Schwellen zugleich)
 Ausgabe       Achse 1: je Drift-Tag eine Zeile, |Δ| absteigend, höchstens 20; der Rest als «… plus N weitere Tag(e)»
@@ -5319,7 +5336,13 @@ Ausgabe       Achse 1: je Drift-Tag eine Zeile, |Δ| absteigend, höchstens 20; 
 
 Reihenfolge der Zeilen: die PV-Tage, dann die Komponenten, zuletzt die Rest-Zeile; ohne Drift eine OK-Zeile. Die Meldung
 nennt `HA − eedc` mit Vorzeichen und den Anteil an `max(Σ_eedc, Σ_HA)`. Ein Lesefehler an einem Tag nimmt den Tag aus beiden
-Achsen. Code: `services/daten_checker/datenquelle/quellen.py::QuellenChecks._check_datenquelle_drift` (Phasen
+Achsen. **Kalendertag (N-815):** die Wahl je Tag und Gruppe liest `kanal_gruppen_der_tage` (nur an einer Anlage mit HA-Spiegel);
+je Kanal-Tag, dessen Folgetag die Schleife nicht liest, liest die Prüfung diesen Folgetag einmal nach — **im Normalbetrieb
+einmal je Lauf** (für gestern den Tag von heute, seine Slot 0 ist gestern 23–24 Uhr), dazu je Lücke der Tageszeilen einen
+(Entscheid Master H-E2 (a): ein echter Fehler am Kanal-Tag bleibt Befund, N-790/N-791); jeder Folgetag höchstens einmal
+(`daten_checker/datenquelle/drift_kalendertag.py`). Die **PV-Achse bleibt
+beim Fenster**: PV erzeugt zwischen 23 und 24 Uhr nichts, was die Schwelle erreicht (Produktiv-Kopie 15.11.2026: höchster Wert
+0,0 kWh in 739 Nächten); dort bleiben die Grenzen 1 (Rest) und 2 im Abschnitt «Benannte Grenzen des Sensorwechsels». Code: `services/daten_checker/datenquelle/quellen.py::QuellenChecks._check_datenquelle_drift` (Phasen
 `_drift_pv_achse`, `_drift_komponenten_achse`, `_drift_tageszeilen`, `_drift_komponentenzeilen`, RF-64). Meldungen und
 Behebung: [HANDBUCH_DATEN_CHECKER §4.17](HANDBUCH_DATEN_CHECKER.md#417-datenquellen-drift).
 
@@ -5749,10 +5772,14 @@ springt» (a)–(d) und der MQTT-Regeln (a)–(l) stehen bei ihren Abschnitten o
    sind; «Aus Home Assistant neu übernehmen» ändert nichts. Beide Lösungswege sagen es. Nicht gebaut (Korrekturrunde WEGB-K):
    die Prüfung bräuchte je Gerät den Beginn der Statistik und den Wert des Kalendertags — keine kleine Änderung an einer Stelle,
    und die importierte Statistik (Grenze 2) hat eine zweite Ursache. Ein Tag, an dem eine Statistik vor mehr als 90 Tagen begann,
-   erscheint nicht. **Allgemein (N-815, Entscheid Gernot 22.11.2026: Text, kein Bau):** dieselbe Fenster-Ursache trifft jeden
-   gewöhnlichen Kanal-Tag, wenn die Stunde 23–24 Uhr zweier Folgetage um mindestens 2 kWh und 5 % verschieden ist (gemessen
-   `golden-master/funde-b-2026-11-22/test_mess_m2.py`: Wärmepumpe 67,5 → 60,0, Tag = HA = 67,5); der erste Tag einer Statistik
-   ist ein Fall davon. Die gezeigte Zahl ist die von Home Assistant, ungenau ist allein der Vergleichswert; beide Lösungswege sagen es.
+   erscheint nicht. **Allgemein (N-815):** dieselbe Fenster-Ursache traf jeden gewöhnlichen Kanal-Tag, wenn die Stunde 23–24 Uhr
+   zweier Folgetage um mindestens 2 kWh und 5 % verschieden war (gemessen `golden-master/funde-b-2026-11-22/test_mess_m2.py`:
+   Wärmepumpe 67,5 → 60,0, Tag = HA = 67,5); der erste Tag einer Statistik ist ein Fall davon. **Gebaut in Fund-Päckchen E
+   (Entscheid Gernot 22.11.2026):** `drift_komponente` vergleicht an einem Kanal-Tag der Gruppe gegen HAs Kalendertag (Abschnitt
+   «Drift-Prüfung Datenquellen») — für Wallbox, E-Auto, Wärmepumpe, Sonstiges, Einspeisung und Netzbezug ist die Grenze
+   beseitigt (`test_funde_e.py`). Es bleibt: (a) `drift_tag` (PV) vergleicht weiter im Fenster — PV erzeugt nachts nichts, was
+   die Schwelle erreicht; (b) führt Home Assistant die Zeile 23:00 eines Geräts nicht, obwohl seine Statistik davor läuft, wird
+   das Gerät an diesem Tag und am Vortag nicht verglichen (kein Ersatzwert).
 2. **Importierte Statistik mit großem erstem `sum`:** zählt wie in Home Assistant ganz. Seit Fund-Päckchen B (22.11.2026) nennt
    «Zählerstand springt» die erste Stunde an jedem Feld, wenn ihr Wert über der Grenze (b) liegt (`test_funde_b.py`). An einem
    PV-Feld nennt zusätzlich `drift_tag` den Tag (der Vergleichswert lässt die Stunde über der Plausibilitätsgrenze aus,

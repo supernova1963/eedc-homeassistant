@@ -7,15 +7,15 @@ Es gibt eine Zeile je Gerät, nicht je Tag; sie nennt den Tag mit der größten 
 tragen Wirtschaftlichkeit und CO₂-Bilanz mit — eine Abweichung an der Wallbox kostet genauso wie eine an der PV. Geprüft werden
 die Tage der letzten 90 Tage bis gestern.
 
-**Benannte Grenze — die Stunde 23–24 Uhr:** die Prüfung kann einen Tag nennen, obwohl eedc und Home Assistant für ihn
-dieselbe Zahl zeigen. Der Grund: eedc zeigt den Kalendertag wie Home Assistant; der Vergleichswert der Prüfung reicht aber von
-23 Uhr des Vortags bis 23 Uhr. Lief das Gerät in der Stunde 23–24 Uhr an zwei aufeinanderfolgenden Tagen deutlich verschieden
-— mindestens 2 kWh und 5 % des Tages, typisch eine Wärmepumpe oder Wallbox nachts —, weicht nur dieser Vergleichswert ab
-(gemessen: «67,5 → 60,0 kWh», Tagesansicht und Home Assistant 67,5). Ein Fall derselben Grenze ist der erste Tag einer
-Statistik: beginnt sie an diesem Tag, fehlt dem Vergleichswert die Stunde 23–24 Uhr (gemessen: «12,5 → 10,0 kWh»,
-Tagesansicht und Home Assistant 12,5). Erkennen: zeigen die Tagesansicht in eedc und Home Assistant für den genannten Tag
-dieselbe Zahl, ist die gezeigte Zahl die von Home Assistant und ungenau allein der Vergleichswert. Dann ist nichts zu tun;
-«Aus Home Assistant neu übernehmen» ändert daran nichts.
+**Welcher Tag verglichen wird:** zeigt eedc ein Gerät an einem Tag aus dem Home-Assistant-Spiegel (der Kalendertag, 0 bis
+24 Uhr), vergleicht die Prüfung mit dem Kalendertag von Home Assistant; liest eedc den Tag aus den gespeicherten Werten,
+vergleicht sie wie diese von 23 Uhr des Vortags bis 23 Uhr. Ein Gerät, das nachts an zwei Tagen verschieden läuft, und der
+erste Tag einer Statistik erscheinen deshalb nicht mehr, wenn eedc und Home Assistant dieselbe Zahl zeigen.
+
+**Benannte Grenze — eine fehlende Stunde in Home Assistant:** führt Home Assistant für ein Gerät die Stunde 23–24 Uhr nicht
+(etwa weil der Sensor in dieser Stunde nicht lesbar war), obwohl seine Statistik davor läuft, prüft der Daten-Checker dieses
+Gerät an den beiden Tagen um diese Stunde nicht — eedc setzt für die fehlende Stunde keinen Wert ein. Ebenso bleibt der
+letzte geprüfte Tag (gestern) ungeprüft, solange Home Assistant die Stunde 23–24 Uhr von gestern noch nicht geschrieben hat.
 
 ## Lösungsweg
 1. In Home Assistant prüfen, welcher Wert stimmt. Ist die Statistik dort falsch (etwa ein Zählersprung), sie unter

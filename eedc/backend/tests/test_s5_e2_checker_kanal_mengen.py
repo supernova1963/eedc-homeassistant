@@ -117,7 +117,12 @@ def _ha(monkeypatch, werte_je_tag: dict) -> None:
     import backend.services.snapshot.lts_aggregator as lts
 
     async def _lts(anlage, invs_by_id, datum):
-        return dict(werte_je_tag.get(datum, {}))
+        from backend.services.snapshot.lts_aggregator import KomponentenTag
+
+        werte = dict(werte_je_tag.get(datum, {}))
+        # Fund-Päckchen E (N-815): HAs Randstunde Slot 0 je Wert führt die Probe als 0 — der Wert ist dann zugleich HAs
+        # Kalendertag, gegen den der Daten-Checker an Kanal-Tagen vergleicht (vorher: ohne Randstunden dasselbe Fenster).
+        return KomponentenTag(werte, erste_stunde={k: 0.0 for k in werte})
 
     monkeypatch.setattr(ha, "get_ha_statistics_service", lambda: SimpleNamespace(is_available=True))
     monkeypatch.setattr(lts, "get_komponenten_tageskwh_lts", _lts)

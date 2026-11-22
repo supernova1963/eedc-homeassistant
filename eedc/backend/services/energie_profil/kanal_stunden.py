@@ -830,8 +830,8 @@ def _summe_stunden(werte) -> float:
 
 
 def _tages_delta(gs) -> dict[str, float]:
-    """Je Kanal der Gruppe das Tages-Δ als Σ seiner Stunden (S3-R4: Σ Stunden ≡ Tag)."""
-    return {k: sum(v for v in m if v is not None) for k, m in gs.mengen.items() if any(v is not None for v in m)}
+    """Je Kanal der Gruppe das Tages-Δ als Σ seiner Stunden (S3-R4: Σ Stunden ≡ Tag) — ohne Zeile am Lückentag 0 (N-818)."""
+    return {k: sum(v for v in m if v is not None) for k, m in gs.mengen.items()}
 
 
 def kanal_werte_je_inv(delta: Mapping[str, float], invs_by_id: Mapping[str, Any], datum: date, typen: frozenset[str],

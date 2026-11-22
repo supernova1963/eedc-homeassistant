@@ -119,12 +119,10 @@ async def _bedarf(db: AsyncSession, stamm, aktiv, fenster: Optional[tuple[int, i
     return b
 
 
-def _voll(z: Optional[Zeitraum]) -> bool:
-    return z is not None and z.voll and z.delta is not None
-
-
-def waehle_wp(bedarf: _Bedarf, ergebnisse: dict[str, Zeitraum]) -> WpZeitraum:
-    """Die Wahl der WP-Gruppe in EINEM Zeitraum und bei ``kanal`` die Zeilen. Reine Funktion."""
+def waehle_wp(bedarf: _Bedarf, ergebnisse: dict[str, Zeitraum], *, lueckentag: bool = False) -> WpZeitraum:
+    """Die Wahl der WP-Gruppe in EINEM Zeitraum und bei ``kanal`` die Zeilen. Reine Funktion. ``lueckentag``: der Zeitraum
+    ist ein Tag — die Lückentag-Regel der Bilanz gilt (``geraete_leser.gedeckt_delta``, Fund-Päckchen E, N-818)."""
+    from backend.services.kanal.geraete_leser import gedeckt_delta
     from backend.services.kanal.modus_strom import abdeckung_key, modus_strom_key
 
     if bedarf.leer:
@@ -134,8 +132,8 @@ def waehle_wp(bedarf: _Bedarf, ergebnisse: dict[str, Zeitraum]) -> WpZeitraum:
 
     def _nimm(inv_id: int, feld: str, key: str) -> None:
         z = ergebnisse.get(key)
-        if _voll(z):
-            zeilen.setdefault(inv_id, {})[feld] = z.delta
+        if (d := gedeckt_delta(z, lueckentag)) is not None:
+            zeilen.setdefault(inv_id, {})[feld] = d
         else:
             gruende[key] = GRUND_KEIN_KANAL if z is None else (z.grund or "nicht_voll")
 

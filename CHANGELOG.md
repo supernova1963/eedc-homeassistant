@@ -39,11 +39,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   ersten Wert wie Home Assistant; der Weg ist, den Wert in Home Assistant zu berichtigen („Summe anpassen“) und danach im
   Daten-Checker „Aus Home Assistant neu übernehmen“. Die Auskunft „Tage mit Mengen aus den gespeicherten Stundenwerten“
   („… Tage ohne Kanal-Deckung …“) kann einen Tag weniger nennen — der Tag, an dem eine Statistik beginnt, zählt nicht mehr dazu.
-  Am ersten Tag einer Statistik können „Abweichung zu Home Assistant an einem Tag (PV)“ und „Ein Gerät weicht an Tagen von
-  Home Assistant ab“ (etwa an einer Wärmepumpe, die nachts läuft) den Tag nennen, obwohl eedc und Home Assistant dieselbe Zahl
-  zeigen — der Vergleichswert endet an diesem Tag um 23 Uhr, bei einer importierten Statistik mit großem ersten Wert lässt er
-  die erste Stunde aus; nichts zu tun, beide Lösungswege sagen es (auch für einen gewöhnlichen Tag, an dem das Gerät zwischen 23
-  und 24 Uhr an zwei Folgetagen deutlich verschieden lief). Die Werte der ersten Stunde nach „Werte vor dem
+  Am ersten Tag einer Statistik kann „Abweichung zu Home Assistant an einem Tag (PV)“ den Tag nennen, obwohl eedc und Home
+  Assistant dieselbe Zahl zeigen — der Vergleichswert der PV endet an diesem Tag um 23 Uhr, bei einer importierten Statistik
+  mit großem ersten Wert lässt er die erste Stunde aus; nichts zu tun, der Lösungsweg sagt es. Die Werte der ersten Stunde nach „Werte vor dem
   Sensorbeginn verwerfen“ und der erste Tag einer Wallbox bleiben, wie sie bisher waren (ohne die erste Stunde). Gespeicherte Monatswerte und gespeicherte Tageswerte ändern sich nicht von selbst. Ein leerer Tag sagt
   jetzt nur „Zähler zugeordnet, aber für diesen Tag liegen keine Zählerstände vor — eedc bildet für diesen Tag deshalb keinen
   Tageswert.“ (bisher versprach der Satz ein Nachrechnen in der Reparatur-Werkbank). **MQTT:** springt der Zählerstand eines PV- oder Einspeise-Felds,
@@ -203,10 +201,29 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   ersten Zählerstand. **Was sich an bestehenden Zahlen ändern kann:** Tage und Monate, die bisher aus den gespeicherten
   Stundenwerten kamen, weil ein später begonnener Zähler fehlte, kommen jetzt aus den Kanälen — sie zeigen dann den
   Kalendertag wie Home Assistant (Abweichungen meist in der zweiten Nachkommastelle; was zwischen 23 und 24 Uhr gemessen
-  wurde, steht jetzt an diesem Tag statt am Folgetag). Grenzt ein solcher Tag an einen Tag, der weiter aus den gespeicherten
-  Werten kommt (etwa weil ein Zähler dort eine Lücke hat), kann die Stunde 23–24 Uhr an dieser Grenze in Tag und Monat
-  fehlen (gemessen an einer echten Anlage: eine Wallbox im März 2025 3,47 kWh unter Home Assistant). Die Auskunft „… Tage
-  ohne Kanal-Deckung …“ nennt entsprechend weniger Tage.
+  wurde, steht jetzt an diesem Tag statt am Folgetag). Die Auskunft „… Tage ohne Kanal-Deckung …“ nennt entsprechend
+  weniger Tage.
+- **Daten-Checker „Ein Gerät weicht an Tagen von Home Assistant ab“: kein Befund mehr an fehlerfreien Tagen.** Lief eine
+  Wärmepumpe, Wallbox oder ein anderes Gerät zwischen 23 und 24 Uhr an zwei aufeinanderfolgenden Tagen deutlich verschieden
+  (oder begann seine Statistik an diesem Tag), nannte der Befund eine Abweichung, obwohl eedc und Home Assistant für den Tag
+  dieselbe Zahl zeigten (gemessen: Wärmepumpe „67,5 → 60,0 kWh“, Tagesansicht und Home Assistant 67,5) — „Aus Home Assistant
+  neu übernehmen“ änderte daran nichts. Der Grund: eedc zeigt an Tagen aus dem Home-Assistant-Spiegel den Kalendertag (0 bis
+  24 Uhr), der Vergleichswert reichte von 23 Uhr des Vortags bis 23 Uhr. Jetzt vergleicht der Daten-Checker an diesen Tagen mit
+  dem Kalendertag von Home Assistant, zusammengesetzt nur aus Stunden, die Home Assistant führt; an Tagen aus den gespeicherten
+  Werten bleibt der Vergleich, wie er war. Eine echte Abweichung (etwa nach „Summe anpassen“ in Home Assistant) bleibt ein Befund.
+  Fehlt in Home Assistant die Stunde 23–24 Uhr eines Geräts, wird es an den beiden Tagen um diese Stunde nicht verglichen — eedc
+  setzt keinen Wert dafür ein. An der PV ändert sich nichts (sie erzeugt nachts nichts). Angezeigte Zahlen ändern sich nicht.
+- **Zählerlücke an Wallbox, E-Auto, Wärmepumpe oder Sonstigem: Tag und Monat wie Home Assistant.** Hatte der Zähler eines
+  Geräts einen ganzen Tag lang keinen Wert in Home Assistant (bzw. keinen MQTT-Zählerstand), las eedc für dieses Gerät die
+  Tage der Lücke aus den gespeicherten Werten — mit „—“ am Tag in der Lücke und, an der Grenze zum nächsten Tag, mit einer
+  Stunde 23–24 Uhr zu wenig oder doppelt (gemessen an einer echten Anlage: eine Wallbox im März 2025 3,47 kWh unter Home
+  Assistant). Jetzt zählt der Tag wie in Home Assistant und wie schon bei PV, Netz und Speicher: der Tag in der Lücke zeigt 0,
+  die Menge der Lücke steht am ersten Tag danach; Tag und Monat sind gleich Home Assistant (an der echten Anlage stimmen
+  alle 91 geänderten Tage und Monate mit Home Assistant überein, der März 2025 wieder 188,12 kWh). **Was sich an bestehenden
+  Zahlen ändern kann:** Tage in einer solchen Lücke zeigen 0 statt „—“; ein E-Auto, dessen Statistik erst später beginnt, zeigt
+  an diesen Tagen „—“ statt 0 — wie Home Assistant vor dem Beginn seiner Statistik. Was bleibt: grenzt ein Tag,
+  den eedc für ein Gerät aus den gespeicherten Werten liest (etwa vor dem ersten Zählerstand oder nach dem letzten), an einen
+  Tag aus den Kanälen, kann die Stunde 23–24 Uhr an dieser Grenze fehlen oder doppelt zählen.
 - **Ein Feld über MQTT neben Feldern aus Home Assistant zählt wieder mit.** Kam bei einer Anlage mit Home-Assistant-Feldern
   ein Feld allein über MQTT — etwa der Netzbezug nach „Bisherige Werte bleiben“ beim Wechsel von Home Assistant zu MQTT,
   oder die Ladung einer Wallbox über MQTT —, zeigten die Tageswerte dieses Feld an allen Tagen „—“ und der Monat 0 bzw. gar

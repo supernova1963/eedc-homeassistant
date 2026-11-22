@@ -217,7 +217,48 @@ async def lts_tagestabelle(
         eid: {h: (slot.delta, slot.n) for h, slot in reihen[eid].slots.items()}
         for eid in zusatz if eid in reihen
     }
+    tabelle.erste_stunde = erste_stunde_je_ziel(tabelle, reihen, datum)
     return tabelle
+
+
+#: Toleranz «der Tageswert ist Σ seiner Stunden» (Gleitkomma der Summen).
+_SUMME_TOL = 1e-6
+
+
+def erste_stunde_je_ziel(tabelle: TagesTabelle, reihen: dict, datum: date) -> dict[str, Optional[float]]:
+    """Fund-Päckchen E (N-815): je Ziel-Key von ``komponenten_kwh`` die Menge der Randstunde Slot 0 ``[Vortag 23:00,
+    00:00)``, wie Home Assistant sie führt — der Baustein des HA-Kalendertags (``slot_konvention.kalendertag_aus_fenster``).
+
+    * Der Wert, mit dem Slot 0 in ``komponenten_kwh`` einging (``komponenten_je_stunde[0]``); ging er nicht ein (R4
+      verworfen, Zähler ohne Zuwachs), 0.
+    * ``None`` (**Stunde nicht bekannt — kein Vergleich**), wenn ein Zähler des Ziels für Slot 0 keine Zeile hat, obwohl
+      seine Statistik davor läuft (``anker_start_ts`` vor dem Beginn der Stunde — eine Lücke, deren Menge HA einer späteren
+      Stunde zuordnet), wenn HA im Fenster für ihn gar keine Zeile führt, oder wenn der Tageswert nicht Σ seiner Stunden ist
+      (Tageswert-Auflösung im PV-Aggregat-Fall, N-623). Beginnt die Statistik erst nach dieser Stunde (Anker = Anfangsstand 0
+      der ersten Zeile, ``get_hourly_slots_for_day``), ist vorher nichts abzuziehen: 0."""
+    from backend.core.berechnungen.slot_konvention import slot_start_ts
+
+    beginn = slot_start_ts(datum, 0)
+    stunde0 = tabelle.komponenten_je_stunde.get(0, {})
+    out: dict[str, Optional[float]] = {}
+    for ziel, tageswert in tabelle.komponenten_kwh.items():
+        summe = sum(je.get(ziel, 0.0) for je in tabelle.komponenten_je_stunde.values())
+        quellen = tabelle.quellen_je_ziel.get(ziel, frozenset())
+        if not quellen or beginn is None or abs(summe - tageswert) > _SUMME_TOL or any(
+                _randstunde_fehlt(reihen.get(q), beginn) for q in quellen):
+            out[ziel] = None
+        else:
+            out[ziel] = stunde0.get(ziel, 0.0)
+    return out
+
+
+def _randstunde_fehlt(reihe, beginn: int) -> bool:
+    """Führt HA für Slot 0 dieses Zählers keine Zeile, obwohl seine Statistik vor ihr läuft? (``None``: keine Reihe)"""
+    if reihe is None:
+        return True
+    if 0 in reihe.slots:
+        return False
+    return reihe.anker_start_ts is None or reihe.anker_start_ts < beginn
 
 
 #: Slots eines Tages im Backward-Raster (``SensorSlotReihe.slots`` 0..23; Slot h endet mit dem Stand um ``datum`` + h Stunden).
@@ -393,4 +434,14 @@ async def get_komponenten_tageskwh_lts(
         return {}
     if marken_out is not None:
         marken_out.update(tabelle.pv_marken)
-    return dict(tabelle.komponenten_kwh)
+    return KomponentenTag(tabelle.komponenten_kwh, erste_stunde=tabelle.erste_stunde)
+
+
+class KomponentenTag(dict):
+    """``komponenten_kwh`` eines Tages (ein ``dict`` wie bisher) samt ``erste_stunde`` je Ziel-Key — der Randstunde Slot 0
+    ``[Vortag 23:00, 00:00)``, wie HA sie führt (``erste_stunde_je_ziel``; Fund-Päckchen E, N-815: der Daten-Checker setzt
+    daraus an Kanal-Tagen den HA-Kalendertag zusammen). Ohne Angabe (``{}``) ist keine Randstunde bekannt."""
+
+    def __init__(self, werte: dict, *, erste_stunde: Optional[dict] = None):
+        super().__init__(werte)
+        self.erste_stunde: dict[str, Optional[float]] = dict(erste_stunde or {})

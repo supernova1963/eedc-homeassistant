@@ -108,6 +108,15 @@ class TagesTabelle:
     #: Lesezugriff. Sie gehen in keine Achse und in keinen Tageswert — die Rechnung der
     #: Tabelle sieht sie nicht; nur der Ladeblock-Hook liest sie.
     zusatz_slots: dict[str, dict[int, tuple[float, int]]] = field(default_factory=dict)
+    #: Fund-Päckchen E (N-815): je Stunde ``h`` die Gerätewerte je Ziel-Key, die in ``komponenten_kwh`` eingehen (dieselben
+    #: Werte, R5b) — die Randstunde Slot 0 setzt den HA-Kalendertag aus dem Fenster zusammen (``slot_konvention.
+    #: kalendertag_aus_fenster``). Ein Ziel, das nur als Tageswert entsteht (PV-Aggregat-Fall, N-623), steht in keiner Stunde.
+    komponenten_je_stunde: dict[int, dict[str, float]] = field(default_factory=dict)
+    #: Fund-Päckchen E: je Ziel-Key die Zähler (``schluessel``), die nach dem Entweder-oder des Tages in ihn eingehen.
+    quellen_je_ziel: dict[str, frozenset[str]] = field(default_factory=dict)
+    #: Fund-Päckchen E: je Ziel-Key die Randstunde Slot 0, wie HA sie führt (``None``: nicht bekannt) — nur der HA-Pfad
+    #: setzt sie (``lts_aggregator.erste_stunde_je_ziel``, er kennt die Anker der Zeilen).
+    erste_stunde: dict[str, Optional[float]] = field(default_factory=dict)
 
 
 # ── RF-22 (Serie „Funktion vor Datei"): der Zustand, den die Phasen von `baue_tagestabelle`
@@ -203,13 +212,14 @@ def baue_tagestabelle(
     # Aussage — eine Teilsumme der übrigen Summanden wäre eine Behauptung.
     ohne_ziel = {e.target_key for e in eintraege if e.schluessel in ohne_tageswert}
     stunden: dict[int, dict[str, Optional[float]]] = {}
+    je_stunde: dict[int, dict[str, float]] = {}
     agg = _AggregatTag()
     for h in range(24):
         st = _Stunde()
         einzel_eintraege = _beitraege_der_stunde(st, h, brauchbar, fenster_je, pv_quelle)
         _einzel_pv_der_stunde(st, h, einzel_eintraege, fenster_je, pv_quelle, _alle_invs, agg)
         _deckel_der_achsen(st, h, tag)
-        _komponenten_der_stunde(st, h, ohne_ziel, komponenten, agg)
+        je_stunde[h] = _komponenten_der_stunde(st, h, ohne_ziel, komponenten, agg)
         stunden[h] = _stundenwerte(st)
 
     pv_marken = _pv_aggregat_aufloesen(pv_quelle, komponenten, agg, tag, ohne_tageswert, _alle_invs)
@@ -220,7 +230,17 @@ def baue_tagestabelle(
         pv_marken=pv_marken,
         verworfen={k: round(v, 3) for k, v in tag.verworfen.items()},
         nachtrag={k: round(v, 3) for k, v in tag.nachtrag.items()},
+        komponenten_je_stunde=je_stunde,
+        quellen_je_ziel=_quellen_je_ziel(eintraege),
     )
+
+
+def _quellen_je_ziel(eintraege: list[TabellenEintrag]) -> dict[str, frozenset[str]]:
+    """Je Ziel-Key die Zähler nach dem Entweder-oder des Tages (Fund-Päckchen E)."""
+    out: dict[str, set[str]] = {}
+    for e in eintraege:
+        out.setdefault(e.target_key, set()).add(e.schluessel)
+    return {k: frozenset(v) for k, v in out.items()}
 
 
 def _brauchbare_slots(
@@ -380,20 +400,23 @@ def _deckel_der_achsen(st: _Stunde, h: int, tag: _Tag) -> None:
 
 
 def _komponenten_der_stunde(st: _Stunde, h: int, ohne_ziel: set, komponenten: dict,
-                            agg: _AggregatTag) -> None:
+                            agg: _AggregatTag) -> dict[str, float]:
     """Schritt 7 (R5b): ``komponenten_kwh`` aus denselben Werten wie die Stunde; dazu die
-    verwendeten Aggregat-Slots je Stunde (N-623)."""
+    verwendeten Aggregat-Slots je Stunde (N-623). Gibt die Werte dieser Stunde je Ziel-Key zurück (Fund-Päckchen E)."""
     je_achse, aggregat_je_stunde = st.je_achse, agg.aggregat_je_stunde
+    der_stunde: dict[str, float] = {}
     # ── 7. komponenten_kwh aus denselben Werten (R5b) ────────────────
     for beitraege in je_achse.values():
         for target, wert, _n in beitraege:
             if target in ohne_ziel:
                 continue
             komponenten[target] = komponenten.get(target, 0.0) + wert
+            der_stunde[target] = der_stunde.get(target, 0.0) + wert
 
     for target, wert, _n in je_achse.get("pv", []):
         if target == PV_AGGREGAT_BASIS_FELD:
             aggregat_je_stunde[h] = aggregat_je_stunde.get(h, 0.0) + wert
+    return der_stunde
 
 
 def _stundenwerte(st: _Stunde) -> dict[str, Optional[float]]:

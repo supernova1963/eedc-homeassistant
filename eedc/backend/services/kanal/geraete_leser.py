@@ -36,6 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.berechnungen.pv_anteil_ladung import pv_anteil_prozent
 from backend.models.kanal import ART_SUM
 from backend.services.kanal.abgeleitet import EMOB_TYPEN, abgeleitet_key, lade_auswahl, verfuegbarkeit
+from backend.services.kanal.bilanz_leser import _gedeckt
 from backend.services.kanal.fenster import kalendermonatsfenster, monate, monatsgrenzen
 from backend.services.kanal.lesen import GRUND_KEIN_KANAL, Zeitraum, kanaele_laden, reihe_stapel, soll_ende
 from backend.services.kanal.quellenwahl import GRUND_KEINE_EINGAENGE, QUELLE_BESTAND, QUELLE_KANAL, Quellenwahl
@@ -190,15 +191,24 @@ async def _bedarf(db, stamm: _Stamm, aktiv, stichtag: date,
 # ── Wahl je Gruppe (rein) ───────────────────────────────────────────────────
 
 
-def _voll(z: Optional[Zeitraum]) -> bool:
-    return z is not None and z.voll and z.delta is not None
+def gedeckt_delta(z: Optional[Zeitraum], lueckentag: bool) -> Optional[float]:
+    """Das Δ eines Kanals, der den Zeitraum deckt — sonst ``None``. Die Regel steht EINMAL, in der Bilanz
+    (``bilanz_leser._gedeckt``, «Lückentag wie HA»): voll gedeckt, oder an einem beendeten Tag (``lueckentag``) ein Rand in
+    einer Spanne > Tag mit ``teil_delta`` (der Tag in der Lücke trägt 0, die Menge der Lücke die erste Stunde danach).
+    Fund-Päckchen E (N-818): die Gerätegruppen (E-Mobilität, Sonstiges, Wärmepumpe) wählen ihren Tag mit derselben Regel."""
+    ok, delta = _gedeckt(z, lueckentag)
+    return delta if ok else None
 
 
-def waehle_gruppe(bedarf: _Bedarf, ergebnisse: dict[str, Zeitraum]) -> GruppeZeitraum:
-    """Die Wahl einer Gruppe in EINEM Zeitraum und bei ``kanal`` die Zeilen. Reine Funktion."""
+def waehle_gruppe(bedarf: _Bedarf, ergebnisse: dict[str, Zeitraum], *, lueckentag: bool = False) -> GruppeZeitraum:
+    """Die Wahl einer Gruppe in EINEM Zeitraum und bei ``kanal`` die Zeilen. Reine Funktion. ``lueckentag``: der Zeitraum
+    ist ein Tag — die Lückentag-Regel der Bilanz gilt (``gedeckt_delta``); Monate wählen ohne sie (wie ``monate_bilanz``)."""
     if bedarf.leer:
         return GruppeZeitraum(Quellenwahl(QUELLE_BESTAND, {"": GRUND_KEINE_EINGAENGE}, {}))
     gruende: dict[str, str] = {}
+
+    def _delta(key: str) -> Optional[float]:
+        return gedeckt_delta(ergebnisse.get(key), lueckentag)
 
     def _grund(key: str) -> None:
         z = ergebnisse.get(key)
@@ -208,30 +218,30 @@ def waehle_gruppe(bedarf: _Bedarf, ergebnisse: dict[str, Zeitraum]) -> GruppeZei
     for inv_id, felder in bedarf.direkt.items():
         for f in felder:
             key = f"inv:{inv_id}:{f}"
-            if _voll(ergebnisse.get(key)):
-                zeilen.setdefault(inv_id, {})[f] = ergebnisse[key].delta
+            if (d := _delta(key)) is not None:
+                zeilen.setdefault(inv_id, {})[f] = d
             else:
                 _grund(key)
     for inv_id, gruppen in bedarf.ersatz.items():
         for gruppe in gruppen:
-            gewaehlt = next((f for f in gruppe if _voll(ergebnisse.get(f"inv:{inv_id}:{f}"))), None)
+            gewaehlt = next((f for f in gruppe if _delta(f"inv:{inv_id}:{f}") is not None), None)
             if gewaehlt is None:
                 _grund(f"inv:{inv_id}:{gruppe[0]}")
             else:
-                zeilen.setdefault(inv_id, {})[gewaehlt] = ergebnisse[f"inv:{inv_id}:{gewaehlt}"].delta
+                zeilen.setdefault(inv_id, {})[gewaehlt] = _delta(f"inv:{inv_id}:{gewaehlt}")
     pv = ladung = 0.0
     for inv_id, ladekeys in bedarf.abgeleitet.items():
         ak = abgeleitet_key(inv_id)
-        if not _voll(ergebnisse.get(ak)):
+        if _delta(ak) is None:
             _grund(ak)
             continue
-        if not all(_voll(ergebnisse.get(k)) for k in ladekeys):
+        if any(_delta(k) is None for k in ladekeys):
             for k in ladekeys:
-                if not _voll(ergebnisse.get(k)):
+                if _delta(k) is None:
                     _grund(k)
             continue
-        pv += ergebnisse[ak].delta
-        ladung += sum(ergebnisse[k].delta for k in ladekeys)
+        pv += _delta(ak)
+        ladung += sum(_delta(k) for k in ladekeys)
     vorhanden = {k: ergebnisse[k] for k in bedarf.keys() if k in ergebnisse}
     if gruende:
         return GruppeZeitraum(Quellenwahl(QUELLE_BESTAND, gruende, vorhanden))
@@ -396,7 +406,7 @@ async def emob_quoten(
 
 
 __all__ = [
-    "GeraeteZeitraum", "GruppeZeitraum", "HERKUNFT_KANAL", "emob_quoten", "geraete_kalendermonate", "geraete_monate",
-    "geraete_sensorwerte_kalendermonate",
+    "GeraeteZeitraum", "GruppeZeitraum", "HERKUNFT_KANAL", "emob_quoten", "gedeckt_delta", "geraete_kalendermonate",
+    "geraete_monate", "geraete_sensorwerte_kalendermonate",
     "herkunft_der_zeile", "uhr", "waehle_gruppe",
 ]

@@ -412,7 +412,7 @@ def _geraete_wahl(emob_b, sonst_b, z: dict) -> tuple[dict[str, Quellenwahl], dic
     out: dict[str, Quellenwahl] = {}
     keys: dict[str, set[str]] = {}
     for gruppe, bedarf in ((GRUPPE_EMOB, emob_b), (GRUPPE_SONSTIGES, sonst_b)):
-        g = geraete_leser.waehle_gruppe(bedarf, z)
+        g = geraete_leser.waehle_gruppe(bedarf, z, lueckentag=True)       # N-818: Lückentag wie die Bilanz
         out[gruppe] = g.wahl
         if g.kanal:
             keys[gruppe] = _gewaehlte_keys(g, bedarf)
@@ -465,7 +465,7 @@ async def _wp_bauen(db: AsyncSession, anlage_id: int, datum: date, wahl: Quellen
 async def _wp(db: AsyncSession, anlage_id: int, datum: date, jetzt: int, tag: dict) -> Quellenwahl:
     bedarf = await _wp_bedarf(db, anlage_id, datum)
     von, bis = tagesfenster(datum)
-    w = wp_leser.waehle_wp(bedarf, await _tages_deltas(db, anlage_id, bedarf.keys(), von, bis, jetzt))
+    w = wp_leser.waehle_wp(bedarf, await _tages_deltas(db, anlage_id, bedarf.keys(), von, bis, jetzt), lueckentag=True)
     if w.kanal:
         await _wp_bauen(db, anlage_id, datum, w.wahl, await _lies_stunden(db, anlage_id, bedarf.keys(), datum, jetzt),
                         tag)
@@ -643,7 +643,7 @@ async def _wp_bereich(db: AsyncSession, anlage_id: int, tage: Sequence[date], je
     z = await _deltas_bereich(db, anlage_id, set().union(*(b.keys() for b in bedarfe.values())), tage, jetzt)
     plaene = {}
     for d in tage:
-        w = wp_leser.waehle_wp(bedarfe[d], z[d])
+        w = wp_leser.waehle_wp(bedarfe[d], z[d], lueckentag=True)
         wahlen[d][GRUPPE_WP] = w.wahl
         if w.kanal:
             plaene[d] = w.wahl
@@ -677,7 +677,7 @@ async def geraete_tageswerte(db: AsyncSession, anlage_id: int, tage: Sequence[da
     out: dict[date, dict[str, float]] = {}
     zaehler_je_satz: dict[frozenset, list] = {}
     for d in tage:
-        g = geraete_leser.waehle_gruppe(bedarfe[d], z[d])
+        g = geraete_leser.waehle_gruppe(bedarfe[d], z[d], lueckentag=True)
         if not g.kanal:
             continue
         keys = {gruppe: _gewaehlte_keys(g, bedarfe[d])}
@@ -689,9 +689,9 @@ async def geraete_tageswerte(db: AsyncSession, anlage_id: int, tage: Sequence[da
             zaehler_je_satz[satz] = await zaehler_eintraege(db, stamm.anlage, aktiv, d)
         werte: dict[str, float] = {}
         for e in _zaehler_der_gruppe(zaehler_je_satz[satz], keys[gruppe]):
-            zr = z[d].get(e.schluessel)
-            if zr is not None and zr.voll and zr.delta is not None:
-                werte[e.target_key] = werte.get(e.target_key, 0.0) + e.vorzeichen * zr.delta
+            delta = geraete_leser.gedeckt_delta(z[d].get(e.schluessel), True)      # dieselbe Regel wie die Wahl (N-818)
+            if delta is not None:
+                werte[e.target_key] = werte.get(e.target_key, 0.0) + e.vorzeichen * delta
         out[d] = werte
     return out
 

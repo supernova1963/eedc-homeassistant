@@ -245,6 +245,22 @@ def lts_boundary_index(start_ts_dt: datetime, datum: date) -> int:
     return (boundary_dt.date() - datum).days * 24 + boundary_dt.hour
 
 
+def kalendertag_aus_fenster(
+    fenster_kwh: float, erste_stunde_kwh: float | None, erste_stunde_folgetag_kwh: float | None,
+) -> float | None:
+    """HAs **Kalendertag** ``[D 00:00, D+1 00:00)`` eines Tageswerts aus dem Backward-Fenster ``[D−1 23:00, D 23:00)``
+    (Fund-Päckchen E, N-815): ``Fenster(D) − Slot 0 von D + Slot 0 von D+1``. Slot 0 eines Tages ist die Stunde
+    ``[Vortag 23:00, 00:00)`` — die Zeile mit Beginn 23:00, die HA dem Vortag zuordnet.
+
+    Beide Randstunden sind, was HA für diese Stunde führt (der Zuwachs seiner Zeile mit Beginn 23:00; eine Stunde ohne Zeile,
+    weil die Statistik erst danach beginnt, trägt 0). ``None`` an einer Randstunde heißt «nicht bekannt» — HA führt die
+    Stunde nicht, obwohl die Statistik davor läuft, oder der Tag ist nicht gelesen —, dann gibt es **keinen Kalendertag**
+    (``None``): kein Ersatzwert, keine Verteilung."""
+    if erste_stunde_kwh is None or erste_stunde_folgetag_kwh is None:
+        return None
+    return fenster_kwh - erste_stunde_kwh + erste_stunde_folgetag_kwh
+
+
 def slot_start_ts(datum: date, slot: int) -> int | None:
     """Backward-Slot ``slot`` des Tages ``datum`` → ``start_ts`` der HA-Stundenzeile, die ihn schließt.
 

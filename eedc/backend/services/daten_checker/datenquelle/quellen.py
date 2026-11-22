@@ -56,6 +56,11 @@ class _DriftKontext:
     kanal_gruppen: dict = field(default_factory=dict)
     #: Sensorwechsel S2 (§8 Nr. 22 c): die verzeichneten Wechsel für den LTS-Tag (``lts_aggregator.wechsel_kwargs``).
     wechsel_kw: dict = field(default_factory=dict)
+    #: Fund-Päckchen E (N-815, ``drift_kalendertag.py``): je Kanal-Tag die Ziel-Schlüssel der Bilanz-Zähler (nur mit
+    #: ``sonstige_``-Schlüssel geladen) und der LTS-Read des Tages nach dem letzten geprüften ({Tag: Read}, nur wenn dieser
+    #: ein Kanal-Tag ist) — für den Vergleich gegen HAs Kalendertag.
+    bilanz_ziele: dict = field(default_factory=dict)
+    ha_folgetag: dict = field(default_factory=dict)
 
 
 async def _aktion_aeltere_quelle(db, anlage_id: int, letzter: date) -> Optional[Aktion]:
@@ -447,6 +452,11 @@ class QuellenChecks:
             wechsel_kw=await wechsel_kwargs(self.db, anlage.id),
         )
         await self._drift_pv_achse(ctx)
+        # N-815 (Fund-Päckchen E): Spiegel, Wahl je Tag und Gruppe und die Randstunde nach dem letzten Tag — vor der zweiten
+        # Achse, die an Kanal-Tagen gegen HAs Kalendertag vergleicht (``drift_kalendertag.py``).
+        from backend.services.daten_checker.datenquelle.drift_kalendertag import lade_kalendertag
+
+        await lade_kalendertag(self.db, ctx)
         self._drift_komponenten_achse(ctx)
 
         if not ctx.drift_pro_tag and not ctx.drift_komponente:
@@ -466,14 +476,8 @@ class QuellenChecks:
             )]
 
         # N-790 (ottokar): an einem Kanal-Tag liest der Tag den HA-Spiegel — «Tag reparieren» liest denselben Spiegel und
-        # kann die Drift nicht beheben. Mit Spiegel trägt die Zeile den Abgleich + Neu-Aggregation des Tages.
-        from backend.services.kanal.konsistenz import spiegel_quellen_anzahl
-
-        ctx.hat_spiegel = await spiegel_quellen_anzahl(self.db, anlage.id) > 0
-        if ctx.hat_spiegel:   # N-791: Bestand- oder Kanal-Tag je Gruppe (der Text der Zeile)
-            from backend.services.energie_profil.kanal_stunden import kanal_gruppen_der_tage
-
-            ctx.kanal_gruppen = await kanal_gruppen_der_tage(self.db, anlage.id, von, bis)
+        # kann die Drift nicht beheben. Mit Spiegel trägt die Zeile den Abgleich + Neu-Aggregation des Tages; N-791: Bestand-
+        # oder Kanal-Tag je Gruppe (der Text der Zeile). Beides lädt seit N-815 ``lade_kalendertag`` vor der zweiten Achse.
         # E5 V2: die Zeilen in `drift_zeilen.py`; die über 20 hinaus weggelassenen Tage stehen als `weitere` an der
         # Gruppenzeile der Tageszeilen (früher eine Restzeile «… plus n weitere Tag(e) mit Drift»).
         return drift_tageszeilen(ctx) + drift_komponentenzeilen(ctx)
@@ -572,9 +576,12 @@ class QuellenChecks:
     def _drift_komponenten_achse(ctx: _DriftKontext) -> None:
         """Achse 2 (N-201): je Nicht-PV-Komponente ohne ``batterie_*``, beide Seiten > 0, dieselben Schwellen.
 
-        Liest den aufgehobenen LTS-Read der ersten Achse (kein zweiter Read) und sammelt je Key in
-        ``ctx.drift_komponente``.
+        Liest den aufgehobenen LTS-Read der ersten Achse (kein zweiter Read; je Kanal-Tag ohne gelesenen Folgetag —
+        im Normalbetrieb nur gestern — die Randstunde des Folgetags, ``drift_kalendertag.lade_kalendertag``) und sammelt je Key in ``ctx.drift_komponente``.
+        N-815: an einem Kanal-Tag der Gruppe des Keys gilt HAs Kalendertag (``drift_kalendertag.vergleichswert``).
         """
+        from backend.services.daten_checker.datenquelle.drift_kalendertag import vergleichswert
+
         tz_list, komp_je_tag = ctx.tz_list, ctx.komp_je_tag
         ha_komp_je_tag, drift_komponente = ctx.ha_komp_je_tag, ctx.drift_komponente
 
@@ -612,6 +619,11 @@ class QuellenChecks:
                 if any(k.startswith(p) for p in PV_KOMPONENTEN_PREFIXE):
                     continue  # oben als Summe geprüft
                 if k.startswith("batterie_"):
+                    continue
+                # N-815: am Kanal-Tag der Gruppe HAs Kalendertag, sonst das Fenster; ``None`` (Randstunde nicht bekannt):
+                # an diesem Tag nicht verglichen (``drift_kalendertag.vergleichswert``).
+                ha_v = vergleichswert(ctx, tz.datum, k, ha_v)
+                if ha_v is None:
                     continue
                 eedc_v = tz_komp.get(k)
                 if not isinstance(eedc_v, (int, float)):
