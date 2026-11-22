@@ -72,6 +72,17 @@ def _wie_verlauf(s: dict) -> None:
     assert s["quellen"]["tagesebene"] is True and s["quellen"]["ha_statistics"] is False
 
 
+async def _zaehler_fakten(db, aid: int, monat: int):
+    """Die Monats-Fakten mit Tageswerten an ``ZaehlerFakten`` (``miss_fakten`` führt die Zähler nicht)."""
+    from backend.services.monats_fakten import lade_monats_fakten
+
+    fk = await lade_monats_fakten(db, aid, von=(mx.JAHR, monat), bis=(mx.JAHR, monat), inkl_nur_tageswerte=True)
+    if not fk:
+        return None
+    return {"pv": mx._r(fk[0].erzeugung.pv_kwh), "einsp": mx._r(fk[0].zaehler.einspeisung_kwh),
+            "netz": mx._r(fk[0].zaehler.netzbezug_kwh)}
+
+
 @pytest.mark.parametrize("fid", ["W2-V", "W2-L", "F13a", "W2-B"])
 async def test_sa_vergangener_monat_aus_den_kanaelen(fid, tmp_path):
     """I2/I3/I5/I6 der Matrix: PV, Netz, Eigenverbrauch, Autarkie = Monats-Fakten = Jahr-Verlauf (F13a/W2-B: Strings UND
@@ -80,18 +91,31 @@ async def test_sa_vergangener_monat_aus_den_kanaelen(fid, tmp_path):
     try:
         with mx._umgebung(mx._ha_aus()):
             s = await _sichten(db, aid, ids)
-            mai = await mx.miss_cockpit_monat(db, aid, 5)
-            mai_quellen = await _quellen(db, aid, 5)
-            mai_tw = await mx.miss_fakten(db, aid, ids, 5, tageswerte=True)
+            mai = await _sichten(db, aid, ids, 5)
+            mai_zaehler = await _zaehler_fakten(db, aid, 5)
+            april = await _sichten(db, aid, ids, 4)
+            april_zaehler = await _zaehler_fakten(db, aid, 4)
     finally:
         await db.close()
         await engine.dispose()
     _wie_verlauf(s)
-    # Gegenprobe: der Mai ist nicht voll gedeckt (Reihe ab 31.05. 18:00) — er bleibt leer, obwohl der 31.05. eine
-    # Tageszeile hat (eine Teilmenge der Tage wäre die «stille Untertreibung» von N-472; Antwort: der Abschluss).
-    assert mai_tw is not None                                           # die Tagesspur gibt es (Netz am Abend)
-    assert mai["pv"] is None and mai["einsp"] is None and mai["netz"] is None
-    assert mai_quellen["tagesebene"] is False
+    # Gegenprobe Mai — der Monat des ersten Stands. Die eigene Summe beginnt am 31.05. um 17:00. Seit R-D1 (Fund-Päckchen D,
+    # Entscheid Gernot 22.11.2026: der erste Stand einer MQTT-/eigenen Quelle ist Anfangsstand) zählen Tag und Monat, in dem
+    # die Quelle beginnt, ab diesem Stand — der Mai ist ein Kanal-Monat mit der Menge seit 17:00 (wie Home Assistant den
+    # Monat zeigt, in dem eine Statistik beginnt); bis D blieb er leer (Gegenprobe N-472). Alle Sichten nennen dieselbe Zahl.
+    assert mai_zaehler == {"pv": 0.0, "einsp": 0.0, "netz": 2.4}, mai_zaehler
+    for sicht in ("monat", "verlauf", "jahr"):
+        assert (mai[sicht]["einsp"], mai[sicht]["netz"]) == (0.0, 2.4), (sicht, mai[sicht])
+    assert mai["quellen"]["tagesebene"] is True
+    # Benannte Grenze N-585: Cockpit → Monat übernimmt aus der fünften Quelle PV nur über 0 (Einspeisung/Netz auch als
+    # gemessene 0, Flag ``*_erfasst``) — PV 0,0 der Fakten steht dort als «—» (Kandidat ohne ID, Bericht Fund-Päckchen E).
+    assert mai["fakten_tw"]["pv"] == 0.0 and mai["monat"]["pv"] is None
+    # Echte Gegenprobe: der April liegt ganz vor dem ersten Stand — in keiner Sicht ein Wert.
+    assert april_zaehler is None and april["fakten_tw"] is None
+    assert all(april["monat"][g] is None for g in ("pv", "einsp", "netz", "ev", "autarkie")), april["monat"]
+    assert april["jahr"] is None or all(april["jahr"][g] is None for g in ("pv", "einsp", "netz")), april["jahr"]
+    assert april["verlauf"] is None or all(april["verlauf"][g] is None for g in ("pv", "einsp", "netz")), april["verlauf"]
+    assert april["quellen"]["tagesebene"] is False
 
 
 async def test_reine_mqtt_anlage_ohne_zuordnung(tmp_path):
