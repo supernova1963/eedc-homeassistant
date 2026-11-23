@@ -17,6 +17,9 @@ die **ganze Historie der heutigen Entity** aus HAs Langzeitstatistik: ``sum``/``
 * **Nur die Vorgeschichte DERSELBEN Quelle.** Ist die erste Quelle des Kanals nicht der Spiegel der
   heutigen Entity (Sensortausch, MQTT davor), wird nichts gefüllt und das gezählt — die Historie einer
   anderen Entity gehört nicht in diese Reihe (für diese Zeit bleiben die bisherigen Zeilen die Quelle, §3b).
+* **Eine verworfene Quelle kommt nie zurück** (Fund-Päckchen H, H1 (b)): trägt der Kanal eine markierte reale Quelle
+  (``verworfen_ts``, Werkbank), füllt es nichts unter dem Beginn der ersten unmarkierten Quelle danach (``_untergrenze``) —
+  auch nicht bei derselben Entity (Quelle bei ``t`` geteilt, A → B → A); Grund ``vorgeschichte_verworfen``.
 * **Quelle.** Die Zeilen sind wörtlich; ihr ``offset`` ist der der ersten Quelle (dieselbe Rohreihe),
   deren ``gueltig_ab`` wird auf die neue erste Stunde gesenkt.
 
@@ -218,10 +221,13 @@ async def _fuelle_kanal(sitzungen: Sitzungen, anlage_id: int, ziel: _Ziel, ha_sv
 
     async with sitzungen() as db:
         kanal, erste_ts, erste_q = await _erste(db, anlage_id, ziel.key)
+        untergrenze = await _untergrenze(db, kanal)
     kanal_id = kanal.id if kanal is not None else None
     if erste_q is not None and (erste_q.familie != FAMILIE_SPIEGEL or erste_q.statistic_id != ziel.eid):
         return kanal_id, "vorgeschichte_andere_quelle", 0
     obergrenze = (erste_ts - 1) if erste_ts is not None else ts_bis_jetzt
+    if untergrenze is not None and obergrenze < untergrenze:
+        return kanal_id, "vorgeschichte_verworfen", 0
     neu = 0
     while True:
         anker = await asyncio.to_thread(ha_svc.get_stundenzeile_bis, ziel.eid, obergrenze)
@@ -231,12 +237,16 @@ async def _fuelle_kanal(sitzungen: Sitzungen, anlage_id: int, ziel: _Ziel, ha_sv
             _ha_erreichbar(ha_svc)
             break
         a_ts = float(anker["start_ts"])
+        if untergrenze is not None and a_ts < untergrenze:   # H1 (b): unter der verworfenen Zeit holt es nichts
+            return kanal_id, (None if neu else "vorgeschichte_verworfen"), neu
         gelesen = await asyncio.to_thread(
             ha_svc.get_stundenzeilen_mehrere, {ziel.eid: a_ts - block_stunden * _STUNDE}, a_ts)
         if ziel.eid not in gelesen:
             _ha_erreichbar(ha_svc)
             return kanal_id, "ha_kennt_sensor_nicht", neu
         meta, roh = gelesen[ziel.eid]
+        if untergrenze is not None:
+            roh = [z for z in roh if z["start_ts"] >= untergrenze]
         if not roh:
             _ha_erreichbar(ha_svc)
             break
@@ -272,6 +282,17 @@ async def _fuelle_kanal(sitzungen: Sitzungen, anlage_id: int, ziel: _Ziel, ha_sv
         erg.bloecke += 1
         obergrenze = erste_neu - 1
     return kanal_id, None, neu
+
+
+async def _untergrenze(db: AsyncSession, kanal: Optional[Kanal]) -> Optional[int]:
+    """Fund-Päckchen H, H1 (b): unter dieser Stunde füllt das Nachfüllen nichts — eine verworfene reale Quelle kommt nie
+    zurück, auch nicht bei derselben Entity (``kanal/verwerfen.untergrenze_nach_verworfen``); ``None`` ohne solche Quelle."""
+    from backend.services.kanal.verwerfen import untergrenze_nach_verworfen
+
+    if kanal is None:
+        return None
+    return untergrenze_nach_verworfen(list((await db.execute(
+        select(KanalQuelle).where(KanalQuelle.kanal_id == kanal.id))).scalars().all()))
 
 
 async def _platzhalter_davor(db: AsyncSession, kanal_id: int, erste_neu: int) -> None:

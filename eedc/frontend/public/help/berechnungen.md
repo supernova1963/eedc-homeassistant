@@ -1921,8 +1921,10 @@ aggregiert wurden, tragen `NULL`, und `NULL` heißt „keine Aussage", nicht „
 >
 > * **Derselbe Anteil mit und ohne Abschluss** (N-631): deckt die E-Mob-Gruppe den Monat, nehmen die Monats-Fakten,
 >   *Cockpit → Monat* und die Sichten außerhalb der Fakten (`lade_abgeleitete_ladeanteile`: Komponenten-Hub, Aussichten,
->   HA-Export) diesen Anteil; sonst die Quote der Tagesebene. Angewandt wird er auf die Ladung der
->   Zeilen ohne eigene Aufteilung (Punkt 3).
+>   HA-Export) diesen Anteil; sonst die Quote der Tagesebene (`TagesMonatsSumme.abgeleiteter_pv_anteil` aus
+>   `kanal/bilanz_leser.lade_monats_summen`) — seit Fund-Päckchen H (H3) auch *Cockpit → Monat*, wenn keine gespeicherte
+>   Schätzung den Monat trägt (bis dahin zählte die Route die Heimladung ohne Wallbox-Anteil dort ganz zum Netz). Angewandt
+>   wird er auf die Ladung der Zeilen ohne eigene Aufteilung (Punkt 3).
 > * **Die Lademengen eines Monats ohne Abschluss** kommen aus den Kanälen der E-Mob-Gruppe (je Gerät jedes Energiefeld
 >   mit Zähler — die Felder, die ein Abschluss schriebe) und laufen durch dieselbe Faltung und dieselbe eine Funktion wie
 >   eine gespeicherte Monatszeile: Wallbox-Regel, Pool, Rest nach km, Dienstwagen getrennt. Ein Monat mit Zeile behält
@@ -1942,9 +1944,11 @@ aggregiert wurden, tragen `NULL`, und `NULL` heißt „keine Aussage", nicht „
 >   `slot_konvention.echte_stunden_des_slots`, auch an den Umstellungstagen) — wie der Ladeblock-Eingang. Trägt der Tag
 >   keine gedeckte Ladestunde, bleibt sein Anteil leer («keine Aussage»). Die Fenster liest die Mengen-Weiche des Tages
 >   (`kanal/stillstand.fenster_im_bereich`, nur markierbare Fenster); ein Tag ohne Bilanz aus den Kanälen trägt keine Marke
->   (Grenze G-4), der abgeleitete Kanal rechnet ohnehin nur aus Kanälen. **Grenze:** schon geschriebene Zeilen des
->   abgeleiteten Kanals behalten ihren PV-Teil, bis eedc sie neu schreibt (`verwerfe_ab`: Konsistenzlauf mit Korrektur,
->   Sensorwechsel); eine gespeicherte Tageszeile ändert sich mit «Tag neu aggregieren».
+>   (Grenze G-4), der abgeleitete Kanal rechnet ohnehin nur aus Kanälen. **Bestand:** die vor dieser Regel geschriebenen
+>   Zeilen des abgeleiteten Kanals verwirft ein Einmal-Lauf beim Start ab dem ersten markierten Fenster in seinem Bereich
+>   (`services/migrations/migrate_heimladung_stillstand.py`, `verwerfe_ab` nur dieses Kanals; Anlagen ohne solchen Kanal
+>   oder ohne Fenster bleiben unberührt), der nächste Stundenlauf schreibt sie mit der Regel neu (Fund-Päckchen H, H2);
+>   gespeicherte Monatswerte bleiben. Eine gespeicherte Tageszeile ändert sich mit «Tag neu aggregieren».
 > * **Rückwirkung nur für den laufenden Monat:** ein neuer Kanal beginnt beim ersten Lauf mit dem laufenden Monat
 >   (`aufbaubar_ab` eine Stunde vor dem Monatsfenster), sobald der Spiegel die Stunden trägt; kein abgeschlossener Monat
 >   wird aus ihm neu gerechnet. Korrigiert der Konsistenzlauf den Spiegel, wird der Kanal ab der korrigierten Stunde neu

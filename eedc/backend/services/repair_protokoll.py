@@ -39,6 +39,7 @@ OPERATION_LABELS = {
     "delete_monatsdaten": "Monatsdaten löschen",
     "reset_cloud_import": "Cloud-Import-Werte zurücksetzen",
     "verwerfen_vor_quellbeginn": "Werte vor dem Sensorbeginn verwerfen",
+    "verwerfen_vor_zeitpunkt": "Werte eines Felds vor einem Zeitpunkt verwerfen",
     # E3 Daten-Checker (`repair_operationen_checker.py`); Vitest-Spiegel `src/test/operation-labels.test.ts`.
     "temperatur_aus_messung": "Temperatur aus Messung übernehmen",
     "feldwert_entfernen": "Wert in nicht geführtem Feld entfernen",

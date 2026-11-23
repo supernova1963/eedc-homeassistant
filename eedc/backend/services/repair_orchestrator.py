@@ -79,6 +79,8 @@ class RepairOperationType(str, Enum):
     #: HA-Bauform S3, E-S3-5: Werte eines Feldes vor dem Beginn seines jüngsten Sensors verwerfen (Kanal + Bestand,
     #: feldgenau) — `services/verwerfen_vor_quellbeginn.py`.
     VERWERFEN_VOR_QUELLBEGINN = "verwerfen_vor_quellbeginn"
+    #: Fund-Päckchen H (H1): Werte EINES Felds vor einem frei gewählten Zeitpunkt — `services/verwerfen_vor_zeitpunkt.py`.
+    VERWERFEN_VOR_ZEITPUNKT = "verwerfen_vor_zeitpunkt"
     SOLCAST_REWRITE = "solcast_rewrite"
     #: E3 Daten-Checker (Konzept §3.2): Plan/Ausführen in `services/repair_operationen_checker.py`.
     TEMPERATUR_AUS_MESSUNG = "temperatur_aus_messung"
@@ -1574,6 +1576,9 @@ async def plan(req: RepairOperationRequest, db: AsyncSession) -> RepairPlan:
         )
     elif req.operation == RepairOperationType.VERWERFEN_VOR_QUELLBEGINN:
         estimated, warnings, op_preview = await _plan_verwerfen_vor_quellbeginn(req, db)
+    elif req.operation == RepairOperationType.VERWERFEN_VOR_ZEITPUNKT:
+        from backend.services import verwerfen_vor_zeitpunkt as vz
+        estimated, warnings, op_preview = await vz.plan(db, req.anlage_id, req.params)
     elif req.operation == RepairOperationType.SOLCAST_REWRITE:
         await _plan_solcast_rewrite(req, db)
         # Unreachable wegen NotImplementedError, hilft mypy
@@ -1657,6 +1662,9 @@ async def execute(plan_id: UUID, db: AsyncSession) -> RepairResult:
         summary = await _execute_reset_cloud_import(req, db)
     elif req.operation == RepairOperationType.VERWERFEN_VOR_QUELLBEGINN:
         summary = await _execute_verwerfen_vor_quellbeginn(req, db)
+    elif req.operation == RepairOperationType.VERWERFEN_VOR_ZEITPUNKT:
+        from backend.services import verwerfen_vor_zeitpunkt as vz
+        summary = await vz.fuehre_aus(db, req.anlage_id, req.params)
     elif req.operation == RepairOperationType.SOLCAST_REWRITE:
         raise NotImplementedError("SOLCAST_REWRITE ist Päckchen 6")
     else:  # E3: die Operationen der Daten-Checker-Knöpfe

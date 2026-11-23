@@ -1533,6 +1533,11 @@ async def _run_data_migrations() -> None:
             ohne_leser_inbound_stempel_auf_keine,
         )
 
+        # Fund-Päckchen H (H2): abgeleiteter Heimlade-Kanal ab dem ersten markierten Erfassungs-Stillstand neu (der
+        # Stundenlauf schreibt mit der Regel aus Nachtrag G). Lokal, kein HTTP.
+        from backend.services.migrations.migrate_heimladung_stillstand import NAME as _H2, heimladung_ab_stillstand_neu
+        await _apply_once(_H2, heimladung_ab_stillstand_neu)
+
         # N-545: Die Sensor-Definitionen eines NEUEN Pakets starten bei einer
         # BESTANDSinstallation abgewaehlt (Entscheid Gernot 22.09.2026). Kein
         # `_apply_once` — der Name einer Migration gilt einmal je Installation,

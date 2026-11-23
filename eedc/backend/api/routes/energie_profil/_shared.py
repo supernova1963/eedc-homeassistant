@@ -707,9 +707,11 @@ class TagWerteResponse(BaseModel):
     netto_ertrag: Optional[float] = None
     netto_bilanz: Optional[float] = None
     # CO₂ — der **PV-Anteil** der kanonischen Bilanz (`berechne_co2_bilanz`,
-    # ADR-001/DI-2): Eigenverbrauch × Strommix-Faktor. WP-Wärme und
-    # E-Mobilitäts-Kilometer sind Monatsgrößen (`InvestitionMonatsdaten`) und auf
-    # Tagesebene nicht gemessen — dieser Wert enthält sie deshalb **nicht**.
+    # ADR-001/DI-2): Eigenverbrauch × Strommix-Faktor. Die CO₂-Einsparung von
+    # Wärmepumpe und E-Mobilität rechnet eedc nur je Monat (Eingänge Wärme, Strom,
+    # Kilometer und Netzladung des Monats, `core/calculations.py`) — dieser
+    # Wert enthält sie **nicht**, auch wenn die Tageszeile Wärme und Kilometer
+    # zeigt (`services/energie_profil/tage_werte.py`: nur `co2_pv_kg`).
     # Bis 2026-07-31 stand hier `erzeugung × Faktor` (F-6): das schrieb auch der
     # eingespeisten kWh die volle Netzstrom-Vermeidung gut.
     # None, wenn der Eigenverbrauch nicht erfasst ist (s. `eigenverbrauch`) —

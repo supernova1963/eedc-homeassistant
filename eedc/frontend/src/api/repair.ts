@@ -19,6 +19,7 @@ export type RepairOperationType =
   | 'delete_monatsdaten'
   | 'reset_cloud_import'
   | 'verwerfen_vor_quellbeginn'
+  | 'verwerfen_vor_zeitpunkt'
   | 'solcast_rewrite'
   // E3 Daten-Checker (backend `services/repair_operationen_checker.py`)
   | 'temperatur_aus_messung'
@@ -150,6 +151,15 @@ export const OPERATION_META: OperationMeta[] = [
       'danach die Geschichte des neuen Sensors, soweit Home Assistant sie führt, und bildet die betroffenen Tage im ' +
       'Hintergrund neu. Gespeicherte Monatswerte bleiben. Kein Rückweg in eedc: die Vorschau sagt, was danach geschieht.',
     inWorkbench: true,
+  },
+  {
+    // Fund-Päckchen H (H1): im Backend gebaut, in der Werkbank noch nicht angeboten (Halt im Bericht FUNDE-H).
+    type: 'verwerfen_vor_zeitpunkt',
+    label: 'Werte eines Felds vor einem Zeitpunkt verwerfen',
+    description:
+      'Verwirft für EIN Feld alle Werte vor einem gewählten Zeitpunkt, als wäre seine Quelle erst ab dann zugeordnet. ' +
+      'Gespeicherte Monatswerte bleiben. Kein Rückweg in eedc.',
+    inWorkbench: false,
   },
   // E3 Daten-Checker: die Knöpfe der Befunde als Operationen (Labels wörtlich wie `repair_protokoll.OPERATION_LABELS`,
   // Vitest-Spiegel `src/test/operation-labels.test.ts`).

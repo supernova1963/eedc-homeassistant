@@ -101,8 +101,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Im Anteil des Tages fällt die Stunde heraus (trägt der Tag keine andere Ladestunde, bleibt er leer); in dem Anteil, den
   eedc mit Home Assistant Stunde für Stunde für den Monat fortschreibt, zählt ihre Ladung zum Netz — wie bei jeder Stunde,
   über die die Zähler nichts sagen. Eine Wallbox oder ein E-Auto mit eigenem PV-Ladezähler ist nicht betroffen. Gilt für
-  Tage und Stunden, die eedc ab jetzt bildet: ein gespeicherter Tag ändert sich mit „Tag neu aggregieren“, schon
-  fortgeschriebene Stunden des Monatsanteils behalten ihren Wert.
+  Tage und Stunden, die eedc ab jetzt bildet: ein gespeicherter Tag ändert sich mit „Tag neu aggregieren“; den
+  fortgeschriebenen Monatsanteil schreibt eedc nach dem Update einmal ab dem ersten markierten Erfassungs-Ausfall neu
+  (gemessen an einer Anlage mit 12-stündigem Ausfall: November-Anteil 85,1 % → 70,5 %). Gespeicherte Monatswerte ändern
+  sich nicht.
+- **Cockpit → Monat: Heimladung ohne PV-Ladezähler zählte ganz als Netz.** Deckten die Zähler den Monat nicht ganz (etwa
+  nach einem Ausfall von Home Assistant) und trug keine gespeicherte Schätzung den Monat, rechnete *Cockpit → Monat* die
+  Heimladung eines Autos ohne PV-Ladezähler vollständig als Netzladung, der PV-Anteil stand leer; die Monats-Fakten (und
+  damit derselbe Monat nach dem Abschluss) nahmen den Anteil aus den Tageswerten. Jetzt nimmt *Cockpit → Monat* denselben
+  Anteil (gemessen an einer Kopie ohne PV-Ladezähler, November: PV leer / Netz 104,98 kWh → PV 89,30 / Netz 15,68 kWh,
+  85,1 %).
 - **Datei hochladen bei gesetzter PIN.** Mit Einstellungs-Sperre scheiterten das Hochladen einer Datei in der Infothek und
   des Horizontprofils in der Solarprognose immer mit „Einstellungen sind gesperrt. Bitte mit der PIN entsperren.“ — auch
   nach dem Entsperren. Der Upload trägt den Nachweis der Entsperrung jetzt mit wie jede andere Änderung.

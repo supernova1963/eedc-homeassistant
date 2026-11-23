@@ -14,7 +14,10 @@ Drei Endpoints für die zentrale Reparatur-Werkbank:
   DELETE /api/repair/plans/{plan_id}        → verwirft offenen Plan
   GET    /api/repair/kanal-auswahl?anlage_id=… → Felder mit Sensortausch für
                                               «Werte vor dem Sensorbeginn
-                                              verwerfen» (HA-Bauform S3, E-S3-5)
+                                              verwerfen» (HA-Bauform S3, E-S3-5);
+                                              mit &alle=true alle Felder für
+                                              «Werte eines Felds vor einem
+                                              Zeitpunkt verwerfen» (Fund-Päckchen H)
 
 Konzept: docs/archive/KONZEPT-DATENPIPELINE.md Sektion 5.
 
@@ -143,11 +146,17 @@ class KanalAuswahlResponse(BaseModel):
 @router.get("/kanal-auswahl", response_model=KanalAuswahlResponse)
 async def kanal_auswahl(
     anlage_id: int = Query(..., description="Anlage-ID"),
+    alle: bool = Query(False, description="Alle Felder mit Zähler-/Stand-Kanal (Fund-Päckchen H)"),
     db: AsyncSession = Depends(get_db),
 ):
     """Zählerkanäle zugeordneter Felder mit mindestens zwei Quellen (Sensortausch), je Kanal die Quellen
     (`gueltig_ab`, Familie, `statistic_id`, Marke «verworfen am») und die Vorbelegung des Zeitpunkts (Beginn der
-    jüngsten Quelle). Nur lesend."""
+    jüngsten Quelle). Nur lesend. Mit ``alle=true`` (Fund-Päckchen H, «Werte eines Felds vor einem Zeitpunkt
+    verwerfen») jedes Feld mit Zähler- oder Stand-Kanal, auch mit nur einer Quelle."""
+    if alle is True:                  # direkt gerufen (Proben) steht hier der Query-Vorgabewert
+        from backend.services.verwerfen_vor_zeitpunkt import auswahl as auswahl_alle
+
+        return KanalAuswahlResponse(kanaele=await auswahl_alle(db, anlage_id))
     from backend.services.verwerfen_vor_quellbeginn import auswahl
 
     return KanalAuswahlResponse(kanaele=await auswahl(db, anlage_id))

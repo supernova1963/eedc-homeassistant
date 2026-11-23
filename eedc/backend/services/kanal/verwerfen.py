@@ -219,6 +219,41 @@ async def markiere_quellen(db: AsyncSession, kanal_id: int, t: int, jetzt_ts: in
     return int(res.rowcount or 0)
 
 
+async def teile_quelle(db: AsyncSession, kanal_id: int, t: int, jetzt_ts: int) -> tuple[int, int]:
+    """Werkbank «Werte eines Felds vor einem Zeitpunkt verwerfen» (Fund-Päckchen H, H1 (a)): die Quelle **bei ``t`` teilen**.
+    Die Quelle, die bei ``t`` gilt (größtes ``gueltig_ab < t``), bekommt eine zweite Zeile derselben Entity ab ``t`` (Familie,
+    Kennung und ``offset`` wie sie — die Werte ab ``t`` lesen unverändert); danach tragen alle Quellen vor ``t`` die Marke
+    «verworfen am» (``markiere_quellen``). Getrennt wird nur eine unmarkierte Quelle — eine schon verworfene bleibt es auch ab
+    ``t``; beginnt eine Quelle genau bei ``t``, gibt es nichts zu teilen. Kein Schema, keine Zeile von ``kanal_statistik``
+    (die löscht ``loesche_zeilen``). Returns: ``(markierte Quellen, 1 wenn geteilt sonst 0)``."""
+    davor = (await db.execute(select(KanalQuelle).where(and_(
+        KanalQuelle.kanal_id == kanal_id, KanalQuelle.gueltig_ab < t)).order_by(KanalQuelle.gueltig_ab.desc())
+        .limit(1))).scalar_one_or_none()
+    ab_t = (await db.execute(select(func.count()).select_from(KanalQuelle).where(and_(
+        KanalQuelle.kanal_id == kanal_id, KanalQuelle.gueltig_ab == t)))).scalar_one()
+    geteilt = 0
+    if davor is not None and davor.verworfen_ts is None and not ab_t:
+        db.add(KanalQuelle(kanal_id=kanal_id, gueltig_ab=t, familie=davor.familie, statistic_id=davor.statistic_id,
+                           offset=davor.offset))
+        await db.flush()
+        geteilt = 1
+    return await markiere_quellen(db, kanal_id, t, jetzt_ts), geteilt
+
+
+def untergrenze_nach_verworfen(quellen: list[KanalQuelle]) -> Optional[int]:
+    """**Eine Bedeutung der Marke** (Fund-Päckchen H, H1 (b)): eine verworfene reale Quelle (``verworfen_ts`` mit Entity, kein
+    Platzhalter von «löschen») wird nie zurückgeholt — gleich, ob sie dieselbe oder eine andere Entity hat. Die Grenze, unter
+    die das Nachfüllen nicht schreibt: der Beginn der ersten unmarkierten Quelle nach der letzten markierten realen Quelle
+    (``None``: keine markierte reale Quelle; ``0`` ist nie das Ergebnis — ohne unmarkierte Quelle danach die Grenze
+    ``2**62``, es wird nichts gefüllt)."""
+    qs = sorted(quellen, key=lambda q: q.gueltig_ab)
+    marken = [i for i, q in enumerate(qs) if q.verworfen_ts is not None and q.statistic_id is not None]
+    if not marken:
+        return None
+    danach = [q.gueltig_ab for q in qs[marken[-1] + 1:] if q.verworfen_ts is None]
+    return danach[0] if danach else 2 ** 62
+
+
 def platzhalter_bedingung():
     """Der **Platzhalter** eines Kanals (Sensorwechsel Weg B, Bauplan Nr. 180 Option A): eine verworfene Quelle ohne Entity
     (``verworfen_ts`` gesetzt, ``statistic_id`` leer). Nur «Daten vor der Änderung löschen» legt ihn an

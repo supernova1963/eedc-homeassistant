@@ -11,7 +11,10 @@ ihrem eigenen Weg wie in v4.3.1 (sie löscht keine Zählerstände, füllt nichts
   gelöscht: die Zeit davor ist bewusst leer (die übrigen Felder behalten ihre Kanal-Deckung, ``bilanz_adapter.BewusstLeer``),
   und das Nachfüllen holt die Geschichte des neuen Sensors, soweit Home Assistant sie führt (``nachfuellen._erste_ohne_platzhalter``)
   — das Feld verhält sich, als wäre der neue Sensor von Anfang an zugeordnet. Ohne: die Quellen bekommen die Marke «verworfen
-  am» (Werkbank-Form, ein Halt fürs Nachfüllen).
+  am» (Werkbank-Form, ein Halt fürs Nachfüllen). Mit ``teilen`` (Werkbank «Werte eines Felds vor einem Zeitpunkt verwerfen»,
+  ``services/verwerfen_vor_zeitpunkt.py``, Fund-Päckchen H): die bei ``t`` geltende Quelle wird geteilt
+  (``kanal/verwerfen.teile_quelle``), die Nachfüll-Marke bleibt — das Feld verhält sich, als wäre seine Quelle erst ab ``t``
+  zugeordnet.
 * **Zählerstände** (``sensor_snapshots``) und **MQTT-Rohstände** des Schlüssels vor ``t`` (``verwerfe_staende``).
 * **Wechsel-Zeilen** des Schlüssels (nur mit ``zum_platzhalter``; ``loesche_wechsel``): ohne sie gilt für jede Zeit die heutige
   Zuordnung. Die Werkbank löscht über denselben Baustein die Wechsel bis zum Ende der ersten Stunde ab ihrem Zeitpunkt, einen
@@ -64,6 +67,8 @@ class Geloescht:
     w0: Optional[int] = None
     abgeleitet_familien: Optional[frozenset] = None
     abgeleitet_verworfen: int = 0
+    #: H1 (Werkbank «vor einem Zeitpunkt»): 1, wenn die bei ``t`` geltende Quelle geteilt wurde.
+    geteilt: int = 0
     #: Die Tage, die der Lauf neu bildet (Tageszeile trug das Feld, dazu der Tag von ``t``).
     tage: list[date] = field(default_factory=list)
 
@@ -98,7 +103,8 @@ async def _tage_mit_feld(db: AsyncSession, anlage_id: int, ziele, bis_tag: date)
     return sorted({row.datum for row in await _tz_zeilen(db, anlage_id, bis_tag, ziele) if tz_keys_der_zeile(row, ziele)})
 
 
-async def _kanal(db: AsyncSession, g: Geloescht, anlage_id: int, t_ts: int, jetzt_ts: int, zum_platzhalter: bool) -> None:
+async def _kanal(db: AsyncSession, g: Geloescht, anlage_id: int, t_ts: int, jetzt_ts: int, zum_platzhalter: bool,
+                 teilen: bool = False) -> None:
     from backend.models.kanal import Kanal, KanalNachfuellung, KanalStatistik
     from backend.services.kanal import verwerfen as kv
     from backend.services.kanal.abgeleitet import verwerfe_ab
@@ -114,6 +120,8 @@ async def _kanal(db: AsyncSession, g: Geloescht, anlage_id: int, t_ts: int, jetz
     if zum_platzhalter:
         g.quellen = await kv.zum_platzhalter(db, k.id, t_ts, jetzt_ts)
         await db.execute(delete(KanalNachfuellung).where(KanalNachfuellung.kanal_id == k.id))
+    elif teilen:                     # H1: Quelle bei t teilen, die Nachfüll-Marke bleibt (nichts vor t kommt zurück)
+        g.quellen, g.geteilt = await kv.teile_quelle(db, k.id, t_ts, jetzt_ts)
     else:
         g.quellen = await kv.markiere_quellen(db, k.id, t_ts, jetzt_ts)
     if g.w0 is not None:
@@ -145,8 +153,13 @@ async def loesche_wechsel(db: AsyncSession, anlage_id: int, key: str, *, bis: Op
 
 
 async def loesche_vor(db: AsyncSession, anlage, key: str, t: datetime, *, auch_abschluss: bool, zum_platzhalter: bool,
-                      jetzt: Optional[datetime] = None) -> Geloescht:
-    """Die Daten des Felds ``key`` vor ``t`` löschen (Modul-Docstring), in der Sitzung des Aufrufers, ohne Commit."""
+                      jetzt: Optional[datetime] = None, teilen: bool = False) -> Geloescht:
+    """Die Daten des Felds ``key`` vor ``t`` löschen (Modul-Docstring), in der Sitzung des Aufrufers, ohne Commit.
+
+    ``teilen`` (Werkbank «Werte eines Felds vor einem Zeitpunkt verwerfen», Fund-Päckchen H): statt Platzhalter bzw. Marke
+    wird die bei ``t`` geltende Quelle geteilt (``kanal/verwerfen.teile_quelle``), die Nachfüll-Marke bleibt, und die
+    verzeichneten Wechsel gehen wie in der Werkbank-Form nur bis zum Ende der ersten Stunde ab ``t`` (``loesche_wechsel``
+    mit ``bis``/``gleiche_quelle_bis``) — das Feld verhält sich, als wäre seine Quelle erst ab ``t`` zugeordnet."""
     from backend.services import verwerfen_vor_quellbeginn as vq
     from backend.services.kanal import merken
     from backend.services.kanal.abgeleitet import tag_der_stunde
@@ -157,10 +170,13 @@ async def loesche_vor(db: AsyncSession, anlage, key: str, t: datetime, *, auch_a
     ziele = await vq.bestand_ziele(db, anlage, key)
     bis_tag = tag_der_stunde(t_ts)
     g.tage = sorted(set(await _tage_mit_feld(db, anlage.id, ziele, bis_tag)) | {bis_tag})
-    await _kanal(db, g, anlage.id, t_ts, int(jetzt.timestamp()), zum_platzhalter)
+    await _kanal(db, g, anlage.id, t_ts, int(jetzt.timestamp()), zum_platzhalter, teilen)
     g.staende, g.rohstaende = await verwerfe_staende(db, anlage.id, key, t)
     if zum_platzhalter:
         g.wechsel = await loesche_wechsel(db, anlage.id, key)
+    elif teilen:
+        g.wechsel = await loesche_wechsel(db, anlage.id, key, bis=datetime.fromtimestamp(t_ts + 3600),
+                                          gleiche_quelle_bis=t)
     abschluss = frozenset() if auch_abschluss else await vq.abschluss_monate(db, anlage.id)
     g.bestand = await vq.leere_bestand(db, anlage.id, ziele, bis_tag, abschluss)
     merken.invalidiere(anlage.id, db=db)

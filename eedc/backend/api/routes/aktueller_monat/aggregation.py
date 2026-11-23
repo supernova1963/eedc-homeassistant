@@ -516,7 +516,7 @@ def emob_heimladung_pool(
     *, direct_fields, investitionen, jahr, monat, resolved,
     monats_fakt=None, ist_aktueller_monat=True,
     heimlade_quellen=frozenset(), ha_felder_mit_daten=frozenset(),
-    bloecke=None, kanal_quote=(False, None), wallbox_zuordnung=None,
+    bloecke=None, kanal_quote=(False, None), wallbox_zuordnung=None, tages_quote=None,
 ):
     """E-Mobilitaet: Heimladung nach der **einen Funktion** (veraendert `resolved` in place).
 
@@ -595,15 +595,23 @@ def emob_heimladung_pool(
     wallbox_in_betrieb = geraete.wallbox_in_betrieb
     # HA-Bauform E4c (N-631): deckt die E-Mob-Gruppe den Monat aus den Kanälen, gilt ihr PV-Anteil — angewandt wie in
     # den Monats-Fakten (`bau.py`): erst auf die Zeilen ohne eigene Aufteilung (`reichere_ladezeilen_an`), dann als
-    # Quote der einen Funktion. Sonst die Quote einer gespeicherten Schätzung wie bisher.
+    # Quote der einen Funktion. Sonst die Quote einer gespeicherten Schätzung wie bisher, und ohne sie (Fund-Päckchen H,
+    # H3) die Quote der Tagesebene wie die Monats-Fakten (`bau.py`: `tages_summe.abgeleiteter_pv_anteil`) — `None` bleibt
+    # «keine Aussage»; bis H3 stand hier `None` und die Heimladung ohne Wallbox-Anteil zählte ganz als Netz.
     _kanal_gedeckt, _kanal_quote = kanal_quote
-    if _kanal_gedeckt:
+    _schaetzung = (
+        pv_anteil_prozent(gespeichert.ladung_pv_kwh, gespeichert.ladung_kwh, faktor=1)  # Layer, Z1b
+        if not _kanal_gedeckt and gespeichert is not None and gespeichert_quelle == QUELLE_SCHAETZUNG
+        and gespeichert.ladung_anteil_abgeleitet else None
+    )
+    _quote = _kanal_quote if _kanal_gedeckt else _schaetzung if _schaetzung is not None else tages_quote
+    if _kanal_gedeckt or (_schaetzung is None and _quote is not None):
         from backend.services.emob_ladeanteil import reichere_ladezeilen_an
 
         _ea_ids = list(eauto_je_inv)
         _ea, wallbox_daten, _ = reichere_ladezeilen_an(
             eauto_daten=[eauto_je_inv[i] for i in _ea_ids], wallbox_daten=wallbox_daten,
-            quote=_kanal_quote, wallbox_in_betrieb=wallbox_in_betrieb,
+            quote=_quote, wallbox_in_betrieb=wallbox_in_betrieb,
         )
         eauto_je_inv = dict(zip(_ea_ids, _ea))
     entscheid = entscheide_emob_heimladung(
@@ -617,15 +625,7 @@ def emob_heimladung_pool(
         heimlade_quellen=heimlade_quellen if ist_aktueller_monat else (),
         # N-555 Stufe 3 (Regel 9 Punkt 3): geltende Ladeblöcke sind die Messung je Auto.
         bloecke=bloecke,
-        # Die Quote der gespeicherten Schaetzung gilt weiter; eine andere kennt
-        # dieser Zweig nicht (die Tagesebene liest die Schicht).
-        pv_quote=(
-            _kanal_quote if _kanal_gedeckt
-            else pv_anteil_prozent(gespeichert.ladung_pv_kwh, gespeichert.ladung_kwh, faktor=1)  # Layer, Z1b
-            if gespeichert is not None and gespeichert_quelle == QUELLE_SCHAETZUNG
-            and gespeichert.ladung_anteil_abgeleitet
-            else None
-        ),
+        pv_quote=_quote,
     )
     _pool_in_resolved(
         entscheid=entscheid, resolved=resolved, direct_fields=direct_fields,

@@ -13,10 +13,9 @@ der Stundenlauf legt die neue Quelle an, die Werkbank verwirft vor ihrem Beginn 
 
 und jede Probe zählt die Kanalzeilen vor ``t``: **0**.
 
-⛔ **Offen (H-2 im Bericht E-S3-5, gemessen, nicht gesperrt):** wird später wieder der ALTE Sensor zugeordnet (A → B,
-verwerfen, → A), füllt der Startlauf die verworfene Zeit aus HA wieder auf — ``_fuelle_kanal`` sieht als erste Quelle
-den alten Sensor, der jetzt wieder die Entity der Zuordnung ist. Die Probe ``test_rueckkehr_zum_alten_sensor_…`` hält den
-gemessenen Stand fest; sie kippt, wenn der Master eine Sperre beschließt.
+**H-2 (Bericht E-S3-5) seit Fund-Päckchen H gesperrt:** wird später wieder der ALTE Sensor zugeordnet (A → B, verwerfen,
+→ A), füllt der Startlauf die verworfene Zeit nicht mehr aus HA auf — eine verworfene Quelle kommt nie zurück, gleich
+welche Entity (``nachfuellen._untergrenze``). Probe ``test_rueckkehr_zum_alten_sensor_…``.
 
 Schwesterdateien: test_werkbank_verwerfen_vor_quellbeginn.py, test_kanal_nachfuellen.py, test_kanal_konsistenz.py,
 test_kanal_eigene_summe_nachfuellen.py.
@@ -216,13 +215,14 @@ async def test_b_staende_nachfuellen_fuellt_nichts_vor_t(ha, datei):
     assert await _vor_t(sitzungen, k.id, t) == 0
 
 
-async def test_rueckkehr_zum_alten_sensor_fuellt_die_verworfene_zeit_wieder_halt_h2(ha, datei):
-    """⛔ H-2, gemessen: A → B, verwerfen vor B, dann wieder A zugeordnet ⇒ der Startlauf füllt die Zeit vor t aus HAs
-    Statistik von A wieder auf (``_fuelle_kanal``: erste Quelle = A = heutige Entity). Hält den Stand fest; keine Sperre
-    gebaut (Auftrag Punkt 4)."""
+async def test_rueckkehr_zum_alten_sensor_fuellt_die_verworfene_zeit_nicht_wieder(ha, datei):
+    """H-2, seit Fund-Päckchen H (H1 (b), Entscheid Master 23.11.2026 «eine Bedeutung der Marke») gesperrt: A → B, verwerfen
+    vor B, dann wieder A zugeordnet ⇒ der Startlauf füllt die Zeit vor t NICHT aus HAs Statistik von A auf
+    (``nachfuellen._untergrenze``: unter der ersten unmarkierten Quelle nach der markierten holt er nichts). Bis dahin hielt
+    die Probe fest, dass die verworfene Zeit zurückkam."""
     svc, sitzungen, aid, k, t, vorher, neu_mid = await _tausch_und_verwerfen(ha, datei)
     await _zuordnung(sitzungen, aid, einspeisung="sensor.einsp")
     await _stundenlauf(sitzungen, aid, svc, STUNDENLAUF + timedelta(days=2))
     assert [q.statistic_id for q in await _quellen(sitzungen, k.id)] == ["sensor.einsp", "sensor.einsp_neu", "sensor.einsp"]
     await nachfuellen_anlage(sitzungen, aid, jetzt=JETZT, ha_svc=svc)
-    assert await _vor_t(sitzungen, k.id, t) == vorher           # die verworfene Zeit ist wieder da
+    assert await _vor_t(sitzungen, k.id, t) == 0                # die verworfene Zeit bleibt leer

@@ -737,7 +737,7 @@ async def _berechne_monat(
     ist_aktueller_monat = _out["ist_aktueller_monat"]
     fenster = _out["fenster"]
     investitionen = _out["investitionen"]
-    _out = await _quellen_des_monats(db, anlage, anlage_id, investitionen, jahr, monat, ist_aktueller_monat, kontext)
+    _out = _out_q = await _quellen_des_monats(db, anlage, anlage_id, investitionen, jahr, monat, ist_aktueller_monat, kontext)
     kontext = _out["kontext"]
     monats_fakt = _out["monats_fakt"]
     saved = _out["saved"]
@@ -774,6 +774,9 @@ async def _berechne_monat(
         bloecke=await _emob_bloecke_des_monats(db, anlage.id, investitionen, jahr, monat),
         # HA-Bauform E4c (N-631): der PV-Anteil aus dem abgeleiteten Kanal, wenn die E-Mob-Gruppe den Monat deckt.
         kanal_quote=_emob_kanal,
+        # Fund-Päckchen H (H3): ohne Kanal-Deckung die Quote der Tagesebene wie die Monats-Fakten (`lade_monats_summen`).
+        tages_quote=None if _emob_kanal[0] or not any(i.typ in ("e-auto", "wallbox") for i in investitionen)
+        else await _tages_quote(db, anlage_id, jahr, monat, _out_q["_summen"]),
         # N-771 Rest 1 (E6): der Zuordnungsmonat des Felds je Wallbox — dort ist das Feld nicht ihre Netzladung.
         wallbox_zuordnung=await wallbox_zuordnung_des_monats(
             db, anlage_id, investitionen, resolved, jahr, monat, ist_aktueller_monat=ist_aktueller_monat),
@@ -1265,6 +1268,16 @@ def _herkunft_lokal() -> DatenquelleInfo:
     return DatenquelleInfo(quelle="tagesebene", konfidenz=80, zeitpunkt=datetime.now().isoformat())
 
 
+async def _tages_quote(db: AsyncSession, anlage_id: int, jahr: int, monat: int, summen: Optional[dict]) -> Optional[float]:
+    """H3: der PV-Anteil der Heimladung aus der Tagesebene des Monats — dieselbe Summe wie die Monats-Fakten."""
+    from backend.services.kanal.bilanz_leser import lade_monats_summen
+
+    if summen is None:
+        summen = await lade_monats_summen(db, anlage_id, von=(jahr, monat), bis=(jahr, monat))
+    s = summen.get((jahr, monat))
+    return s.abgeleiteter_pv_anteil if s is not None else None
+
+
 async def _summen_der_tagesebene(
     db: AsyncSession, anlage_id: int, jahr: int, monat: int, *, ist_aktueller_monat: bool, ha_geliefert: bool,
 ) -> Optional[dict]:
@@ -1433,7 +1446,7 @@ async def _quellen_des_monats(
         "mqtt_energy": mqtt_energy, "ha_stats": ha_stats if ha_geliefert else {}, "_emob_kanal": _emob_kanal,
         "_sonstiges_kanal": _sonstiges_kanal, "_wp_kanal": _wp_kanal, "_wp_kanal_zeilen": _wp_kanal_zeilen,
         "_emob_kanal_zeilen": _emob_kanal_zeilen, "ha_felder_mit_daten": ha_felder_mit_daten, "_tages_wp_mengen": _tages_wp_mengen, "tagesebene": tagesebene,
-        "resolved": resolved, "teilzeitraum": teilzeitraum,
+        "resolved": resolved, "teilzeitraum": teilzeitraum, "_summen": _summen_laufend,
     }
 
 
