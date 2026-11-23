@@ -116,7 +116,8 @@ Felder erfasst.
 >   (`aggregate_day` → `lts_aggregator.lts_tagestabelle`, ebenso die Vorschau der Werkbank) nimmt bei einer Anlage mit
 >   MQTT-Ständen (`mischform_kwargs`) die EINE Auswahl über beide Quellen (`_mqtt_neben_ha`), liest jedes HA-Feld aus HAs
 >   Statistik und jedes Feld allein über MQTT aus seinen Ständen (`snapshot.aggregator.slots_aus_staenden`: Bündel nach einer
->   Lücke, R4, B-3; hat das Feld an dem Tag keine zwei Stände, bleibt es «—»). Reine HA- und reine MQTT-Anlagen bitgleich;
+>   Lücke, R4, B-3; hat das Feld an dem Tag keinen Stand oder keinen Stand davor, bleibt es «—» — fehlt der Stand am
+>   Fensterbeginn, verankert `letzter_stand_vor` beliebig weit zurück, und die Menge seit dem früheren Stand steht im ersten Slot). Reine HA- und reine MQTT-Anlagen bitgleich;
 >   gespeicherte Tageszeilen ändern sich erst, wenn der Tag neu gebildet wird. Gemessen (`golden-master/funde-f-2026-11-23/
 >   test_mess_f2_mischform.py`, PV über HA, Netzbezug und Wallbox über MQTT, alle Tage Bestandstage): Netzbezug «—» → 11,5/12,0/12,0,
 >   Wallbox «—» → 30,36/31,68/31,68, Oktober Netzbezug 0,0 → 35,5, aktueller Monat Netzbezug «—» → 35,5. Die HA-Monatswerte
@@ -2340,7 +2341,8 @@ behalten den Anteil im Rest — eedc rechnet die Historie nicht nach.
 > Tageszeile als Betrag (`energie.verbraucher_als_betrag`, die Schreibweise der Beitragsschicht); die gespeicherte Zeile bleibt.
 > Batterie (Ladung −, Entladung +), `sonstige_*` (Verbraucher in beiden Pfaden −) und `haushalt` bleiben, wie sie sind. Ohne
 > das summierte *Energieprofil → Monat* (`monat._komponenten_summen`) beide Sorten Tage gegeneinander (gemessen Lab-Kopie rc47,
-> Winterborn November 2026: Wallbox 108,8 statt 214,84 kWh; Oktober Kategorie Wärmepumpe −46,72 statt 98,88 — eine
+> Winterborn November 2026: Wallbox 108,8 statt 214,84 kWh; Oktober Kategorie Wärmepumpe 46,72 statt 98,88 kWh, so in der
+> Oberfläche (die Antwort trägt −108,8 bzw. −46,72, die Oberfläche zeigt den Betrag) — eine
 > Wärmepumpe aus dem Zähler +, eine aus der Live-Σ −). Leser über `komponenten_der_tage`: Monat, `/tage`, `tage-werte`,
 > E-Mob-Zusatz, Modus-Split-Bezug, Komponenten-Serien, Daten-Checker (Drift, Speicher, E-Mob, Quellen). Ohne die Mischung lesen
 > nur Leser, die je Tag den Betrag nehmen (`waermepumpe_kwh_je_investition`, «Ladung heute») oder keine Verbraucher-Schlüssel
@@ -4544,27 +4546,38 @@ Stunden-kWh entstehen als **Differenz kumulativer Zähler-Snapshots**, nicht aus
 
 **Lücke zwischen zwei Zählerständen (N-817, Entscheid Gernot 22./23.11.2026 — wie HA):**
 
-Fehlt ein Stand (Scheduler-Ausfall, MQTT-Sender ohne Stand, HA-Statistics-Timeout), bleiben die Stunden ohne Stand leer («—»,
+Fehlt ein Stand (Scheduler-Ausfall, eedc aus oder nach einem Neustart noch ohne MQTT-Stand, HA-Statistics-Timeout), bleiben die Stunden ohne Stand leer («—»,
 nicht 0); die Menge der Lücke steht in der **ersten Stunde danach** als Bündel mit Spanne `n` (Stunden seit dem letzten Stand
 davor) — wie im HA-Energie-Dashboard, wie am Fensterbeginn (T3, `letzter_stand_vor`) und wie der Kanal-Pfad:
 
 ```
 Slot h (Stand bei h vorhanden) = stand[h] − letzter Stand davor (im Fenster oder davor, T3);  n = Stunden zwischen beiden
+                                                                                      (R2: n = 1 bei Menge 0)
 Slots zwischen den beiden Ständen = leer
 Tageswert = Σ Slots (die Randstände trägt das Bündel; unverändert gegenüber der früheren Füllung)
 ```
 
-Eine Stelle: `snapshot/aggregator.py::slots_aus_staenden` (Schreibweg `snapshot_tagestabelle` der Bestandstage von
-Standalone-/MQTT-Anlagen und der MQTT-Felder neben HA-Feldern, F2); dieselbe Regel liest `snapshot/stunden_leser.lade_stundenformen`
-(Stundenform je Zähler für den Wärme-Verlauf, beim Lesen). Das Bündel geht in Überschuss/Defizit/Direktverbrauch über die
-Fenster-Rechnung (`tagesbilanz.py`, N-799 E-4, `stundenpaarung`), der Daten-Checker nennt den Tag unter «Stunden ohne
-Stundenwerte» (`erfassung_stillstand`, Lücken-Bündel mit Kennzeichen — gemessen am Bestandstag einer MQTT-Welt,
+Drei Stellen mit derselben Bündel-Regel: `snapshot/aggregator.py::slots_aus_staenden` (mit T3-Anker und Spanne `n`;
+Schreibweg `snapshot_tagestabelle` der Bestandstage von Standalone-/MQTT-Anlagen und der MQTT-Felder neben HA-Feldern, F2),
+`snapshot/stunden_leser.lade_stundenformen` (Stundenform je Zähler für den Wärme-Verlauf, beim Lesen) und
+`snapshot/aggregator._counter_slots` (WP-Zähler Starts/Betriebsstunden, F6) — die beiden letzten mit Anker nur im Fenster,
+ohne `letzter_stand_vor` und ohne Spanne. Das Bündel geht in Überschuss/Defizit/Direktverbrauch über die Fenster-Rechnung
+(`tagesbilanz.py`, N-799 E-4, `stundenpaarung`) — nur bei gleichem `n` auf den Bilanz-Achsen, PV und Verbrauch über 0,1 kWh
+und getrennten Speicher-Richtungen; mit einem Speicher, der am Bestandstag nur als Saldo `batterie_kw` steht, «—» (nicht
+bestimmbar, `URSACHE_SALDIERT`); bei PV bis 0,1 kWh (Lücke in der Nacht) gepaart wie eine Stunde, ohne Kennzeichen. Der
+Daten-Checker nennt den Tag unter «Stunden ohne Stundenwerte», wenn er ein Kennzeichen trägt (`erfassung_stillstand`,
+`stundenpaarung` Fenster oder nicht rechenbar — gemessen am Bestandstag einer MQTT-Welt,
 `golden-master/funde-f-2026-11-23/test_mess_f1_mqtt_luecke.py`: Lücke 08:00–13:00, Bündel PV 10,0 / Einspeisung 5,0 / Netzbezug
-2,5 kWh, n = 5, Tag 48,0 / 24,0 / 12,0 vorher wie nachher). Über eine Fortsetzungs-Naht (B-3) trägt das Bündel 0 (nur der
+2,5 kWh, n = 5, Tag 48,0 / 24,0 / 12,0 vorher wie nachher). Die Leser, die Stunde gegen Stunde stellen, lassen das Bündel
+über seine Spanne aus (`spannen.zeile_gebuendelt`/`verbrauch_gebuendelt`, dieselbe Regel wie nach einer Lücke in HA) —
+gemessen am Bestandstag derselben Welt (Nachtrag F, N2, `test_mess_n2_buendel_leser.py`): keine Heatmap-Zelle der Stunde
+12–13 Uhr, PV-Spitze des Monats 2,0 kW (das Bündel trägt 10,0), Netzbezug-/Einspeise-Spitzen ohne diese Stunde, Tagesprofil 12 Uhr 2,0 /
+1,5 kW, Korrekturprofil und Verbrauchsprognose/-profil überspringen die Zeile. Über eine Fortsetzungs-Naht (B-3) trägt das Bündel 0 (nur der
 neue Abschnitt, wie bisher). **Bis 23.11.2026** füllte `_fill_gaps_linear` (#145, v3.20.0) die Stände dazwischen linear —
 Stundenmengen, die keine Quelle führt. **Gespeicherte Stunden vergangener Tage bleiben**, wie sie sind (keine Migration);
 sie ändern sich erst, wenn der Tag neu gebildet wird (Werkbank, Self-Healing). Der Wärme-Verlauf, der beim Lesen bildet, zeigt
-die Regel sofort für alle Tage. Ränder (kein Stand im Fenster davor in der Stundenform) werden nicht extrapoliert.
+die Regel sofort für alle Tage — die Betriebsart- und Funktions-Formen immer, den Gesamtstrom nur, wenn seine Stände denselben
+Tageswert ergeben wie die gespeicherte Spalte (H-F1, unten), sonst die gespeicherten Stunden. Ränder (kein Stand im Fenster davor in der Stundenform) werden nicht extrapoliert.
 **Eine Sicht, eine Quelle für alle Formen des Tages (H-F1, Entscheid Master 23.11.2026):** der Wärme-Verlauf je Stunde bildet
 an einem Tag ohne WP-Kanal-Deckung den Gesamtstrom je Slot aus denselben Ständen wie die Summanden-Formen
 (`api/routes/energie_profil/waerme._gesamtstrom_aus_staenden`, Σ der Gesamt-Zähler der Beitragsschicht je an dem Tag
@@ -5979,8 +5992,13 @@ Spanne), der Tageswert bleibt der Kalendertag. **Benannte Grenze (Fenster der Be
 unterscheiden sich um die Starts zwischen 23 und 24 Uhr am Vortag und am Tag — die Stunden liegen im Fenster
 `[Vortag 23:00, 23:00)`, der Tageswert im Kalendertag; die Invariante prüft deshalb gegen die Menge im Fenster
 (`test_funde_f.py::test_f6_…`). Gespeicherte Stunden alter Tage bleiben, bis der Tag neu gebildet wird. Gemessen: Lab-, Produktiv-
-und GM-Kopien tragen keinen solchen Zähler (Häufigkeit 0); Leser der Stunden: `/stunden` (`serien.py`); Tag, Monat und Sensoren
-lesen `komponenten_starts`.
+und GM-Kopien tragen keinen solchen Zähler (Häufigkeit 0); Leser der Stunden: `/stunden` (`serien.py`, Stundentabelle und
+Verlauf). Die Kacheln «Kompressor-Starts» und «Betriebsstunden» in *Cockpit → Tag* zeigen seit dem Nachtrag zu F (N1, Entscheid
+Master 23.11.2026) den Tageswert aus der Antwort (`tage-werte`: `wp_starts`, `wp_betriebszeit_min` aus `komponenten_starts`,
+`tage_werte_zusatz._wp_zaehler`), nicht mehr die Summe der Stunden (`TagKomponenten.baueTagAlsMonat`) — gemessen
+(`golden-master/funde-f-2026-11-23/test_mess_n1_kachel.py`, `aggregate_day`): 5 Starts / 0,5 h am Vortag 23–24 Uhr ⇒ Kachel
+vorher 5 / 30 min, nachher keine Kachel (Tageswert 0); 3 Starts / 0,75 h am Tag 23–24 Uhr ⇒ vorher keine Kachel, nachher
+3 / 45 min. Monat, `/tage`, WP-Dashboard, Sensoren und *Cockpit → Tag* lesen damit alle `komponenten_starts` (Kalendertag).
 
 Architektur trennt Counter-Felder strikt von kWh-Feldern in `KUMULATIVE_COUNTER_FELDER`, damit reine Counter nicht versehentlich in die Energie-Bilanz fließen. Vollbackfill aus HA Long-Term Statistics greift für Tages-Summen (Faktor 1.0 statt 0.001 bei unbekannter Einheit). Stunden-Detail wird ab Live-Erfassung gefüllt.
 

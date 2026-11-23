@@ -937,7 +937,7 @@ export function baueKomponentenBloecke(
     ]
     // #238 Counter (Verschleiß-/Auslegungs-Indikatoren). Monat: Σ Monat prominent,
     // Max/Tag im Untertitel. Tag: Tagessumme prominent, kein Max/Tag (period-korrekt,
-    // Gernot 2026-06-23). Für Tag liefert der Aufrufer die Tages-Summe in
+    // Gernot 2026-06-23). Für Tag liefert der Aufrufer den Tageswert (Kalendertag, aus der Antwort) in
     // `wp_starts_summe_monat`/`wp_betriebsstunden_summe_monat` (period-neutraler Slot).
     const startsZeigen = istTag ? (d.wp_starts_summe_monat != null && d.wp_starts_summe_monat > 0)
                                 : (d.wp_starts_max_tag != null && d.wp_starts_max_tag > 0)

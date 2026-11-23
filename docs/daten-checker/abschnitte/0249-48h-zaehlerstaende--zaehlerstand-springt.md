@@ -13,7 +13,7 @@ verglichen und durch die Tage seit seinem letzten Zuwachs geteilt (mindestens 1)
 Zehnfachen — wenn der Zähler schon ein Jahr mit gewöhnlichem Betrieb kennt (ein Jahr Statistik, an mindestens 14 Tagen etwas
 gezählt, an einem davon mindestens 1 kWh) oder die Menge mehr ist, als eine Anlage in einer Stunde leisten kann (100 kWh oder
 1,5 × die Anlagenleistung in kWp, was größer ist; nur bei kWh). Ein Neubeginn, der nicht bei 0 liegt, ist ein Befund ab dem
-Dreifachen. Beginnt eine Statistik mit einem Stand über dieser Grenze statt bei 0 (eine importierte Statistik, ein Zähler,
+Dreifachen. Beginnt eine Statistik mit einem Stand über 100 kWh bzw. 1,5 × die Anlagenleistung in kWp statt bei 0 (eine importierte Statistik, ein Zähler,
 der beim ersten Wert springt), nennt der Befund ihre erste Stunde («die Statistik beginnt mit diesem Stand statt bei 0») —
 eedc zählt sie wie Home Assistant ganz ([Handbuch Einstellungen §7.7c](HANDBUCH_EINSTELLUNGEN.md#77c-was-passiert-wenn)).
 Verglichen werden nur Stunden desselben Sensors.

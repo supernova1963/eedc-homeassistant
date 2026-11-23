@@ -408,8 +408,9 @@ async def _get_mqtt_snapshot_at(
     Standard ±10 min (vorher ±30): MQTT-Publisher liefern Zählerstände
     typischerweise alle 1–5 min. Ein Fenster > 10 min bedeutet fast immer,
     dass der Zielzeitpunkt gar keine frische Publikation hatte — in dem Fall
-    ist None + Interpolation in der aufrufenden Schicht (Issue #145) besser
-    als ein weit entfernter Wert, der Stunden-Deltas verzerrt.
+    ist None besser als ein weit entfernter Wert, der Stunden-Deltas verzerrt:
+    die aufrufende Schicht lässt die Stunde leer, und die erste Stunde mit
+    Stand trägt die Menge (N-817, wie HA; bis 23.11.2026 linear gefüllt, #145).
 
     Kandidaten werden nach absolutem Zeitabstand sortiert (nearest first),
     nicht nach Timestamp-Reihenfolge — damit der zeitlich passendste Wert

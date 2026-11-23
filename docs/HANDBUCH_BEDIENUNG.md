@@ -381,7 +381,8 @@ Die **Tag**-Sicht bringt den feingranularen Stunden-Tag ins Cockpit: ein ausgew�
 > **Stand die Erfassung still, sind drei Werte gerechnet.** Hat Home Assistant einige Stunden lang keine Werte geliefert
 > (der Rechner war aus, Home Assistant startete neu) und tragen die Zähler die Menge danach in einer Stunde nach, rechnet
 > eedc **Überschuss, Defizit und Direktverbrauch** des Tages für diese Stunden aus den Zählerständen statt aus
-> Stundenwerten. Die Bilanz des Tages trägt dann das Zeichen **„aus Zählerständen gerechnet"** mit einem Satz, der die Stunden nennt — und,
+> Stundenwerten. Die Bilanz des Tages trägt dann ein Rechner-Zeichen statt des Warndreiecks („aus Zählerständen gerechnet" statt
+> „geschätzt") mit einem Satz, der die Stunden nennt — und,
 > wenn in diesen Stunden mehr ins Netz und in den Speicher ging, als die PV erzeugt hat, wie viel der Speicher mindestens aus
 > dem Netz geladen hat —, und den Link **„Im Daten-Checker nachlesen"**. Lassen sich die drei Werte nicht bestimmen, steht „—" mit dem Grund. Die Mengen des Tages (Erzeugung,
 > Einspeisung, Netzbezug, Verbrauch, Speicher) stimmen in beiden Fällen. Was die Rechnung voraussetzt und welche Vorbehalte
@@ -1414,7 +1415,8 @@ Der interaktive Überblick über alle Monatswerte in einer sortierbaren Tabelle 
 > nicht zu unterscheiden. Der Stunden-Blick auf denselben Tag liegt in [Cockpit → Tag](#22-tag).
 
 > **Überschuss, Defizit und Direktverbrauch an Tagen mit Erfassungs-Ausfall (Tagesansicht).** Stand die Erfassung an
-> einem Tag einige Stunden still, trägt die Zahl in diesen drei Spalten das Zeichen **„aus Zählerständen gerechnet"** — für
+> einem Tag einige Stunden still, trägt die Zahl in diesen drei Spalten ein Rechner-Zeichen statt des Warndreiecks („aus
+> Zählerständen gerechnet" statt „geschätzt"; das Wort steht in der CSV) — für
 > diese Stunden ist sie aus den Zählerständen gerechnet, nicht aus Stundenwerten. Unter der Tabelle steht je Tag der Satz mit den Stunden und der Link **„Im
 > Daten-Checker nachlesen"**. Lässt sich ein Tag nicht bestimmen, steht „—"; die Summenzeile sagt, wie viele Tage sie
 > auslässt bzw. wie viele mit Zähler-Rechnung sie enthält. Der CSV-Export trägt für solche Tage die Spalte „Kennzeichen

@@ -1062,10 +1062,10 @@ async def lade_zaehler_und_counter(
         )
 
     # ── Counter-Tagesdifferenzen (Issue #136: WP-Kompressor-Starts) ──────
-    # Boundary-Diff über das Tagesfenster. Wird hier — vor der Stunden-Schleife —
-    # geholt, weil die Stunden-Σ aus diesem Tageswert ABGELEITET wird (Counter-
-    # Daily-Drift Variante 2-light, KONZEPT-COUNTER-DAILY-DRIFT.md): eine Quelle
-    # pro Tag. {feld: {inv_id: wert}}, z.B. {"wp_starts_anzahl": {"5": 12}}.
+    # Boundary-Diff über den Kalendertag (der Tageswert von Monat, Sensoren und *Cockpit → Tag*). Die Stunden
+    # oben kommen seit F6 (23.11.2026) unverändert aus den Ständen im Fenster [Vortag 23:00, 23:00) und werden
+    # nicht mehr auf diesen Wert umgerechnet; die Invariante prüft sie gegen ``CounterStunden.fenster``.
+    # {feld: {inv_id: wert}}, z.B. {"wp_starts_anzahl": {"5": 12}}.
     komponenten_starts: dict = {}
     try:
         from backend.services.sensor_snapshot_service import get_daily_counter_deltas_by_inv
@@ -1580,9 +1580,8 @@ async def komponenten_tagesgesamt_und_peaks(
     Returns:
         ``pv_marken`` — die #406-Herkunftsmarken je ``komponenten_kwh``-Sub-Key.
     """
-    # Counter-Tagesdifferenzen (`komponenten_starts`) wurden bereits vor der
-    # Stunden-Schleife geholt — die Stunden-Σ wird daraus abgeleitet (Counter-
-    # Daily-Drift Variante 2-light). Hier nur noch weiterverwenden.
+    # Counter-Tagesdifferenzen (`komponenten_starts`, Kalendertag) wurden bereits vor der
+    # Stunden-Schleife geholt; die Stunden werden seit F6 nicht mehr daraus abgeleitet. Hier nur noch weiterverwenden.
 
     # ── Tagesgesamt pro Komponente (Etappe 3c P3 + Etappe 4 v3.31.0) ─────
     # Etappe 4: wenn der Stunden-Pfad aus HA-LTS gespeist wurde, nutzen wir

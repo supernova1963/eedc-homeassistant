@@ -7,13 +7,18 @@ Stunde. Die bestehende Stunden-Funktion (`get_hourly_kwh_by_category`) liefert
 dieselben Slots, faltet sie aber sofort zu **Kategorien** — die Zuordnung zum
 einzelnen Zähler (und damit zum Innengerät, zur Betriebsart) ist danach weg.
 
-⭐ **Die Regeln werden geteilt, nicht kopiert** — das war der Einwand der
+⭐ **Raster und Slot-Menge werden geteilt** — das war der Einwand der
 Gegenprüfung („zwei Wahrheiten zwischen Kachel-Stunden und Verlaufs-Stunden"):
 
 * Slot-Raster: `BoundaryRange.for_hourly_slots` (Rückwärts, #144),
-* Lücken zwischen Ständen: die Menge steht in der ersten Stunde danach (N-817, wie HA und
-  `snapshot_tagestabelle`; bis 23.11.2026 linear gefüllt, #145),
 * Menge je Slot samt Tagesreset-Regel der **Stunde**: `stunden_slot_delta`.
+
+⚠ **Die Bündel-Regel nach einer Lücke steht hier als eigene Schleife** (N-817, wie HA; bis
+23.11.2026 linear gefüllt, #145): die Stunden ohne Stand bleiben leer, die erste Stunde danach
+trägt die Menge seit dem letzten Stand. Anders als `snapshot/aggregator.slots_aus_staenden`
+(Anker auch vor dem Fenster über `reader.letzter_stand_vor`, Spanne ``n``) liegt der Anker hier
+nur im Fenster, und eine Spanne gibt es nicht. Dieselbe Regel steht ein drittes Mal für die
+WP-Zähler in `snapshot/aggregator._counter_slots`.
 
 ⭐ **Warum Snapshots und nicht die HA-Langzeitstatistik direkt.** Die
 Tageswerte, die der Verlauf auf die Stunden verteilt, entstehen seit N-434 und

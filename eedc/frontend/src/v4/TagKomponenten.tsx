@@ -60,9 +60,6 @@ export function baueTagAlsMonat(
   tag: TagWerte, stunden: StundenWert[], serien: SerieInfo[], tagDetail?: TagDetail | null,
 ): AktuellerMonatResponse {
   const tagessumme = (key: string) => stunden.reduce((a, s) => a + (s.komponenten?.[key] ?? 0), 0)
-  // WP-Counter pro Tag (Issue #136/#238): Tagessumme der Stundenwerte (anlagenweit).
-  const wpStartsTag = stunden.reduce((a, s) => a + (s.wp_starts_anzahl ?? 0), 0)
-  const wpBetriebsstundenTag = stunden.reduce((a, s) => a + (s.wp_betriebsstunden ?? 0), 0)
   let bkw = 0, sonstErz = 0, sonstVerb = 0, sonstAbg = 0
   // Pro-Gerät-Liste (Tag): je Serie ein Gerät — Tag kennt nur Erzeugung/Verbrauch
   // (kein Eigenverbrauch-/Bezug-Split auf Stundenebene).
@@ -208,8 +205,12 @@ export function baueTagAlsMonat(
     // wp_modus_abdeckung_h > 0`, und ein Betriebsart-Zähler hat keine
     // Abdeckungs-Stunden. Monat und Jahr zeigten den Block, der Tag nie.
     wp_modus_gemessen: tagDetail?.wp_modus_gemessen ?? null,
-    wp_starts_summe_monat: wpStartsTag > 0 ? wpStartsTag : null,
-    wp_betriebsstunden_summe_monat: wpBetriebsstundenTag > 0 ? wpBetriebsstundenTag : null,
+    // WP-Zähler des Tages (Issue #136/#238, Nachtrag F N1 23.11.2026): der Tageswert aus der Antwort — Kalendertag wie
+    // Home Assistant, Cockpit → Monat und die Sensoren (`komponenten_starts`, `tage_werte_zusatz.py`), nicht die Summe
+    // der Stunden: die Stunden zählen von 23 Uhr des Vortags bis 23 Uhr (F6) und wichen an Tagen mit Starts zwischen 23
+    // und 24 Uhr ab. Die Betriebszeit kommt in ganzen Minuten; der Slot erwartet Stunden (Einheitenumrechnung).
+    wp_starts_summe_monat: tag.wp_starts ?? null,
+    wp_betriebsstunden_summe_monat: tag.wp_betriebszeit_min != null ? tag.wp_betriebszeit_min / 60 : null,
     // E-Mobilität — Ladung, PV-Anteil (Heim) und km des Tages kommen fertig aus tagDetail (Päckchen BB2, N-783:
     // Zählerpfad vor Leistungspfad, private Geräte wie der Monat); ohne Tagesdetail „—". PV-/Netz-Anteil der Ladung
     // nur mit Sensor. Verbrauch je 100 km und € nur im Monat → null/„—". V2H (#110) kommt als Tagesgröße aus dem

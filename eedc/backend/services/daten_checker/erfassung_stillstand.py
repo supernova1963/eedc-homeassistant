@@ -78,8 +78,8 @@ EINLEITUNG = ("An diesen Tagen hat die Erfassung für einige Stunden keine Stund
 SCHLUSS = "Was für diese Tage gilt und welche Vorbehalte die Rechnung hat, steht unter «Was gilt»."
 OK_MELDUNG = "Keine Stunden ohne Stundenwerte in den letzten 90 Tagen"
 OK_DETAILS = ("Steht die Erfassung mehrere Stunden still oder fehlen Stundenwerte, nennt eedc hier die Tage der letzten 90 "
-              "Tage. Ein älterer Tag mit dem Zeichen «geschätzt» an Überschuss, Defizit und Direktverbrauch öffnet über "
-              "«Im Daten-Checker nachlesen» die Erklärung zu diesem Befund.")
+              "Tage. Ein älterer Tag mit dem Rechner-Zeichen («aus Zählerständen gerechnet») an Überschuss, Defizit und "
+              "Direktverbrauch öffnet über «Im Daten-Checker nachlesen» die Erklärung zu diesem Befund.")
 
 
 @dataclass

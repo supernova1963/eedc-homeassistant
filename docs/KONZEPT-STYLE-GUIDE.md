@@ -301,7 +301,7 @@ Daraus die drei Klauseln:
 > daraus Drift.
 >
 > - **Zustands-Vokabular ist geteilt** (`ErfassungZustand`, s. A3): `geschaetzt` = der Wert ist
->   **gerechnet statt gemessen** (z. B. „geschätzt (kWp-Anteil)"), `gerechnet` = Überschuss, Defizit und Direktverbrauch eines
+>   **nach einer Annahme aufgeteilt, nicht gemessen** (z. B. „geschätzt (kWp-Anteil)"), `gerechnet` = Überschuss, Defizit und Direktverbrauch eines
 >   Tages mit gebündelten Stunden (N-799) **aus Zählerständen gerechnet** — eigener Zustand seit Fund-Päckchen F (F5, Gernot
 >   23.11.2026: eedc schätzt dort nichts), Farbe wie `geschaetzt`, Icon `Calculator`, Label „aus Zählerständen gerechnet“, `weicht_ab` = der Wert ist
 >   **unvollständig** und damit systematisch zu niedrig (z. B. ein ausgefallener Wetter-Teilabruf).

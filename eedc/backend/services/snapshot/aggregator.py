@@ -4,7 +4,8 @@ Snapshot-Aggregator.
 Liest Boundary-Snapshots aus `sensor_snapshots` (mit Self-Healing über
 `reader.get_snapshot()`) und liefert stündliche kWh-Werte nach Energiefluss-
 Kategorie, stündliche Counter-Inkremente pro Feld und Tages-Counter-Deltas
-pro Investition. Lückenfüllung via linearer Interpolation (Issue #145).
+pro Investition. Eine Lücke zwischen zwei Ständen bleibt leer, die erste Stunde
+danach trägt die Menge (N-817, wie HA; bis 23.11.2026 linear gefüllt, #145).
 
 Slot-Konvention seit Etappe 3c P2 (KONZEPT-ENERGIEPROFIL-3C.md):
 - Hourly-Konsumenten gehen über `BoundaryRange.for_hourly_slots()` —

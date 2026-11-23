@@ -232,3 +232,20 @@ describe('Tages-Komponenten — Zählerpfad vor Leistungspfad (§2)', () => {
     expect(d.sonstiges_verbrauch_kwh).toBe(2.0)
   })
 })
+
+describe('Kompressor-Starts und Betriebsstunden am Tag — der Tageswert der Antwort (Nachtrag F, N1)', () => {
+  // Messung `golden-master/funde-f-2026-11-23/test_mess_n1_kachel.py` (aggregate_day, Stände in sensor_snapshots):
+  // 5 Starts / 0,5 h am Vortag 23–24 Uhr ⇒ Stunden Σ 5 / 0,5, Tageswert (Kalendertag) 0 / 0 ⇒ `wp_starts` null.
+  const nacht = [stunde(0, { wp_starts_anzahl: 5, wp_betriebsstunden: 0.5 })]
+
+  it('Starts am Vortag 23–24 Uhr zählen nicht zum Tag (Kalendertag wie Home Assistant und Monat)', () => {
+    const d = baueTagAlsMonat(tagWerte('2026-10-28', { wp_starts: null, wp_betriebszeit_min: null }), nacht, [])
+    expect(d.wp_starts_summe_monat).toBeNull()
+    expect(d.wp_betriebsstunden_summe_monat).toBeNull()
+  })
+  it('Starts am Tag 23–24 Uhr zählen zum Tag, obwohl die Stunden sie erst am Folgetag tragen', () => {
+    const d = baueTagAlsMonat(tagWerte('2026-10-28', { wp_starts: 3, wp_betriebszeit_min: 45 }), [], [])
+    expect(d.wp_starts_summe_monat).toBe(3)
+    expect(d.wp_betriebsstunden_summe_monat).toBe(0.75)
+  })
+})
