@@ -510,3 +510,19 @@ def marke_der_stunde(fenster: Iterable[StillstandFenster], stunden_ts: Iterable[
         if any(f.von_ts <= ts < f.nachtrag_ts for ts in ts_menge):
             return 0, f.achsen
     return None
+
+
+#: Die Achsen, auf denen ein Bündel einer Stunde den PV-/Netz-Anteil der Heimladung nimmt — Ladung, PV, Netzbezug
+#: (N-141 Weg c: ``aggregator.verrechne_stunde``, ``kanal_stunden.ladeanteil_der_kanal_stunden``; Ladeblock-Eingang).
+ACHSEN_LADEANTEIL: tuple[str, ...] = ("wallbox", "pv", "netzbezug")
+
+
+def stillstand_ohne_ladeanteil(fenster: Iterable[StillstandFenster], stunden_ts: Iterable[int]) -> bool:
+    """**Die eine Regel für alle Schreiber des PV-/Netz-Anteils der Heimladung** (Nachtrag G, N-799 Grenze G-5): trägt
+    die Stunde (echte Stunden ``stunden_ts``) die Marke eines Erfassungs-Stillstands auf einer der ``ACHSEN_LADEANTEIL``
+    — die Nachtragsstunde (n = k + 1) oder eine Nullstunde (n = 0)? Dann trägt sie die Menge mehrerer Stunden oder
+    keiner, und aus ihr entsteht kein Anteil (dieselbe Regel wie ``zeile_gebuendelt`` je Achse: n ≠ 1); die Ladung
+    zählt weiter. Gerufen vom Schreiber der Tageszeile (Kanal-Tag und Bestandsweg, ``mengen_weiche.Weiche``) und vom
+    abgeleiteten Kanal (``kanal/abgeleitet.py``)."""
+    marke = marke_der_stunde(fenster, stunden_ts)
+    return marke is not None and marke[0] != 1 and any(a in marke[1] for a in ACHSEN_LADEANTEIL)

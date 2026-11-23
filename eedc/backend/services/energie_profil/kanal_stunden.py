@@ -21,8 +21,8 @@ der Kanal-Gruppen aus den Kanal-Stunden (``spanne > 3600`` ⇒ ``{achse: n}``, d
 Achsen aus der herangezogenen Bestandszeile. Jede Mischzeile trägt ``raster = "beginn"`` — ``forward_werte_je_backward_
 zeile`` paart sie zeilengleich.
 
-**Welche Stunden es gibt:** eine Stunde mit einer der beiden Stundenzeilen oder mit einem Kanal-Wert. Fehlen beide (Tag
-älter als die 730-Tage-Aufbewahrung, Bauplan §1 Nr. 4), trägt die Mischzeile die Kanal-Mengen, die übrigen Felder sind
+**Welche Stunden es gibt:** eine Stunde mit einer der beiden Stundenzeilen oder mit einem Kanal-Wert. Fehlen beide (Tag,
+dessen Stundenzeilen bis 4.3.1 nach 730 Tagen gelöscht wurden, Bauplan §1 Nr. 4), trägt die Mischzeile die Kanal-Mengen, die übrigen Felder sind
 leer; eine Stunde ohne Zeile in allen dreien ist keine Zeile (keine 0, S3-R2).
 
 Schwesterdateien: ``services/kanal/stunden_leser.py`` (der Kanal-Stundentag), ``services/kanal/stunden_adapter.py``
@@ -35,7 +35,7 @@ import dataclasses
 import re
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Any, Iterable, Mapping, Optional, Sequence
+from typing import Any, Callable, Iterable, Mapping, Optional, Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1527,17 +1527,18 @@ def einspeisung_neg_preis_der_kanal_stunden(ks: KanalStunden, boerse: Mapping[in
     return round(summe, 3) if summe > 0 else None
 
 
-def ladeanteil_der_kanal_stunden(ks: KanalStunden):
+def ladeanteil_der_kanal_stunden(ks: KanalStunden, ohne_anteil: Optional[Callable[[int], bool]] = None):
     """Der PV-/Netz-/Speicher-Anteil der Heimladung eines Kanal-Tags (N-141 Weg c, N-569) aus den Kanal-Stunden — je
     Stunde ``stunde_aus_bilanzwerten`` (Ladung ``wallbox_kw``, Netz, Einspeisung, Speicher-Spalte), mit der Bündel-Regel
     von ``aggregator.verrechne_stunde`` (trägt Ladung, PV oder Netzbezug mehr als eine reale Stunde, geht die Stunde als
-    «nicht gedeckt» ein), dann ``leite_pv_anteil_ab``."""
+    «nicht gedeckt» ein), dann ``leite_pv_anteil_ab``. ``ohne_anteil(stunde)``: die Stunden eines Erfassungs-Stillstands
+    ebenso (Nachtrag G, ``mengen_weiche.Weiche.kanal_stunde_ohne_ladeanteil``)."""
     from backend.core.berechnungen.pv_anteil_ladung import leite_pv_anteil_ab, stunde_aus_bilanzwerten
-    from backend.core.berechnungen.spannen import zeile_gebuendelt
+    from backend.core.berechnungen.spannen import ACHSEN_LADEANTEIL, zeile_gebuendelt
 
     stunden = []
     for z in ks.zeilen:
-        gebuendelt = any(zeile_gebuendelt(z, a) for a in ("wallbox", "pv", "netzbezug"))
+        gebuendelt = any(zeile_gebuendelt(z, a) for a in ACHSEN_LADEANTEIL) or bool(ohne_anteil and ohne_anteil(z.stunde))
         stunden.append(stunde_aus_bilanzwerten(
             ladung=z.wallbox_kw,
             netzbezug=None if gebuendelt else z.netzbezug_kw,

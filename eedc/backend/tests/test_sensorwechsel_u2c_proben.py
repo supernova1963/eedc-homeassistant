@@ -291,7 +291,7 @@ async def test_befund_stand_zaehler_auskunft_mit_den_wegen_nach_e2(db):
     assert (e.schwere.value if hasattr(e.schwere, "value") else e.schwere) == "info"
     assert e.action is None and e.klasse == "auskunft"
     assert "+2.001,1 m³" in e.details and "„Bisherige Werte bleiben“" in e.details
-    assert "Stilllegungsdatum" in e.details and "Summe anpassen“ in Home Assistant ändert dort nichts" in e.details
+    assert "Stilllegungsdatum" in e.details and "Summe anpassen“ in Home Assistant ändert daran nichts" in e.details  # Nachtrag G: Wortlaut «daran»
 
 
 async def test_nach_wert_anpassen_und_uebernahme_kein_befund(db):

@@ -7,15 +7,17 @@ die Anlage schlechter arbeitet. Der naheliegende Ort dafür — das Feld
 Auto-Fill lag in der gelöschten V3-Seite (**N-426**). Die Größe selbst ist
 trotzdem da, nur an einer anderen Stelle.
 
-⭐ **Und die überlebt sogar länger als gedacht.** Das Retention-Cleanup löscht
-ausschließlich ``TagesEnergieProfil`` (die Stundenzeilen, `scheduler_jobs.py`) —
-``TagesZusammenfassung`` mit ihrem Tages-Min/Max wird **nie** beschnitten.
+⭐ **Und die überlebt sogar länger als gedacht.** Bis 4.3.1 löschte der Nachtlauf
+(`scheduler_jobs.py`) Stundenzeilen (``TagesEnergieProfil``) älter als 730 Tage; seit dem
+Nachtrag zu Fund-Päckchen G löscht eedc keine Stundenzeilen mehr von selbst. Schon
+gelöschte Tage haben keine Stundenwerte — ``TagesZusammenfassung`` mit ihrem
+Tages-Min/Max wurde **nie** beschnitten.
 
 **Die Vorrangkette, von genau nach ungenau:**
 
 1. **Stundenwerte** (``TagesEnergieProfil.temperatur_c``) — das echte Mittel über
-   die gemessenen Stunden. Reicht zwei Jahre zurück und deckt damit genau die
-   Zeiträume ab, die ein Jahres-Verlauf zeigt.
+   die gemessenen Stunden. Reicht so weit zurück wie die Stundenzeilen (Tage, deren
+   Stunden bis 4.3.1 nach zwei Jahren gelöscht wurden, haben keine).
 2. **Tages-Min/Max** (``TagesZusammenfassung``) — ``(min + max) / 2``, die
    klimatologische Näherung. Sie greift für ältere Monate und für Tage, deren
    Stundenzeilen fehlen.

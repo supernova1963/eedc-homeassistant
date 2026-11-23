@@ -19,8 +19,9 @@ N-569, Konzept Wallbox/E-Auto Phase 5) — gerufen, nicht nachgebaut. Je Stunde 
 Ladung zählt trotzdem in ``L(h)`` (sie konkurriert um denselben Überschuss).
 
 ⚑ **Eine Stunde ohne Aussage** (``pv_der_stunde`` → ``None``: kein Netzbezugs- oder Einspeisezähler in der Stunde; oder
-ein Eingang trägt mehr als eine Stunde — Zeile fehlt, Spanne > 1 h; oder erste Zeile eines Eingangs ohne Vorstand)
-trägt **keinen PV-Teil** — der Kanal schreibt die Stunde mit unverändertem Stand (Grenze, Entscheid Master H-1:
+ein Eingang trägt mehr als eine Stunde — Zeile fehlt, Spanne > 1 h; oder erste Zeile eines Eingangs ohne Vorstand; oder
+seit Nachtrag G die Stunde trägt die Marke eines Erfassungs-Stillstands — die Nachtragsstunde, die die Menge der
+stehenden Stunden nachträgt, ``spannen.stillstand_ohne_ladeanteil``) trägt **keinen PV-Teil** — der Kanal schreibt die Stunde mit unverändertem Stand (Grenze, Entscheid Master H-1:
 so belassen). Wer den Anteil eines Zeitraums als
 ``Δ abgeleitet / Δ Ladung`` liest, zählt ihre Ladung damit zum Netz. Der Bestand ließ eine solche Stunde ganz aus (sie
 zählte weder bei PV noch bei Netz, die Quote galt nur über die gedeckten Stunden). Benannte Abweichung (Bericht E4c).
@@ -50,7 +51,7 @@ from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen.pv_anteil_ladung import REGEL_EINSPEISE_DECKUNG, pv_der_stunde
-from backend.core.berechnungen.spannen import achse_der_kategorie
+from backend.core.berechnungen.spannen import achse_der_kategorie, stillstand_ohne_ladeanteil
 from backend.models.kanal import ART_SUM, FAMILIE_ABGELEITET, Kanal, KanalQuelle, KanalStatistik
 from backend.services.kanal import merken
 
@@ -230,6 +231,11 @@ async def schreibe_abgeleitete(
         tag += timedelta(days=1)
     if not any(a.abzuleiten for a in auswahl.values()):
         return 0
+    # Nachtrag G (N-799 Grenze G-5): die Erfassungs-Stillstände der Stunden — eine Stunde mit ihrer Marke (Nachtrag oder
+    # Nullstunde) ist «ohne Aussage» wie eine Stunde mit Spanne ≠ 1 h (`spannen.stillstand_ohne_ladeanteil`).
+    from backend.services.kanal.stillstand import fenster_im_bereich
+
+    stillstand = await fenster_im_bereich(db, anlage.id, date.fromtimestamp(start), date.fromtimestamp(ts_bis))
     eingaenge = set().union(*(a.eingaenge for a in auswahl.values() if a.abzuleiten))
     kanaele = await kanaele_laden(db, anlage.id, eingaenge)
     mengen = [k for k in kanaele.values() if k.art == ART_SUM]
@@ -249,6 +255,8 @@ async def schreibe_abgeleitete(
             if not noetig <= set(werte) or any(erreicht[k] is None or erreicht[k] < h for k in noetig):
                 break                                     # ein Eingang ist noch nicht so weit — später weiter
             ladung = {i: _summe_oder_none([_aenderung(werte[k], h) for k in ks]) for i, ks in a.ladung.items()}
+            if stillstand_ohne_ladeanteil(stillstand, (h,)):
+                ladung = dict.fromkeys(ladung)            # Stunde des Stillstands: ohne Aussage, kein PV-Teil
             netz = _summe_oder_none([_aenderung(werte[k], h) for k in a.netzbezug])
             einsp = _summe_oder_none([_aenderung(werte[k], h) for k in a.einspeisung])
             mit_vorstand = all(_aenderung(werte[k], h) is not None for k in noetig)

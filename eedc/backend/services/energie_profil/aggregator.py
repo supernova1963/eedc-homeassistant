@@ -365,10 +365,11 @@ def verrechne_stunde(
     # — Netz/Einspeisung gehen als „nicht gedeckt" hinein, damit die Marke
     # `…teilweise` die Lücke ausweist (P4) statt eine n-Stunden-Menge mit der
     # Deckung einer einzigen Stunde zu bewerten.
-    from backend.core.berechnungen.spannen import zeile_gebuendelt as _zeile_gebuendelt
+    # Nachtrag G: ebenso eine Stunde mit der Marke eines Erfassungs-Stillstands (`Weiche.slot_ohne_ladeanteil`).
+    from backend.core.berechnungen.spannen import ACHSEN_LADEANTEIL, zeile_gebuendelt as _zeile_gebuendelt
     _gebuendelt = any(
-        _zeile_gebuendelt(zaehler, a) for a in ("wallbox", "pv", "netzbezug")
-    )
+        _zeile_gebuendelt(zaehler, a) for a in ACHSEN_LADEANTEIL
+    ) or kontext.weiche.slot_ohne_ladeanteil(h)
     akku.lade_stunden.append(stunde_aus_bilanzwerten(
         ladung=zaehler.wallbox_kw,
         netzbezug=None if _gebuendelt else zaehler.netzbezug_kw,

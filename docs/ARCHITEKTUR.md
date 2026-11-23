@@ -1687,7 +1687,7 @@ die Fassade, die die öffentlichen Namen re-exportiert), `backend/models/tages_e
 | `_helpers.py` | Wetter-IST, SoC, Betriebsmodus, Strompreis je Stunde |
 | `kanal_stunden.py` | **der eine Tages-Leser der Stunden-Sichten** (HA-Bauform S3): Mischzeilen eines Kanal-Tags für `/stunden`, `tage-werte`, `monat` und die Wärme-Sichten (unten) |
 
-**Funktion:** Langfristige Persistierung stündlicher Energiedaten. HA-History hat nur ~10 Tage Retention — dieser Service sichert die Daten dauerhaft in SQLite.
+**Funktion:** Langfristige Persistierung stündlicher Energiedaten. HA-History hat nur ~10 Tage Retention — dieser Service sichert die Daten dauerhaft in SQLite. Eine Löschfrist für die Stundenzeilen gibt es seit 4.3.2 nicht mehr (bis 4.3.1 löschte der Vortags-Lauf Stundenzeilen älter als 730 Tage).
 
 **Kanal-Stundentag (HA-Bauform, zweites Paket S3).** Die Stunden eines Tages, dessen Gruppe die Kanäle voll decken, liest
 eedc aus den Kanälen — dieselbe Quellenwahl je Tag und Gruppe wie die Tagessummen (ADR-002/P14), dieselbe Komposition

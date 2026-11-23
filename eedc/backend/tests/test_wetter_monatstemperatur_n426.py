@@ -13,8 +13,8 @@ rechnet, und das Archiv ist nur ihre letzte Stufe.
 1. **Stundenmittel** (`TagesEnergieProfil.temperatur_c`) — die eigene Messung am
    Standort der Anlage.
 2. **Tages-Min/Max** (`TagesZusammenfassung`) — die Näherung `(min+max)/2`, für
-   Tage ohne Stundenzeilen. Sie überlebt länger als Stufe 1: das
-   Retention-Cleanup beschneidet nur `TagesEnergieProfil`.
+   Tage ohne Stundenzeilen. Sie überlebt länger als Stufe 1: die Löschfrist bis
+   4.3.1 beschnitt nur `TagesEnergieProfil` (seit Nachtrag G keine Löschfrist mehr).
 3. **Open-Meteo / Bright Sky** — das Archiv einer Wetterstation in der Nähe.
 
 ⛔ **Was NICHT in der Kette steht, obwohl der Dienst es könnte:** die dritte

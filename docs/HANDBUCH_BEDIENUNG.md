@@ -364,9 +364,9 @@ Die **Tag**-Sicht bringt den feingranularen Stunden-Tag ins Cockpit: ein ausgew�
 > Stunden"** beschriftet, die leere Stunde davor ist keine 0. **Ladestand, Temperatur, Strahlung, Preise** und die
 > **Aufteilung je Gerät** (sie kommt vom Leistungssensor) liest eedc weiter aus den eigenen Stundenwerten. Deckt der
 > Spiegel einen Tag nicht (kein HA-Sensor, vor dem Beginn der Statistik), rechnet der Tag
-> wie bisher aus den gespeicherten Zählerständen. **Tage älter als zwei Jahre**, deren Stundenwerte eedc nach der
-> Aufbewahrungsfrist gelöscht hat, zeigen ihren Stunden-Verlauf wieder, soweit der Spiegel zurückreicht — dann ohne
-> Ladestand und Wetter.
+> wie bisher aus den gespeicherten Zählerständen. **Bis Version 4.3.1** hat eedc Stundenwerte nach zwei Jahren
+> gelöscht; diese Tage zeigen ihren Stunden-Verlauf, soweit der Spiegel zurückreicht — dann ohne Ladestand und Wetter.
+> **Ab Version 4.3.2** löscht eedc Stundenwerte nicht mehr von selbst; schon Gelöschtes kommt nicht zurück.
 >
 > **Welcher Tag, welche Stunde.** Ein Tag aus dem HA-Spiegel ist der **Kalendertag** von 0 bis 24 Uhr — wie im
 > HA-Energie-Dashboard; was zwischen 23 und 24 Uhr passiert (die Wallbox lädt nachts, der Speicher zieht Netzstrom),
@@ -1494,7 +1494,7 @@ Der interaktive Überblick über alle Monatswerte in einer sortierbaren Tabelle 
 
 > Kompakte Werte-Blöcke sind zusätzlich direkt in Cockpit- und Komponenten-Sichten eingebettet; die volle Werkbank mit Picker und Export liegt hier.
 
-> **Die Spalte „CO₂-Einsparung (PV)"** zeigt bewusst nur den **PV-Anteil** (Eigenverbrauch × Strommix) — für Monate **und** Tage, damit sich Tageszeilen zum Monat aufaddieren. Wärmepumpe und E-Mobilität fehlen darin: ihre Bezugsgrößen (erzeugte Wärme, gefahrene Kilometer) erfasst eedc nur monatlich. Die **vollständige** Bilanz steht unter **Auswertungen → CO₂** (§4.4) und im Block „CO₂-Bilanz" in [Cockpit → Jahr/Gesamt](#24-jahrgesamt).
+> **Die Spalte „CO₂-Einsparung (PV)"** zeigt bewusst nur den **PV-Anteil** (Eigenverbrauch × Strommix) — für Monate **und** Tage, damit sich Tageszeilen zum Monat aufaddieren. Wärmepumpe und E-Mobilität fehlen darin: ihre CO₂-Einsparung rechnet eedc nur je Monat (aus erzeugter Wärme, Wärmepumpen-Strom, gefahrenen Kilometern und Netzladung des Monats), nicht je Tag. Die **vollständige** Bilanz steht unter **Auswertungen → CO₂** (§4.4) und im Block „CO₂-Bilanz" in [Cockpit → Jahr/Gesamt](#24-jahrgesamt).
 
 ---
 

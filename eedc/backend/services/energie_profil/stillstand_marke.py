@@ -14,8 +14,9 @@ lassen die Zeilen über ``spannen.zeile_gebuendelt`` (n ≠ 1) aus.
 Nur Zeilen, deren Bilanz aus den Kanälen kommt (``aus_kanal_gruppe(z, "pv_kw")``) — ein Bestandstag trägt keine Marke
 (E-9, benannte Grenze G-4).
 
-Dazu dieselbe Marke auf den Adapter-Zeilen für den Schreiber der Heimladungs-Anteile (``kanal_stunden_mit_marke``,
-Fund-Päckchen G): die Nachtragsstunde eines Stillstands geht dort wie jede Bündel-Stunde als «nicht gedeckt» ein.
+Die Schreiber des Heimladungs-Anteils (Tageszeile am Kanal-Tag und im Bestandsweg, abgeleiteter Kanal) lesen die
+Fenster selbst und fragen die eine Regel ``spannen.stillstand_ohne_ladeanteil`` (Nachtrag G; ``stunden_der_zeile`` hier
+bildet die echten Stunden einer Kanal-Stunde).
 
 Schwesterdateien: ``kanal_stunden.py`` (die Mischzeilen), ``services/kanal/stillstand.py`` (die Fenster),
 ``core/berechnungen/spannen.py`` (die Regel).
@@ -78,29 +79,4 @@ async def markiere_stillstand(db: AsyncSession, anlage_id: int, je_tag: Mapping[
     return je_tag
 
 
-async def kanal_stunden_mit_marke(db: AsyncSession, anlage_id: int, datum: date, ks):
-    """Die Adapter-Zeilen eines Kanal-Tags (``KanalStunden``) mit der Marke des Tages — für den Schreiber, der ohne Mischzeile
-    rechnet: die Heimladungs-Anteile der Tageszeile (``kanal_stunden.ladeanteil_der_kanal_stunden`` über
-    ``Weiche.tageszeile``; Fund-Päckchen G, Grenze G-5 des Bauplans N-799). Dieselbe Marke wie ``markiere`` (Fenster aus
-    ``kanal/stillstand.py``), auf **Kopien** der markierten Zeilen — die Adapter-Zeilen sind je Prozess gemerkt
-    (``merken.ADAPTER``) und bleiben unberührt. Ohne Fenster ``ks`` unverändert."""
-    from dataclasses import replace
-    from types import SimpleNamespace
-
-    from backend.services.kanal.stillstand import fenster_im_bereich
-
-    fenster = await fenster_im_bereich(db, anlage_id, datum, datum)
-    if not fenster:
-        return ks
-    zeilen = []
-    for z in ks.zeilen:
-        marke = marke_der_stunde(fenster, stunden_der_zeile(datum, z.stunde))
-        if marke is None:
-            zeilen.append(z)
-            continue
-        n, achsen = marke
-        zeilen.append(SimpleNamespace(**{**vars(z), "spannen": {**(z.spannen or {}), **{a: n for a in sorted(achsen)}}}))
-    return replace(ks, zeilen=tuple(zeilen))
-
-
-__all__ = ["kanal_stunden_mit_marke", "markiere", "markiere_stillstand", "stunden_der_zeile"]
+__all__ = ["markiere", "markiere_stillstand", "stunden_der_zeile"]

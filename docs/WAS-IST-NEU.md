@@ -11,11 +11,13 @@
 
 ## Unveröffentlicht
 
-**Wetter und Börsenpreis bleiben beim Neu-Aggregieren.** Baute eedc einen Tag neu auf und lieferte der Wetter- oder Börsenpreis-Dienst in dem Moment nichts, standen Temperatur, Einstrahlung, Performance Ratio, Börsenpreis und negative Preisstunden danach leer. Jetzt bleibt der gespeicherte Wert, wenn der Abruf nichts liefert; liefert er einen Wert, gewinnt der neue.
+**Wetter und Börsenpreis bleiben beim Neu-Aggregieren.** Baute eedc einen Tag neu auf und lieferte der Wetter- oder Börsenpreis-Dienst in dem Moment nichts, standen Temperatur, Einstrahlung, Performance Ratio, Börsenpreis und negative Preisstunden danach leer. Jetzt bleiben Wetter und Börsenpreis wie gespeichert, wenn der Abruf nichts liefert, und die Performance Ratio entsteht daraus neu; liefert der Abruf einen Wert, gewinnt der neue.
 
-**Daten-Checker: gefahrene Kilometer.** Beginnt Home Assistant die Summe des Kilometerstands mitten in der Reihe neu, während der Stand weiterläuft, zeigten Tag und Tabelle eine andere Monatszahl als der Monatsabschluss. Der Befund „Zählerstände – Zählerstand springt“ nennt den Tag mit beiden Zahlen und den Weg über „Summe anpassen“ in Home Assistant.
+**Daten-Checker: gefahrene Kilometer.** Beginnt Home Assistant die Summe des Kilometerstands (Feld „Gefahrene km“) mitten in der Reihe neu, während der Stand weiterläuft, zeigen Tag und Tabelle eine andere Monatszahl als der Monatsabschluss; eedc berichtigt das nicht selbst. Der Befund „Zählerstände – Zählerstand springt“ nennt jetzt den Tag mit beiden Zahlen und den Weg über „Summe anpassen“ in Home Assistant.
 
-**Heimladung nach einem Erfassungs-Ausfall.** Die Stunde, die die Ladung mehrerer ausgefallener Stunden nachträgt, bekommt keinen PV-Anteil mehr, als wäre sie eine einzige Stunde – wie schon bei den Ladeblöcken.
+**Heimladung nach einem Erfassungs-Ausfall.** Ohne eigenen PV-Ladezähler bewertete eedc die Stunde, die die Ladung mehrerer ausgefallener Stunden nachträgt, im PV-/Netz-Anteil der Heimladung wie eine einzige Stunde. Jetzt ist ihr Anteil nicht bestimmbar – wie schon bei den Ladeblöcken –, die Ladung zählt weiter: im Anteil des Tages fällt die Stunde heraus, in dem Anteil, den eedc mit Home Assistant für den Monat fortschreibt, zählt ihre Ladung zum Netz. Gilt für Tage und Stunden, die eedc ab jetzt bildet; ein gespeicherter Tag ändert sich mit „Tag neu aggregieren“.
+
+**Stundenwerte bleiben dauerhaft.** Bis 4.3.1 löschte eedc die Stundenwerte des Energieprofils nach zwei Jahren – auch Werte, die keine Quelle zurückgibt (Betriebsart, Leistungsverlauf, MQTT-Stunden). Jetzt löscht eedc sie nicht mehr von selbst; schon gelöschte kommen nicht zurück.
 
 **Datei hochladen bei gesetzter PIN.** Das Hochladen einer Datei in der Infothek und des Horizontprofils scheiterte mit Einstellungs-Sperre auch nach dem Entsperren; jetzt geht es.
 

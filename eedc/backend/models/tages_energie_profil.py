@@ -5,7 +5,9 @@ Persistente Speicherung stündlicher Energiedaten für langfristige Analyse
 und Speicher-Dimensionierungs-Simulation.
 
 Daten werden täglich nach Mitternacht aus HA-Sensor-History / MQTT aggregiert
-und bleiben dauerhaft erhalten (HA-History hat nur ~10 Tage Retention).
+und bleiben dauerhaft erhalten (HA-History hat nur ~10 Tage Retention). Bis 4.3.1
+löschte der Nachtlauf Stundenzeilen älter als 730 Tage; seit dem Nachtrag zu
+Fund-Päckchen G gibt es keine Löschfrist mehr (``scheduler_jobs.py``).
 
 Zwei Tabellen:
   - TagesEnergieProfil: 24 Zeilen pro Anlage+Tag (stündliche Auflösung)

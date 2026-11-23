@@ -12,7 +12,7 @@ etwa, weil sie importiert wurde: Home Assistant zählt diesen Stand als Menge de
 dann „die Statistik beginnt mit diesem Stand statt bei 0“. eedc nennt das nur, wenn der Stand mehr
 ist, als eine Anlage in einer Stunde erzeugen oder verbrauchen kann.
 
-Ein dritter Fall betrifft die **gefahrenen Kilometer**: Tag und Tabelle zählen die Zunahme des Kilometerstands, der Monatswert
+Ein dritter Fall betrifft die **gefahrenen Kilometer** (Feld „Gefahrene km“): Tag und Tabelle zählen die Zunahme des Kilometerstands, der Monatswert
 (Vorschlag im Monatsabschluss, „Aus HA laden“) die Summe der Statistik. Beginnt Home Assistant die Summe mitten in der Reihe
 neu — meist nach einer Lücke in der Statistik —, während der Stand weiterläuft, stehen für denselben Monat zwei Zahlen. Die
 Meldung sagt dann „die Summe beginnt neu, der Stand läuft weiter“ und nennt den Tag mit beiden Tageszahlen.
@@ -28,8 +28,9 @@ Meldung sagt dann „die Summe beginnt neu, der Stand läuft weiter“ und nennt
 3. Hast du einen betroffenen Monat schon gespeichert (mit «Aus HA laden» oder per Import), den Monat unter
    [Monatsdaten](eedc:/einstellungen/daten?block=monatsdaten) öffnen und mit «Aus HA laden» neu übernehmen — ein
    gespeicherter Monat ändert sich nicht von allein.
-4. **Zählerstand** (Gas, Wasser, Öl, Kilometerstand; die Meldung sagt es): hier rechnet eedc mit dem Stand, den der Sensor
-   anzeigt, und „Summe anpassen“ wirkt nicht. Wurde der Zähler getauscht, führe den neuen als eigenes Gerät: unter
+4. **Zählerstand** (Gas, Wasser, Öl, Kilometerstand; die Meldung sagt es): hier rechnen Tag und Tabelle mit dem Stand, den
+   der Sensor anzeigt, und „Summe anpassen“ ändert daran nichts (bei gefahrenen Kilometern liest der Monatswert die Summe,
+   siehe Schritt 5). Wurde der Zähler getauscht, führe den neuen als eigenes Gerät: unter
    *Einstellungen → Komponenten* am alten Gerät ein «Stilllegungsdatum (optional)» setzen, den Haken «Aktiv (in
    Berechnungen berücksichtigen)» stehen lassen und den neuen Zähler als eigenes Gerät anlegen (Handbuch Einstellungen,
    Verbrauchszähler). Beim nächsten Tausch zählt kein Sprung, wenn du in Home Assistant für den neuen Zähler einen eigenen
@@ -40,7 +41,8 @@ Meldung sagt dann „die Summe beginnt neu, der Stand läuft weiter“ und nennt
    dieser Stunde eintragen (der Unterschied der beiden Stände, die die Meldung in Klammern nennt), dann „Anpassen“. Danach
    Schritt 2 und, für gespeicherte Monate, Schritt 3 — oder den Monat unter
    [Monatsdaten](eedc:/einstellungen/daten?block=monatsdaten) von Hand berichtigen. Damit zählen Tag, Tabelle und Monatswert
-   dieselbe Zahl; die Kilometer der Lücke stehen dann im Tag des Neubeginns, wie der Stand sie zeigt.
+   dieselbe Zahl (auf den Kilometer genau); die Kilometer der Lücke stehen dann im Tag des Neubeginns, wie der Stand sie
+   zeigt. Ein schon gespeicherter Monat ändert sich erst, wenn du ihn neu übernimmst oder von Hand berichtigst.
 6. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach den Schritten 1 und 2 (bzw. 5) ist der Befund aus der Liste
    verschwunden. Ein Sprung an einem Zählerstand (Schritt 4) bleibt stehen; die Zeile erklärt ihn weiterhin.
 
@@ -50,4 +52,5 @@ an die Adresse aus unserer Antwort schicken.
 
 ## Was ohne Handlung gilt
 Der Sprung bleibt in Tag, Monat und Jahr stehen — in eedc wie im Energie-Dashboard von Home Assistant. eedc schneidet ihn
-nicht selbst ab: die Quelle ist die Statistik in Home Assistant.
+nicht selbst ab: die Quelle ist die Statistik in Home Assistant. Beginnt die Summe neu (gefahrene Kilometer), bleiben Tag
+und Tabelle bei der Zunahme des Stands und der Monatswert bei der Summe — für den Monat stehen weiter zwei Zahlen.

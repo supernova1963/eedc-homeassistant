@@ -221,7 +221,7 @@ class EEDCScheduler:
                 replace_existing=True,
             )
 
-            # Energie-Profil Vortag: Täglich um 00:15 (Finalisierung + Cleanup)
+            # Energie-Profil Vortag: Täglich um 00:15 (Finalisierung; keine Löschfrist mehr, Nachtrag G)
             self._scheduler.add_job(
                 energie_profil_aggregation_job,
                 CronTrigger(hour=0, minute=15),

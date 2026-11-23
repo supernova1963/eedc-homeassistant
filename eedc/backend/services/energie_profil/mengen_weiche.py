@@ -38,7 +38,7 @@ die geleerten Gruppen im Eintrag (``gruppen``); ``datenquelle`` bleibt der Trigg
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Optional
 
 #: Die TZ-Felder der Bilanz, die an einem Kanal-Tag leer bleiben (die Lesestelle ist ``ueberschuss_defizit_der_tage``).
@@ -72,10 +72,13 @@ class Weiche:
     #: Die Präfixe einer Gruppe, der der ganze Präfix gehört — die E-Mobilität (``wallbox_*``/``eauto_*``, Wallbox-Regel
     #: N-555; ``kanal_stunden._ohne_emob``).
     praefixe: tuple[str, ...] = ()
-    #: Fund-Päckchen G (Grenze G-5 des Bauplans N-799): die Kanal-Stunden mit der Marke des Erfassungs-Stillstands
-    #: (``stillstand_marke.kanal_stunden_mit_marke``) — nur mit E-Mob-Gruppe; der Heimladungs-Anteil rechnet eine
-    #: Nachtragsstunde wie jede Bündel-Stunde als «nicht gedeckt» (dieselbe Regel wie der Ladeblock-Eingang).
-    ladeanteil_stunden: Any = None
+    #: Nachtrag G (Grenze G-5 des Bauplans N-799): die markierbaren Erfassungs-Stillstände, die den Tag berühren
+    #: (``kanal/stillstand.fenster_im_bereich``, ab dem Vortag — Slot 0 der Bestandszeile ist Vortag 23:00). Aus einer
+    #: Stunde mit ihrer Marke entsteht kein Heimladungs-Anteil (``spannen.stillstand_ohne_ladeanteil``) — im Schreiber des
+    #: Kanal-Tags (``kanal_stunde_ohne_ladeanteil``) wie im Bestandsweg ``aggregator.verrechne_stunde``
+    #: (``slot_ohne_ladeanteil``), dieselbe Regel wie der Ladeblock-Eingang. An einem Bestandstag leer (E-9, G-4).
+    stillstand: tuple = ()
+    datum: Optional[date] = None
 
     def leerer_schluessel(self, key: str) -> bool:
         """Kommt der ``komponenten_kwh``-Schlüssel an diesem Tag aus dem Kanal (und bleibt in der Tageszeile leer)?"""
@@ -86,6 +89,23 @@ class Weiche:
         from backend.services.kanal.bilanz_leser import ist_bilanz_schluessel
 
         return ist_bilanz_schluessel(key, self.bilanz_ziele)
+
+    def kanal_stunde_ohne_ladeanteil(self, stunde: int) -> bool:
+        """Trägt die Stunde ``stunde`` des Kanal-Tags (Beginn-Raster) die Marke eines Stillstands (Nachtrag G)?"""
+        from backend.core.berechnungen.spannen import stillstand_ohne_ladeanteil
+        from backend.services.energie_profil.stillstand_marke import stunden_der_zeile
+
+        return bool(self.stillstand) and stillstand_ohne_ladeanteil(self.stillstand, stunden_der_zeile(self.datum, stunde))
+
+    def slot_ohne_ladeanteil(self, slot: int) -> bool:
+        """Trägt der Backward-Slot ``slot`` der Bestandszeile die Marke eines Stillstands (Nachtrag G)? Die echten
+        Stunden des Slots über ``slot_konvention.echte_stunden_des_slots`` (Umstellungstage wie das Slot-Raster)."""
+        if not self.stillstand:
+            return False
+        from backend.core.berechnungen.slot_konvention import echte_stunden_des_slots
+        from backend.core.berechnungen.spannen import stillstand_ohne_ladeanteil
+
+        return stillstand_ohne_ladeanteil(self.stillstand, echte_stunden_des_slots(self.datum, slot))
 
     def stunde(self, profil) -> None:
         """Die Mengen-Spalten und Achsen der Gruppen in einer fertig gebauten Stundenzeile leeren (vor ``db.add``)."""
@@ -120,7 +140,7 @@ class Weiche:
         z.performance_ratio = performance_ratio_des_kanal_tags(self.tag, self.stunden, gti_summe, kwp)
         z.einspeisung_neg_preis_kwh = einspeisung_neg_preis_der_kanal_stunden(self.stunden, boerse)
         if GRUPPE_EMOB in self.gruppen:
-            lade_anteil = ladeanteil_der_kanal_stunden(self.ladeanteil_stunden or self.stunden)
+            lade_anteil = ladeanteil_der_kanal_stunden(self.stunden, ohne_anteil=self.kanal_stunde_ohne_ladeanteil)
             z.emob_ladung_pv_abgeleitet_kwh = lade_anteil.pv_kwh if lade_anteil is not None else None
             z.emob_ladung_netz_abgeleitet_kwh = lade_anteil.netz_kwh if lade_anteil is not None else None
             z.emob_ladung_speicher_abgeleitet_kwh = lade_anteil.speicher_kwh if lade_anteil is not None else None
@@ -175,10 +195,9 @@ async def mengen_weiche(db, anlage, datum: date) -> Weiche:
         return KEINE_WEICHE
     tag, ks = k
     gruppen = tuple(g for g in (GRUPPE_BILANZ, GRUPPE_WP, GRUPPE_EMOB, GRUPPE_SONSTIGES) if g in tag.gruppen)
-    lade_stunden = None
-    if GRUPPE_EMOB in gruppen:
-        from backend.services.energie_profil.stillstand_marke import kanal_stunden_mit_marke
-        lade_stunden = await kanal_stunden_mit_marke(db, anlage.id, datum, ks)
+    from backend.services.kanal.stillstand import fenster_im_bereich
+
+    stillstand = tuple(await fenster_im_bereich(db, anlage.id, datum - timedelta(days=1), datum))
     return Weiche(
         gruppen=gruppen, tag=tag, stunden=ks,
         tep_spalten=frozenset(f for g in gruppen for f in FELDER_JE_GRUPPE.get(g, ())),
@@ -186,7 +205,7 @@ async def mengen_weiche(db, anlage, datum: date) -> Weiche:
         bilanz_ziele=frozenset((await bilanz_ziele(db, anlage.id, [datum]))[datum]),
         geraete_schluessel=_geraete_schluessel(tag, tuple(g for g in gruppen[1:] if g != GRUPPE_EMOB)),
         praefixe=WALLBOX_KOMPONENTEN_PREFIXE if GRUPPE_EMOB in gruppen else (),
-        ladeanteil_stunden=lade_stunden,
+        stillstand=stillstand, datum=datum,
     )
 
 

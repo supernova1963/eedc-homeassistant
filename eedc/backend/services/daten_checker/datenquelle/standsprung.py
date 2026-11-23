@@ -199,8 +199,9 @@ SATZ_MENGE = ("Gefunden: {namen}. Lösung in Home Assistant: Einstellungen → W
               "korrigierte Statistik beim nächsten nächtlichen Abgleich von selbst ab — oder sofort hier mit „Aus Home "
               "Assistant neu übernehmen“. Hast du den Monat schon mit dem Sprung gespeichert („Aus HA laden“ oder Import), "
               "übernimm ihn danach im Monatsabschluss neu.")
-SATZ_STAND = ("Bei Zählerständen (Gas, Wasser, Öl, Kilometerstand) rechnet eedc mit dem Stand, den der Sensor anzeigt, nicht mit "
-              "der Summe der Statistik — „Summe anpassen“ in Home Assistant ändert dort nichts. Gefunden: {namen}. Wurde der "
+SATZ_STAND = ("Bei Zählerständen (Gas, Wasser, Öl, Kilometerstand) rechnen Tag und Tabelle mit dem Stand, den der Sensor "
+              "anzeigt, nicht mit der Summe der Statistik — „Summe anpassen“ in Home Assistant ändert daran nichts. Bei "
+              "gefahrenen Kilometern liest der Monatswert die Summe. Gefunden: {namen}. Wurde der "
               "Zähler getauscht, führe den neuen als eigenes Gerät: am alten Gerät ein Stilllegungsdatum setzen und den neuen "
               "Zähler anlegen (Handbuch Einstellungen, Verbrauchszähler). Beim nächsten Tausch zählt kein Sprung, wenn du in "
               "Home Assistant für den neuen Zähler einen eigenen Sensor oder Helfer anlegst, ihn in eedc unter Datenquellen "
@@ -279,6 +280,9 @@ def _meldung(n: int, n_summe_neu: int) -> str:
     if n_summe_neu == n:
         return (f"{n} Stunde(n), in denen die Summe eines Zählerstands in Home Assistant neu beginnt, während der Stand "
                 "weiterläuft — Tag und Monatswert zählen verschieden")
+    if n_summe_neu:
+        return (f"{n} Stunde(n), in denen ein Zählerstand in Home Assistant springt oder seine Summe neu beginnt — die "
+                "Zeilen sagen je Fund, was zählt")
     return f"{n} Stunde(n), in denen ein Zählerstand in Home Assistant springt — Tag, Monat und Jahr zählen den Sprung mit"
 
 

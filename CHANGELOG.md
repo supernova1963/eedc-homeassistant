@@ -52,16 +52,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Menüwege von Home Assistant 2026.11** in Befunden, Lösungswegen, Handbüchern und Dialogen: „Einstellungen → Werkzeuge →
   Statistik (in älteren Home-Assistant-Versionen: Entwicklerwerkzeuge → Statistik)“, „Summe anpassen“, „Zeitpunkt auswählen“,
   „Neuer Wert“, „Anpassen“.
-- **Daten-Checker: gefahrene Kilometer, wenn Home Assistant die Summe neu beginnt.** Tag und Tabelle zählen die Zunahme des
-  Kilometerstands, der Monatswert (Vorschlag im Monatsabschluss, „Aus HA laden“) die Summe der Statistik. Beginnt Home
+- **Daten-Checker: gefahrene Kilometer, wenn Home Assistant die Summe neu beginnt.** Bei den gefahrenen Kilometern (Feld
+  „Gefahrene km“) zählen Tag und Tabelle die Zunahme des Kilometerstands, der Monatswert (Vorschlag im Monatsabschluss, „Aus HA laden“) die Summe der Statistik. Beginnt Home
   Assistant die Summe mitten in der Reihe neu – meist nach einer Lücke in der Statistik –, während der Stand weiterläuft,
   standen für denselben Monat zwei Zahlen, ohne dass ein Befund es sagte (gemessen: Tag 1 924 km, Mai 2 807 km in der
   Tabelle, 902 km als Monatswert). Der Befund „Zählerstände – Zählerstand springt“ nennt jetzt den Tag mit beiden Tageszahlen
   und den Weg: in Home Assistant „Summe anpassen“ an der genannten Stunde auf die Zunahme des Stands, danach „Aus Home
-  Assistant neu übernehmen“ — dann zählen Tag, Tabelle und Monatswert dieselbe Zahl.
+  Assistant neu übernehmen“ — dann zählen Tag, Tabelle und Monatswert dieselbe Zahl; ein schon gespeicherter Monat ändert
+  sich erst, wenn du ihn neu übernimmst oder von Hand berichtigst.
 
 ### Changed
 
+- **Stundenwerte bleiben dauerhaft.** Bis 4.3.1 löschte eedc jede Nacht die Stundenwerte des Energieprofils, die älter als
+  zwei Jahre waren — darunter Werte, die keine Quelle zurückgibt (Betriebsart, Leistungsverlauf, Stundenwerte aus MQTT,
+  Ladestand von Sensoren ohne Langzeitstatistik). Jetzt löscht eedc Stundenwerte nicht mehr von selbst; schon gelöschte
+  kommen nicht zurück. Die Zwischenspeicher der MQTT-Werte (31 bzw. 15 Tage) bleiben, wie sie sind.
 - **„aus Zählerständen gerechnet“ statt „geschätzt“.** Überschuss, Defizit und Direktverbrauch eines Tages, an dem die
   Erfassung einige Stunden ausfiel, tragen in der Tagestabelle und unter der Bilanz in *Cockpit → Tag* jetzt ein
   Rechner-Zeichen statt des Warndreiecks („aus Zählerständen gerechnet“ statt „geschätzt“), in der CSV-Spalte „Kennzeichen
@@ -83,17 +88,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 - **Wetter und Börsenpreis bleiben, wenn der Abruf beim Neu-Aggregieren nichts liefert.** Baute eedc einen Tag neu auf
   („Tag neu aggregieren“, „Mehrere Tage neu aggregieren“, „Aus Home Assistant neu übernehmen“, Knöpfe im Daten-Checker,
-  nächtliche Läufe, „Lücken aus HA-LTS nachfüllen“) und lieferte der Wetter- oder Börsenpreis-Dienst in dem Moment nichts
+  nächtliche Läufe) und lieferte der Wetter- oder Börsenpreis-Dienst in dem Moment nichts
   (kein Netz, Fehler, Begrenzung), standen danach Temperatur, Einstrahlung, Performance Ratio, Börsenpreis und negative
-  Preisstunden des Tages leer — den Börsenpreis füllte kein späterer Lauf wieder. Jetzt gilt je Feld: liefert der Abruf
+  Preisstunden des Tages leer — den Börsenpreis füllte kein späterer Lauf wieder. Jetzt gilt je Stunde und Feld: liefert der Abruf
   einen Wert, gewinnt er; liefert er nichts, bleibt der gespeicherte. Die Performance Ratio und die Einspeisung bei
   negativem Preis rechnet eedc aus denselben Werten neu (gemessen: sechs Tage ohne Netz neu aufgebaut, alle Werte wie
   vorher; mit Netz gewinnt der neue Abruf).
-- **Heimladung: die Stunde nach einem Erfassungs-Ausfall trägt keinen PV-Anteil mehr.** Stand die Erfassung einige Stunden
-  still und trug die Stunde danach die Ladung aller dieser Stunden, rechnete eedc den PV-/Netz-Anteil der Heimladung dieses
-  Tages aus dieser einen Stunde, als wäre es eine — die Ladeblöcke desselben Tages taten das schon nicht. Jetzt gilt für
-  beide dieselbe Regel: der Anteil dieser Stunde ist nicht bestimmbar, die Ladung zählt weiter in jeder Summe. Gilt für Tage,
-  die eedc neu bildet; gespeicherte Tage behalten ihren Wert bis dahin.
+- **Heimladung ohne PV-Ladezähler: die Stunde nach einem Erfassungs-Ausfall zählt im PV-/Netz-Anteil nicht mehr als eine
+  Stunde.** Stand die Erfassung einige Stunden still und trug die Stunde danach die Ladung aller dieser Stunden, rechnete
+  eedc den PV-/Netz-Anteil der Heimladung aus dieser einen Stunde, als wäre es eine — die Ladeblöcke taten das schon nicht.
+  Jetzt gilt überall dieselbe Regel: der Anteil dieser Stunde ist nicht bestimmbar, die Ladung zählt weiter in jeder Summe.
+  Im Anteil des Tages fällt die Stunde heraus (trägt der Tag keine andere Ladestunde, bleibt er leer); in dem Anteil, den
+  eedc mit Home Assistant Stunde für Stunde für den Monat fortschreibt, zählt ihre Ladung zum Netz — wie bei jeder Stunde,
+  über die die Zähler nichts sagen. Eine Wallbox oder ein E-Auto mit eigenem PV-Ladezähler ist nicht betroffen. Gilt für
+  Tage und Stunden, die eedc ab jetzt bildet: ein gespeicherter Tag ändert sich mit „Tag neu aggregieren“, schon
+  fortgeschriebene Stunden des Monatsanteils behalten ihren Wert.
 - **Datei hochladen bei gesetzter PIN.** Mit Einstellungs-Sperre scheiterten das Hochladen einer Datei in der Infothek und
   des Horizontprofils in der Solarprognose immer mit „Einstellungen sind gesperrt. Bitte mit der PIN entsperren.“ — auch
   nach dem Entsperren. Der Upload trägt den Nachweis der Entsperrung jetzt mit wie jede andere Änderung.

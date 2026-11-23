@@ -6,9 +6,9 @@ Auto-Fill lag in der gelöschten V3-Seite (**N-426**). Die Größe steckt trotzd
 in den eigenen Messreihen.
 
 ⭐ **Und die Tages-Näherung überlebt länger als die Stundenwerte:** Das
-Retention-Cleanup löscht ausschließlich ``TagesEnergieProfil``;
-``TagesZusammenfassung`` mit Min/Max wird nie beschnitten
-(``services/energie_profil/scheduler_jobs.py``).
+Löschfrist bis 4.3.1 traf ausschließlich ``TagesEnergieProfil``;
+``TagesZusammenfassung`` mit Min/Max wurde nie beschnitten (seit Nachtrag G keine
+Löschfrist mehr, ``services/energie_profil/scheduler_jobs.py``).
 """
 
 from __future__ import annotations

@@ -5,7 +5,9 @@ Tägliche und 15-minütige Jobs für Energie-Profil-Aggregation, extrahiert aus
 `services/energie_profil_service.py`. Verhalten unverändert. Eigene
 Schreib-Pfade entstehen nicht — beide Wrapper rufen `aggregate_day` für jede
 Anlage; Provenance-Anschluss landet daher im Aggregator selbst (P3 Commit F).
-Retention-Cleanup für TagesEnergieProfil > 2 Jahre bleibt im Vortags-Wrapper.
+Eine Löschfrist für die Stundenzeilen gibt es seit dem Nachtrag zu Fund-Päckchen G (Gernot 23.11.2026) nicht mehr: Werte
+aus Quellen ohne Historie (Betriebsart, Leistungsverlauf, MQTT-Stunden, Wetter, Börsenpreis) werden nicht still gelöscht;
+bis 4.3.1 löschte der Vortags-Wrapper Stundenzeilen älter als 730 Tage.
 """
 
 from __future__ import annotations
@@ -13,11 +15,10 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 
 from backend.core.database import get_session
 from backend.models.anlage import Anlage
-from backend.models.tages_energie_profil import TagesEnergieProfil
 from backend.services.energie_profil.aggregator import aggregate_day
 from backend.services.energie_profil.source import Source
 
@@ -29,10 +30,8 @@ async def aggregate_yesterday_all() -> dict:
     Scheduler-Job: Finalisiert den Vortag für alle Anlagen (täglich um 00:15).
 
     Schreibt den Vortag final (inkl. Wetter-IST-Daten aus Archive-API),
-    berechnet TagesZusammenfassung und räumt alte TagesEnergieProfil-Einträge auf.
-
-    Retention: TagesEnergieProfil-Einträge älter als 2 Jahre werden gelöscht.
-    TagesZusammenfassung bleibt dauerhaft erhalten.
+    berechnet TagesZusammenfassung. Stunden- und Tageszeilen bleiben dauerhaft erhalten (keine Löschfrist mehr,
+    Nachtrag G; Modul-Docstring).
 
     Returns:
         Dict mit Ergebnissen pro Anlage
@@ -60,16 +59,6 @@ async def aggregate_yesterday_all() -> dict:
                 logger.error(f"Anlage {anlage.id}: Aggregation fehlgeschlagen: {type(e).__name__}: {e}")
                 results[anlage.id] = {"status": "fehler", "error": str(e)}
                 await db.rollback()
-
-        # Retention-Cleanup: TagesEnergieProfil älter als 2 Jahre löschen
-        cutoff = date.today() - timedelta(days=730)
-        result = await db.execute(
-            delete(TagesEnergieProfil).where(TagesEnergieProfil.datum < cutoff)
-        )
-        deleted = result.rowcount
-        if deleted > 0:
-            logger.info(f"Energie-Profil Cleanup: {deleted} Stundenwerte älter als 2 Jahre gelöscht")
-        await db.commit()
 
     return results
 

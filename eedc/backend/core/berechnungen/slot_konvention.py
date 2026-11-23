@@ -287,6 +287,20 @@ def slot_start_ts(datum: date, slot: int) -> int | None:
     return max(treffer) if treffer else None
 
 
+def echte_stunden_des_slots(datum: date, slot: int) -> tuple[int, ...]:
+    """Die echten Stunden (``start_ts`` der HA-Zeilen), deren Energie der Backward-Slot ``slot`` des Tages trägt — die
+    Stunden nach der Randzeile des vorigen Slots bis zu seiner eigenen (:func:`slot_start_ts`). Eine; im Herbst für den
+    Slot nach der doppelten Wanduhr beide Zeilen; im Frühjahr für den leeren Slot keine. Wofür: eine Marke, die an echten
+    Stunden hängt (Erfassungs-Stillstand), an die Bestandszeile tragen (Nachtrag G, ``mengen_weiche.Weiche``)."""
+    ende = slot_start_ts(datum, slot)
+    if ende is None:
+        return ()
+    vor = slot_start_ts(datum, slot - 1)
+    if vor is None:                     # Frühjahr: der vorige Slot hat keine eigene Stunde
+        vor = slot_start_ts(datum, slot - 2)
+    return tuple(range(vor + 3600, ende + 1, 3600)) if vor is not None else (ende,)
+
+
 def tagesfenster_start_ts(datum: date) -> tuple[int, int]:
     """Das Rückwärts-Tagesfenster ``[Vortag 23:00, 23:00)`` (N-434) als Rand-Zeilen der Stundenstatistik.
 
