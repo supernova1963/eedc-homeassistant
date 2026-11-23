@@ -9,7 +9,7 @@ kWh-Zähler: Es müssen die kWh-Zeilen belegt sein, nicht nur die Watt-Zeilen.
 1. Nach der Einrichtung zuerst den nächsten Lauf abwarten.
 2. Bleibt die Zeile: in der [Datenquellen-Zuordnung](eedc:/einstellungen/datenquellen) die kWh-Zähler zuordnen
    (Einspeisung, Netzbezug, PV und die Komponenten).
-3. Zurückliegende Tage holt in der [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) die
+3. Zurückliegende Tage holt in der [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) (*Einstellungen → Daten → Energieprofil-Pflege*) die
    Operation «Lücken aus HA-LTS nachfüllen».
 4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — statt dieser Zeile nennt die Kategorie die aktive Quelle als
    bestanden.

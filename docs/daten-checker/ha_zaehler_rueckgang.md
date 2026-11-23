@@ -17,7 +17,7 @@ wird die ganze übernommene Statistik, nicht nur die letzten 30 Tage.
    Klick gleicht eedc die berichtigte Statistik beim nächtlichen Abgleich von selbst ab.
 3. Stammt der Rückgang von einem Sensor, den du inzwischen ersetzt hast (die Meldung sagt „Vorgänger-Sensor, zugeordnet
    bis …“): statt in Home Assistant zu berichtigen, in der
-   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) die Operation «Werte vor dem
+   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) (*Einstellungen → Daten → Energieprofil-Pflege*) die Operation «Werte vor dem
    Sensorbeginn verwerfen» ausführen.
 4. Hast du einen betroffenen Monat schon gespeichert (mit «Aus HA laden» oder per Import), den Monat unter
    [Monatsdaten](eedc:/einstellungen/daten?block=monatsdaten) öffnen und mit «Aus HA laden» neu übernehmen — ein

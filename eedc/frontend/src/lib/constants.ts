@@ -277,6 +277,16 @@ export const REPARATUR_AENDERUNG_LABELS: Record<string, string> = {
   stundenzeilen_geleert: 'Stundenzeilen geleert',
   tageszeilen_geleert: 'Tageszeilen geleert',
   felder_geleert: 'Werte geleert',
+  // Fund-Päckchen H: „Werte eines Felds vor einem Zeitpunkt verwerfen" (Vorschau · Ergebnis, `services/verwerfen_vor_zeitpunkt.py`)
+  zaehlerstaende: 'Zählerstände vor dem Zeitpunkt',
+  mqtt_rohwerte: 'MQTT-Rohwerte vor dem Zeitpunkt',
+  monate_gespeichert: 'Monate mit gespeichertem Monatswert (bleiben)',
+  zaehlerstaende_geloescht: 'Zählerstände gelöscht',
+  mqtt_rohwerte_geloescht: 'MQTT-Rohwerte gelöscht',
+  wechsel_geloescht: 'Sensorwechsel aufgehoben',
+  abgeleitet_verworfen: 'abgeleitete Stundenwerte neu zu bilden',
+  quelle_geteilt: 'Quelle geteilt',
+  tage_neu: 'Tage werden neu gebildet',
   // E3 Daten-Checker: Vorschau-Zähler der Aktionen (eine Zeile im Vorschau-Kasten; Wächter W-4 —
   // keine Mechanik-Wörter, `backend/tests/test_daten_checker_texte.py`).
   anzahl_tage: 'Tage neu aufgebaut',

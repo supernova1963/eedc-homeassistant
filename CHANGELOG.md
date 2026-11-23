@@ -60,6 +60,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   und den Weg: in Home Assistant „Summe anpassen“ an der genannten Stunde auf die Zunahme des Stands, danach „Aus Home
   Assistant neu übernehmen“ — dann zählen Tag, Tabelle und Monatswert dieselbe Zahl; ein schon gespeicherter Monat ändert
   sich erst, wenn du ihn neu übernimmst oder von Hand berichtigst.
+- **Reparatur-Werkbank: „Werte eines Felds vor einem Zeitpunkt verwerfen“.** Für **ein** Feld mit Zähler oder Stand
+  verwirfst du alle Werte vor einem frei gewählten Tag und einer vollen Stunde — als wäre seine Quelle erst ab dann
+  zugeordnet; angeboten wird jedes zugeordnete Feld, nicht nur nach einem Sensortausch. Weg ist nur dieses Feld vor dem
+  Zeitpunkt: seine Stunden im HA-Spiegel, seine Zählerstände (bei MQTT auch die gespeicherten Rohwerte), sein Wert in
+  den Stunden- und Tageswerten, auch in Monaten mit Monatsabschluss, und verzeichnete Sensorwechsel dieses Felds bis zur
+  ersten Stunde ab dem Zeitpunkt; danach bildet eedc die betroffenen Tage im Hintergrund neu. Die gespeicherten Werte jedes
+  anderen Felds, Wetter, Börsen- und Kraftstoffpreise, Prognosen und die gespeicherten Monatswerte bleiben — die Vorschau
+  nennt die Monate, bevor etwas geändert wird, und sagt, dass es sich nicht rückgängig machen lässt. Ein Feld aus Home
+  Assistant mit Tageswert (etwa Einspeisung) zeigt am Tag des Zeitpunkts den ganzen Tag, wie Home Assistant ihn führt; die
+  übrigen Felder dieses Tages liest eedc dann aus den gespeicherten Tageswerten, sie können sich an diesem Tag ändern. Die
+  Vorschau sagt es. Wo ein Neuaufbau den Wert wieder aus der Statistik von Home Assistant
+  schriebe, lehnt die Vorschau ab und nennt die Tage. Anlass: die gefahrenen Kilometer vor dem richtigen Sensor — der
+  Lösungsweg des Befunds „Zählerstand springt“ („die Summe beginnt neu“) nennt die Operation als zweiten Weg (gemessen an
+  einer Kopie: Mai 2 807 → 902 km in der Tabelle wie im Monatswert, der Tag des Neubeginns 1 924 → 19 km, Befund weg).
 
 ### Changed
 
@@ -74,6 +88,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   dieselbe.
   Ebenso sagt der Dialog „Zähler getauscht (gleiche Quelle)“ jetzt „eedc trägt den Tausch … ein“ statt „überbrückt“.
 
+- **Verworfene Werte bleiben verworfen.** Hast du mit „Werte vor dem Sensorbeginn verwerfen“ die Werte des alten Sensors
+  verworfen und ordnest dem Feld später wieder diesen Sensor zu (oder hatte das Feld ihn schon wieder), holt eedc seine
+  Werte vor dem Zeitpunkt nicht mehr aus Home Assistant zurück — bisher kamen sie in den HA-Spiegel zurück. Für „Werte eines
+  Felds vor einem Zeitpunkt verwerfen“ gilt das von Anfang an.
 - **Reparatur-Werkbank „Werte vor dem Sensorbeginn verwerfen“:** hebt verzeichnete Sensorwechsel des Felds bis zur ersten
   Stunde ab dem gewählten Zeitpunkt mit auf — danach rechnet eedc für das Feld, als hätte es den Wechsel nicht gegeben. Ein
   „Zähler getauscht“ in dieser ersten Stunde bleibt eingetragen; sein Sprung zählt weiter nicht als Menge.
@@ -94,23 +112,33 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   einen Wert, gewinnt er; liefert er nichts, bleibt der gespeicherte. Die Performance Ratio und die Einspeisung bei
   negativem Preis rechnet eedc aus denselben Werten neu (gemessen: sechs Tage ohne Netz neu aufgebaut, alle Werte wie
   vorher; mit Netz gewinnt der neue Abruf).
+- **Neu-Aggregieren behält Stunden mit Wetter und Börsenpreis.** Fand eedc beim Neuaufbau eines Tages („Tag neu
+  aggregieren“, „Aus Home Assistant neu übernehmen“, Werkbank, nächtliche Läufe) für eine Stunde keine Menge mehr (keinen
+  Leistungswert, keinen Zählerstand), verschwand ihre Zeile samt Temperatur, Einstrahlung, Wetter und Börsenpreis (gemessen
+  an einer Kopie: ein Tag mit 24 gespeicherten Stunden hatte danach 11). Jetzt bleibt die Stunde mit Wetter und Börsenpreis
+  stehen, dazu wie an jeder neu geschriebenen Stunde Betriebsart, Ladestand und Strompreis — liefert Home Assistant sie
+  nicht mehr (Sensoren ohne Langzeitstatistik), die gespeicherten Werte. Ihre Mengen sind leer. In die Tageswerte
+  (Stundenzahl, Wetter-Tageswerte, Kennzahlen) geht sie nicht ein; die Vorschau von „Tag neu aggregieren“ zählt sie als
+  gespeicherte Stunde. Stunden, die ein Neuaufbau bis 4.3.1 schon entfernt hat, kommen nicht zurück.
 - **Heimladung ohne PV-Ladezähler: die Stunde nach einem Erfassungs-Ausfall zählt im PV-/Netz-Anteil nicht mehr als eine
   Stunde.** Stand die Erfassung einige Stunden still und trug die Stunde danach die Ladung aller dieser Stunden, rechnete
   eedc den PV-/Netz-Anteil der Heimladung aus dieser einen Stunde, als wäre es eine — die Ladeblöcke taten das schon nicht.
-  Jetzt gilt überall dieselbe Regel: der Anteil dieser Stunde ist nicht bestimmbar, die Ladung zählt weiter in jeder Summe.
+  Jetzt gilt an Tagen aus dem HA-Spiegel bzw. den eigenen Zählerständen und im fortgeschriebenen Monatsanteil dieselbe
+  Regel: der Anteil dieser Stunde ist nicht bestimmbar, die Ladung zählt weiter in jeder Summe.
   Im Anteil des Tages fällt die Stunde heraus (trägt der Tag keine andere Ladestunde, bleibt er leer); in dem Anteil, den
   eedc mit Home Assistant Stunde für Stunde für den Monat fortschreibt, zählt ihre Ladung zum Netz — wie bei jeder Stunde,
   über die die Zähler nichts sagen. Eine Wallbox oder ein E-Auto mit eigenem PV-Ladezähler ist nicht betroffen. Gilt für
   Tage und Stunden, die eedc ab jetzt bildet: ein gespeicherter Tag ändert sich mit „Tag neu aggregieren“; den
-  fortgeschriebenen Monatsanteil schreibt eedc nach dem Update einmal ab dem ersten markierten Erfassungs-Ausfall neu
-  (gemessen an einer Anlage mit 12-stündigem Ausfall: November-Anteil 85,1 % → 70,5 %). Gespeicherte Monatswerte ändern
-  sich nicht.
+  fortgeschriebenen Monatsanteil schreibt eedc nach dem Update einmal ab dem ersten erkannten Erfassungs-Ausfall neu
+  (gemessen an einer Anlage ohne PV-Ladezähler mit fortgeschriebenem Monatsanteil und 12-stündigem Ausfall: November-Anteil
+  85,1 % → 70,5 %). Gespeicherte Monatswerte ändern sich nicht; ein abgeschlossener Monat ohne eingetragene PV-/Netz-
+  Aufteilung der Heimladung, den die Zähler decken, zeigt danach den neu geschriebenen Anteil.
 - **Cockpit → Monat: Heimladung ohne PV-Ladezähler zählte ganz als Netz.** Deckten die Zähler den Monat nicht ganz (etwa
   nach einem Ausfall von Home Assistant) und trug keine gespeicherte Schätzung den Monat, rechnete *Cockpit → Monat* die
   Heimladung eines Autos ohne PV-Ladezähler vollständig als Netzladung, der PV-Anteil stand leer; die Monats-Fakten (und
   damit derselbe Monat nach dem Abschluss) nahmen den Anteil aus den Tageswerten. Jetzt nimmt *Cockpit → Monat* denselben
-  Anteil (gemessen an einer Kopie ohne PV-Ladezähler, November: PV leer / Netz 104,98 kWh → PV 89,30 / Netz 15,68 kWh,
-  85,1 %).
+  Anteil (gemessen an einer Kopie ohne PV-Ladezähler und ohne Kanal-Deckung, November: PV leer / Netz 104,98 kWh → PV
+  89,30 / Netz 15,68 kWh, 85,1 %).
 - **Datei hochladen bei gesetzter PIN.** Mit Einstellungs-Sperre scheiterten das Hochladen einer Datei in der Infothek und
   des Horizontprofils in der Solarprognose immer mit „Einstellungen sind gesperrt. Bitte mit der PIN entsperren.“ — auch
   nach dem Entsperren. Der Upload trägt den Nachweis der Entsperrung jetzt mit wie jede andere Änderung.

@@ -67,6 +67,8 @@ class LageZ:
     bilanz: bool
     #: Tage vor ``t``, an denen ein Neu-Aufbau das Feld aus der HA-Statistik in den Bestand schriebe (nicht freigegeben).
     ha_bestandstage: tuple[date, ...] = ()
+    #: Verzeichnete Sensorwechsel, die mit verworfen werden (``feld_loeschen.zaehle_wechsel``, dieselbe Auswahl wie das Löschen).
+    wechsel: int = 0
 
     @property
     def bis_tag(self) -> date:
@@ -74,7 +76,8 @@ class LageZ:
 
     @property
     def nichts_zu_tun(self) -> bool:
-        return not (self.kanal.zeilen or self.staende or self.rohstaende or self.bestand.tage or self.bestand.abschluss_tage)
+        return not (self.kanal.zeilen or self.staende or self.rohstaende or self.bestand.tage or self.bestand.abschluss_tage
+                    or self.wechsel)
 
 
 def _zeitpunkt(params: dict[str, Any]) -> int:
@@ -154,7 +157,7 @@ async def _ha_bestandstage(db: AsyncSession, anlage: Anlage, ziele: vq.BestandZi
 
 async def lage(db: AsyncSession, anlage_id: int, params: dict[str, Any]) -> LageZ:
     """Eingaben prüfen und zählen (kein Schreiben)."""
-    from backend.services.feld_loeschen import gespeicherte_monate
+    from backend.services.feld_loeschen import gespeicherte_monate, zaehle_wechsel
     from backend.services.kanal.bilanz_quellenwahl import bilanz_benoetigte_kanaele
 
     key = params.get("kanal")
@@ -176,27 +179,34 @@ async def lage(db: AsyncSession, anlage_id: int, params: dict[str, Any]) -> Lage
                                        datetime.fromtimestamp(t))
     bilanz = key in await bilanz_benoetigte_kanaele(db, anlage_id, bis_tag)
     ha_tage = await _ha_bestandstage(db, anlage, ziele, kanal_v, bestand, bis_tag) if quelle == QUELLE_HA else ()
+    wechsel = await zaehle_wechsel(db, anlage_id, key, bis=datetime.fromtimestamp(t + 3600),
+                                   gleiche_quelle_bis=datetime.fromtimestamp(t))
     return LageZ(anlage, key, vq.feld_label(key, await vq._investitionen(db, anlage_id)), t, kanal_v, ziele, bestand,
-                 staende, roh, tuple(monate), quelle, bilanz, ha_tage)
+                 staende, roh, tuple(monate), quelle, bilanz, ha_tage, wechsel)
 
 
 # ── Vorschau ────────────────────────────────────────────────────────────────
 
-SATZ_BLEIBT = ("Es bleiben: jedes andere Feld, Wetter, Börsen- und Kraftstoffpreise, Prognosen und die gespeicherten "
-               "Monatswerte.")
+SATZ_BLEIBT = ("Gespeichert bleiben: die Werte jedes anderen Felds, Wetter, Börsen- und Kraftstoffpreise, Prognosen und die "
+               "gespeicherten Monatswerte.")
 SATZ_BILANZ = ("Das Feld gehört zur Energiebilanz: vor dem Zeitpunkt zeigt es «—» wie ein nicht zugeordnetes Feld, die übrigen "
                "Felder des Tages bleiben. Was eedc aus ihm rechnet (etwa Eigenverbrauch, Hausverbrauch, Überschuss), ändert "
                "sich an denselben Tagen mit.")
 SATZ_HA = ("Home Assistant behält seine Statistik. eedc holt die Zeit vor dem Zeitpunkt für dieses Feld nicht wieder — auch "
            "nicht mit «Aus Home Assistant neu übernehmen» oder «Tag neu aggregieren».")
-SATZ_MQTT = "Die Quelle ist MQTT: die verworfenen Werte holt keine Quelle zurück."
+SATZ_MQTT = "Die Quelle ist MQTT: die verworfenen Werte sind nicht wiederholbar — keine Quelle holt sie zurück."
+#: Halt 2 (a), Entscheid Master 23.11.2026: ein HA-Feld mit Tageswert zeigt am Tag des Zeitpunkts den ganzen Tag aus der
+#: HA-Statistik (der Tag verliert mit der Zeile vor ``t`` die Kanal-Deckung, der Neu-Aufbau schreibt den Tageswert aus HA).
+SATZ_TAG_VON_T = ("Am {tag} zeigt dieses Feld den ganzen Tag, wie Home Assistant ihn führt — auch die Stunden vor {uhrzeit} "
+                  "Uhr; die übrigen Felder dieses Tages liest eedc dann aus den gespeicherten Tageswerten, sie können sich an "
+                  "diesem Tag ändern.")
 SATZ_MONAT = "Für {monate} ist ein Monatswert gespeichert. Er bleibt, wie er ist."
 SATZ_MONATE = "Für {monate} sind Monatswerte gespeichert. Sie bleiben, wie sie sind."
 SATZ_MONATE_WEG = "Soll ein Monat zu den verbliebenen Werten passen, ändere ihn unter Einstellungen → «Daten» → «Monatsdaten» von Hand."
-SATZ_NICHT_FREI = ("Für dieses Feld ist das Verwerfen hier nicht möglich: an {n} ({spanne}) hat die Gruppe des Felds keine "
-                   "Kanal-Deckung — dort schriebe jeder Neu-Aufbau des Tages den Wert wieder aus der Statistik von Home "
-                   "Assistant. Bleibt der Wert falsch, berichtige ihn in Home Assistant (Einstellungen → Werkzeuge → "
-                   "Statistik) und übernimm ihn danach mit «Aus Home Assistant neu übernehmen».")
+SATZ_NICHT_FREI = ("Für dieses Feld ist das Verwerfen hier nicht möglich: an {n} ({spanne}) schriebe jeder Neu-Aufbau des "
+                   "Tages den Wert dieses Felds wieder aus der Statistik von Home Assistant. Bleibt der Wert falsch, "
+                   "berichtige ihn in Home Assistant (Einstellungen → Werkzeuge → Statistik) und übernimm ihn danach mit "
+                   "«Aus Home Assistant neu übernehmen».")
 
 
 def _anzahl(n: int, eins: str, mehr: str) -> str:
@@ -216,6 +226,9 @@ def _was_weg(la: LageZ) -> str:
     if tage:
         teile.append(f"die Stunden- und Tageswerte dieses Felds an {_anzahl(len(tage), 'Tag', 'Tagen')} ({vq._spanne(tage)}), "
                      "auch in Monaten mit Monatsabschluss")
+    if la.wechsel:
+        teile.append(f"{_anzahl(la.wechsel, 'verzeichneter Sensorwechsel', 'verzeichnete Sensorwechsel')} dieses Felds bis "
+                     "zur ersten Stunde ab dem Zeitpunkt")
     return "Gelöscht werden nur Daten dieses Felds vor dem Zeitpunkt: " + "; ".join(teile) + "."
 
 
@@ -229,6 +242,7 @@ def klartext(la: LageZ) -> list[str]:
         return s + [_nicht_frei(la)]
     if la.bilanz:
         s.append(SATZ_BILANZ)
+    s.append(_tag_von_t(la))
     s.append(SATZ_BLEIBT)
     if la.monate:
         s.append((SATZ_MONAT if len(la.monate) == 1 else SATZ_MONATE).format(monate=vq._monate_text(list(la.monate))))
@@ -239,6 +253,14 @@ def klartext(la: LageZ) -> list[str]:
 
     s.append(SATZ_ENDGUELTIG)
     return [x for x in s if x]
+
+
+def _tag_von_t(la: LageZ) -> str:
+    """Der Satz «Tag von t» — nur für ein Feld aus Home Assistant mit Tageswert und einen Zeitpunkt nach Mitternacht."""
+    z = datetime.fromtimestamp(la.t)
+    if la.quelle != QUELLE_HA or not la.ziele.tz_keys or z.hour == 0:
+        return ""
+    return SATZ_TAG_VON_T.format(tag=vq._spanne([z.date()]), uhrzeit=z.strftime("%H:%M"))
 
 
 def geschaetzt(la: LageZ) -> dict[str, int]:
@@ -296,8 +318,8 @@ async def fuehre_aus(db: AsyncSession, anlage_id: int, params: dict[str, Any]) -
                "mqtt_rohwerte_geloescht": g.rohstaende, "wechsel_geloescht": g.wechsel,
                "abgeleitet_verworfen": g.abgeleitet_verworfen, **g.bestand, "tage_neu": len(g.tage), "lauf": lauf,
                "meldung": (f"«{la.label}» vor {vq._zeit(la.t)} verworfen: {fmt_zahl(g.kanalzeilen)} Kanalzeilen, "
-                           f"{fmt_zahl(g.staende + g.rohstaende)} Zählerstände; {fmt_zahl(len(g.tage))} Tage werden im "
-                           "Hintergrund neu gebildet.")}
+                           f"{fmt_zahl(g.staende + g.rohstaende)} Zählerstände; "
+                           f"{_anzahl(len(g.tage), 'Tag wird', 'Tage werden')} im Hintergrund neu gebildet.")}
     await db.commit()
     korrektur_lauf.starten(lauf, sitzungen=sitzungen_wie(db, get_session))
     return summary

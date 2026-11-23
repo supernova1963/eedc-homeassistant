@@ -36,15 +36,36 @@ Meldung sagt dann „die Summe beginnt neu, der Stand läuft weiter“ und nennt
    Verbrauchszähler). Beim nächsten Tausch zählt kein Sprung, wenn du in Home Assistant für den neuen Zähler einen eigenen
    Sensor oder Helfer anlegst, ihn in eedc unter [Datenquellen](eedc:/einstellungen/datenquellen) dem Feld zuordnest
    und im Dialog «Bisherige Werte bleiben» wählst.
-5. **Summe beginnt neu, der Stand läuft weiter** (gefahrene Kilometer; die Meldung sagt es): wie in Schritt 1 „Summe
+5. **Summe beginnt neu, der Stand läuft weiter** (gefahrene Kilometer; die Meldung sagt es) — zwei Wege.
+   **Weg 1, die Summe in Home Assistant berichtigen:** wie in Schritt 1 „Summe
    anpassen“ öffnen, unter „Zeitpunkt auswählen“ die genannte Stunde wählen und bei „Neuer Wert“ die Zunahme des Stands in
    dieser Stunde eintragen (der Unterschied der beiden Stände, die die Meldung in Klammern nennt), dann „Anpassen“. Danach
    Schritt 2 und, für gespeicherte Monate, Schritt 3 — oder den Monat unter
    [Monatsdaten](eedc:/einstellungen/daten?block=monatsdaten) von Hand berichtigen. Damit zählen Tag, Tabelle und Monatswert
    dieselbe Zahl (auf den Kilometer genau); die Kilometer der Lücke stehen dann im Tag des Neubeginns, wie der Stand sie
    zeigt. Ein schon gespeicherter Monat ändert sich erst, wenn du ihn neu übernimmst oder von Hand berichtigst.
-6. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach den Schritten 1 und 2 (bzw. 5) ist der Befund aus der Liste
-   verschwunden. Ein Sprung an einem Zählerstand (Schritt 4) bleibt stehen; die Zeile erklärt ihn weiterhin.
+
+   **Weg 2, die Werte vor der Stunde des Neubeginns verwerfen** — wenn die Kilometer davor ohnehin nicht stimmen (etwa
+   weil vorher ein falscher Sensor zugeordnet war) und eedc das Feld erst ab dieser Stunde zählen soll:
+   1. In eedc unter *Einstellungen → Daten → Energieprofil-Pflege* die [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) öffnen und unter
+      „Operation“ **«Werte eines Felds vor einem Zeitpunkt verwerfen»** wählen.
+   2. Unter „Feld“ das Feld aus der Meldung wählen („… · Gefahrene km“ mit dem Namen deines Autos), unter
+      „Verwerfen vor (Tag)“ den Tag und unter „Uhrzeit“ die Stunde aus der Meldung („am …, Stunde ab …“).
+   3. **«Plan erstellen»** und die Vorschau lesen: sie nennt, was gelöscht wird (die Stunden des Felds im HA-Spiegel,
+      seine Zählerstände und seine Stunden- und Tageswerte vor dem Zeitpunkt), was bleibt (jedes andere Feld, Wetter,
+      Preise, Prognosen und die gespeicherten Monatswerte — mit den Monaten), und endet mit „Das lässt sich nicht
+      rückgängig machen.“
+   4. **«Operation ausführen»** — eedc bildet die betroffenen Tage im Hintergrund neu.
+
+   Danach zeigt das Feld vor dem Zeitpunkt „—“ in Tag und Tabelle; der Tag des Neubeginns zählt die Kilometer ab der
+   gewählten Stunde (die Stunde selbst zeigt „—“, sie hat keinen Stand davor); die Kilometer, um die der Stand über die
+   Lücke gesprungen ist, zählen nicht mehr. Home Assistant behält seine Statistik; eedc holt die Zeit vor dem Zeitpunkt
+   nicht wieder — auch nicht mit «Aus Home Assistant neu übernehmen» oder „Tag neu aggregieren“. Gespeicherte Monatswerte bleiben, wie sie sind: soll ein
+   Monat zu den verbliebenen Werten passen, berichtige ihn unter
+   [Monatsdaten](eedc:/einstellungen/daten?block=monatsdaten) von Hand. Der Rückweg ist eine Sicherung der
+   eedc-Datenbank von vorher.
+6. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach den Schritten 1 und 2 (bzw. 5, Weg 1 oder 2) ist der Befund
+   aus der Liste verschwunden. Ein Sprung an einem Zählerstand (Schritt 4) bleibt stehen; die Zeile erklärt ihn weiterhin.
 
 Bleibt der Befund danach: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das Diagnose-Paket:
 im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Herunterladen»** und die Datei

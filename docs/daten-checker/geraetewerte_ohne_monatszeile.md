@@ -15,7 +15,7 @@ nächste Monat gegen den vorletzten Stand und weist zwei Monate als einen aus �
 1. Am Befund **«Monat erfassen»** klicken — der Monatsabschluss dieses Monats öffnet sich.
 2. Einspeisung und Netzbezug eintragen und speichern — die Messwerte gehören dann wieder dazu. Das ist der Regelfall.
 3. Nur wenn die Werte wirklich weg sollen: in der
-   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) die Operation «Messwerte ohne
+   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) (*Einstellungen → Daten → Energieprofil-Pflege*) die Operation «Messwerte ohne
    Monatszeile entfernen» wählen, den Monat wählen, **«Plan erstellen»**, die Vorschau lesen und anwenden — das ist
    endgültig.
 4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Monat ist aus der Liste verschwunden.

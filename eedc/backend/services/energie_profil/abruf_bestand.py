@@ -103,6 +103,39 @@ class AbrufLauf:
                 if self.bestand.tag.get(f) is not None:
                     setattr(zusammenfassung, f, self.bestand.tag[f])
 
+    def stunden_ohne_menge(self, geschrieben: set[int]) -> list[int]:
+        """Stunden, deren gespeicherte Zeile Abruf-Werte trug und die der Lauf nicht schreibt (keine Menge) — Fund-Päckchen H.
+
+        ``aggregate_day`` schreibt nur Stunden mit Leistungspunkt oder Zählerwert. Fehlt einer Stunde beim Neuaufbau jede
+        Menge, verschwand bis hierher ihre Zeile samt Wetter und Börsenpreis (gemessen 23.11.2026 an der Produktiv-Kopie,
+        «Tag neu aggregieren» 31.10.2025: 24 → 11 Zeilen). Regel Gernot 23.11.2026: Werte aus einer Quelle ohne Historie
+        werden nicht gelöscht. Es entsteht nie eine Zeile, die vorher nicht da war (``schreibe_stunde_ohne_menge``).
+        """
+        return sorted((self.bestand.wetter.keys() | self.bestand.boerse.keys()) - geschrieben)
+
+
+def schreibe_stunde_ohne_menge(h: int, kontext, db: AsyncSession, auto_writer: str) -> None:
+    """Die Zeile einer Stunde ohne Menge (``AbrufLauf.stunden_ohne_menge``) — gebaut von ``aggregator.baue_stundenzeile``,
+    derselben Stelle wie jede Stundenzeile, nur ohne Zählerwerte und ohne Beitrag zum Tages-Akkumulator.
+
+    Sie trägt, was eine geschriebene Stunde ohne Menge trüge: die Abruf-Spalten (je Feld der neue Abruf, sonst der
+    gespeicherte Wert) und die Felder der N-595-Rettung — Betriebsart, Ladestand, Endkundenpreis: die Quelle gewinnt, wo sie
+    liefert, sonst der gerettete Wert mit seiner alten Herkunft (``fuehre_gerettete_stunden_zusammen``, dieselbe Bedingung
+    wie an jeder Stunde). Alle Mengen sind leer (Zähler-kWh, Leistungsverlauf, Spannen, Starts und Betriebsstunden der
+    Zähler). Die Tageszeile rechnet ohne sie (Stundenzahl, Wetter-Tageswerte, Vollzyklen, PR, §51 wie ohne die Zeile).
+    """
+    from backend.services.energie_profil import aggregator as ag
+
+    leer = ag.Zaehlerstunde(None, None, None, None, None, None, None, None)
+    sp = kontext.strompreis_stunden
+    profil = ag.baue_stundenzeile(h, {}, leer, ag.wetter_der_stunde(h, kontext), None, None, kontext.soc_stunden.get(h),
+                                  sp.sensor.get(h), sp.boerse.get(h), kontext)
+    profil.wp_starts_anzahl = profil.wp_betriebsstunden = None      # Zählerwerte, keine Werte dieser Stunde
+    db.add(profil)
+    ag.seed_tep_provenance(profil, writer=auto_writer, source=kontext.kwh_source_label)
+    if kontext.gerettete_herkunft.get(h):
+        ag.setze_gerettete_herkunft(profil, kontext.gerettete_herkunft[h])
+
 
 async def abruf_mit_bestand(anlage_id: int, datum: date, db: AsyncSession, wetter_stunden: dict,
                             strompreis: StrompreisStunden) -> AbrufLauf:

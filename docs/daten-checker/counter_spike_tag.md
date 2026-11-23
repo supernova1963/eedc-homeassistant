@@ -11,7 +11,7 @@ eigenen Stundenwerten.
 1. Am Befund **«Tag neu aufbauen»** klicken, die Vorschau lesen und **«Anwenden»** — eedc holt die Zählerstände des Tages
    neu und rechnet den Tag in einem Schritt neu.
 2. Sind mehrere Tage betroffen, in der
-   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) «Mehrere Tage neu aggregieren» mit
+   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) (*Einstellungen → Daten → Energieprofil-Pflege*) «Mehrere Tage neu aggregieren» mit
    dem passenden Von-/Bis-Bereich nutzen; das reicht auch für Tage, die älter als 30 Tage sind.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Tag ist verschwunden, oder an der Stelle steht «Keine
    Counter-Spikes in den letzten 30 Tagen».

@@ -1,7 +1,8 @@
 /**
  * Reparatur-Werkbank — Knopf „HA-Spiegel jetzt abgleichen" (MartyBr, simon42 #429) und die Operation
  * „Werte vor dem Sensorbeginn verwerfen" (HA-Bauform S3, E-S3-5: Auswahl, Vorbelegung, Plan-Parameter, Vorschau-Sätze
- * aus dem Backend).
+ * aus dem Backend) und „Werte eines Felds vor einem Zeitpunkt verwerfen" (Fund-Päckchen H, H1: alle Felder, Zeitpunkt nicht
+ * in der Zukunft, Vorschau-Sätze und Ablehnung aus dem Backend).
  *
  * Nach einer Korrektur in Home Assistant zeigten die Tages-Kennzahlen bis zum Nachtlauf (02:45) den alten
  * HA-Spiegel. Der Werkbank-Eintrag ruft den Lauf von Hand und zeigt die Ergebniszeile aus der Antwort
@@ -10,6 +11,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import type { KanalAbgleichErgebnis, KanalAuswahlEintrag, PlanResponse } from '../../api/repair'
+import { REPARATUR_AENDERUNG_LABELS } from '../../lib/constants'
 
 const kanalAbgleich = vi.fn()
 const kanalAuswahl = vi.fn()
@@ -134,7 +136,7 @@ describe('RepairWorkbench — Werte vor dem Sensorbeginn verwerfen (E-S3-5)', ()
     planFn.mockResolvedValue(planAntwort())
     renderMitProvidern(<RepairWorkbench anlageId={7} />)
     waehleVerwerfen()
-    await waitFor(() => expect(kanalAuswahl).toHaveBeenCalledWith(7))
+    await waitFor(() => expect(kanalAuswahl).toHaveBeenCalledWith(7, false))
     const feld = await screen.findByRole('combobox', { name: 'Feld' })
     const optionen = Array.from((feld as HTMLSelectElement).options).map((o) => o.textContent)
     expect(optionen).toEqual(['Feld mit Sensortausch wählen', 'Anlage · Einspeisung', 'Süddach · Erzeugung'])
@@ -168,5 +170,177 @@ describe('RepairWorkbench — Werte vor dem Sensorbeginn verwerfen (E-S3-5)', ()
     renderMitProvidern(<RepairWorkbench anlageId={7} />)
     waehleVerwerfen()
     expect(await screen.findByText(/Kein Feld dieser Anlage hat einen Sensortausch/)).toBeInTheDocument()
+  })
+})
+
+
+const auswahlAlle = (): KanalAuswahlEintrag[] => [
+  {
+    key: 'inv:1:km_gefahren', label: 'Smart #1 · Gefahrene km', investition_id: 1, typ: 'e-auto',
+    quellen: [{ gueltig_ab: '2024-11-01T00:00', familie: 'spiegel', statistic_id: 'sensor.smart_km', verworfen_am: null }],
+    vorbelegung: '2024-11-01T00:00',
+  },
+  {
+    key: 'basis:einspeisung', label: 'Anlage · Einspeisung', investition_id: null, typ: null,
+    quellen: [{ gueltig_ab: '2024-11-01T00:00', familie: 'spiegel', statistic_id: 'sensor.einsp', verworfen_am: null }],
+    vorbelegung: '2024-11-01T00:00',
+  },
+]
+
+// Wortlaute der Vorschau wörtlich aus der Messung an der Produktiv-Kopie (`services/verwerfen_vor_zeitpunkt.klartext`,
+// `golden-master/funde-h-2026-11-23/aus/t2-prod-km.json`) — vom Backend, der Client zeigt sie nur.
+const SAETZE_ZEIT = [
+  'Verworfen werden die Werte von «Smart #1 · Gefahrene km» (inv:1:km_gefahren) vor 10.05.2025 06:00. Danach verhält sich das Feld, als wäre seine Quelle erst ab diesem Zeitpunkt zugeordnet.',
+  'Gelöscht werden nur Daten dieses Felds vor dem Zeitpunkt: 2.536 Stundenzeilen des Kanals (31.10.2024 … 17.02.2025); 2.536 Zählerstände.',
+  'Gespeichert bleiben: die Werte jedes anderen Felds, Wetter, Börsen- und Kraftstoffpreise, Prognosen und die gespeicherten Monatswerte.',
+  'Für 10/2024 bis 05/2025 sind Monatswerte gespeichert. Sie bleiben, wie sie sind.',
+  'Soll ein Monat zu den verbliebenen Werten passen, ändere ihn unter Einstellungen → «Daten» → «Monatsdaten» von Hand.',
+  'Home Assistant behält seine Statistik. eedc holt die Zeit vor dem Zeitpunkt für dieses Feld nicht wieder — auch nicht mit «Aus Home Assistant neu übernehmen» oder «Tag neu aggregieren».',
+  'Danach bildet eedc die betroffenen Tage im Hintergrund neu.',
+  'Das lässt sich nicht rückgängig machen.',
+]
+
+const planAntwortZeit = (): PlanResponse => ({
+  expires_in_seconds: 3600,
+  plan: {
+    plan_id: 'p2', anlage_id: 7, operation: 'verwerfen_vor_zeitpunkt',
+    operation_params: { kanal: 'inv:1:km_gefahren', zeitpunkt: '2025-05-10T06:00' },
+    created_at: '2026-11-23T10:00:00Z', expires_at: '2026-11-23T11:00:00Z',
+    estimated_changes: { kanalzeilen: 2536, zaehlerstaende: 2536, mqtt_rohwerte: 0, bestand_tage: 1, monate_gespeichert: 8 },
+    diff_preview: [], diff_total_count: 0,
+    warnings: SAETZE_ZEIT,
+    operation_preview: {},
+  },
+})
+
+function waehleVerwerfenZeit() {
+  fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'verwerfen_vor_zeitpunkt' } })
+}
+
+describe('RepairWorkbench — Werte eines Felds vor einem Zeitpunkt verwerfen (Fund-Päckchen H, H1)', () => {
+  beforeEach(() => {
+    kanalAuswahl.mockReset()
+    planFn.mockReset()
+    stubMatchMedia()
+  })
+
+  it('steht in der Werkbank, listet alle Felder (alle=true) und schickt kanal + zeitpunkt', async () => {
+    kanalAuswahl.mockResolvedValue({ kanaele: auswahlAlle() })
+    planFn.mockResolvedValue(planAntwortZeit())
+    renderMitProvidern(<RepairWorkbench anlageId={7} />)
+    const opOptionen = Array.from((screen.getAllByRole('combobox')[0] as HTMLSelectElement).options).map((o) => o.textContent)
+    expect(opOptionen).toContain('Werte eines Felds vor einem Zeitpunkt verwerfen')
+    waehleVerwerfenZeit()
+    await waitFor(() => expect(kanalAuswahl).toHaveBeenCalledWith(7, true))
+    const feld = await screen.findByRole('combobox', { name: 'Feld' })
+    const optionen = Array.from((feld as HTMLSelectElement).options).map((o) => o.textContent)
+    expect(optionen).toEqual(['Feld wählen', 'Anlage · Einspeisung', 'Smart #1 · Gefahrene km'])
+
+    fireEvent.change(feld, { target: { value: 'inv:1:km_gefahren' } })
+    expect(screen.getByText('sensor.smart_km')).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Uhrzeit' }), { target: { value: '06' } })
+    fireEvent.click(screen.getByRole('button', { name: /Plan erstellen/ }))
+    await waitFor(() => expect(planFn).toHaveBeenCalled())
+    expect(planFn.mock.calls[0][0]).toEqual({
+      anlage_id: 7, operation: 'verwerfen_vor_zeitpunkt',
+      params: { kanal: 'inv:1:km_gefahren', zeitpunkt: '2024-11-01T06:00' },
+    })
+    for (const satz of SAETZE_ZEIT) expect(await screen.findByText(satz)).toBeInTheDocument()
+    // Der Knopf, den der Lösungsweg nennt (kein Diff ⇒ «Operation ausführen»).
+    expect(screen.getByRole('button', { name: /Operation ausführen/ })).toBeInTheDocument()
+  })
+
+  it('eine geteilte Quelle: der Vermerk sagt, dass die Werte dieser Quelle verworfen sind', async () => {
+    const geteilt: KanalAuswahlEintrag = {
+      ...auswahlAlle()[0],
+      quellen: [
+        { gueltig_ab: '2024-11-01T00:00', familie: 'spiegel', statistic_id: 'sensor.smart_km', verworfen_am: '2026-11-23T10:00' },
+        { gueltig_ab: '2025-05-10T06:00', familie: 'spiegel', statistic_id: 'sensor.smart_km', verworfen_am: null },
+      ],
+      vorbelegung: '2025-05-10T06:00',
+    }
+    kanalAuswahl.mockResolvedValue({ kanaele: [geteilt] })
+    renderMitProvidern(<RepairWorkbench anlageId={7} />)
+    waehleVerwerfenZeit()
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Feld' }), { target: { value: 'inv:1:km_gefahren' } })
+    expect(screen.getByText(/Werte dieser Quelle verworfen am/)).toBeInTheDocument()
+    expect(screen.queryByText(/Werte davor verworfen/)).toBeNull()
+  })
+
+  it('ohne Feld kein Plan', async () => {
+    kanalAuswahl.mockResolvedValue({ kanaele: auswahlAlle() })
+    renderMitProvidern(<RepairWorkbench anlageId={7} />)
+    waehleVerwerfenZeit()
+    await screen.findByRole('combobox', { name: 'Feld' })
+    fireEvent.click(screen.getByRole('button', { name: /Plan erstellen/ }))
+    expect(await screen.findByText('Bitte ein Feld und den Zeitpunkt wählen.')).toBeInTheDocument()
+    expect(planFn).not.toHaveBeenCalled()
+  })
+
+  it('ein Zeitpunkt in der Zukunft geht nicht zum Backend', async () => {
+    kanalAuswahl.mockResolvedValue({ kanaele: [{ ...auswahlAlle()[0], vorbelegung: '2099-01-01T05:00' }] })
+    renderMitProvidern(<RepairWorkbench anlageId={7} />)
+    waehleVerwerfenZeit()
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Feld' }), { target: { value: 'inv:1:km_gefahren' } })
+    fireEvent.click(screen.getByRole('button', { name: /Plan erstellen/ }))
+    expect(await screen.findByText(/Der Zeitpunkt liegt in der Zukunft/)).toBeInTheDocument()
+    expect(planFn).not.toHaveBeenCalled()
+  })
+
+  it('eine nicht freigegebene Lage: der Satz des Backends steht als Fehler da', async () => {
+    kanalAuswahl.mockResolvedValue({ kanaele: auswahlAlle() })
+    planFn.mockRejectedValue(new Error('Für dieses Feld ist das Verwerfen hier nicht möglich: an 1 Tag (01.11.2024) schriebe jeder Neu-Aufbau des Tages den Wert dieses Felds wieder aus der Statistik von Home Assistant.'))
+    renderMitProvidern(<RepairWorkbench anlageId={7} />)
+    waehleVerwerfenZeit()
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Feld' }), { target: { value: 'basis:einspeisung' } })
+    fireEvent.click(screen.getByRole('button', { name: /Plan erstellen/ }))
+    expect(await screen.findByText(/das Verwerfen hier nicht möglich/)).toBeInTheDocument()
+  })
+})
+
+
+// Regel 0 (`lib/constants.ts::REPARATUR_AENDERUNG_LABELS`): kein roher Schlüssel in Vorschau, Ergebnis und Verlauf. Die Schlüssel
+// sind die der Messung an der Produktiv-Kopie (`verwerfen_vor_zeitpunkt.geschaetzt` bzw. die Ganzzahlen von `fuehre_aus`,
+// `repair_protokoll.mengen`; `golden-master/funde-h-2026-11-23/aus/t2-prod-km.json`).
+const ERGEBNIS_ZEIT: Record<string, number> = {
+  kanalzeilen_geloescht: 2536, quellen_markiert: 1, quelle_geteilt: 1, zaehlerstaende_geloescht: 2536,
+  mqtt_rohwerte_geloescht: 0, wechsel_geloescht: 0, abgeleitet_verworfen: 0, stundenzeilen_geleert: 0,
+  tageszeilen_geleert: 0, felder_geleert: 0, tage_neu: 1,
+}
+
+describe('RepairWorkbench — Chips von „Werte eines Felds vor einem Zeitpunkt verwerfen" (Regel 0)', () => {
+  beforeEach(() => {
+    kanalAuswahl.mockReset()
+    planFn.mockReset()
+    executeFn.mockReset()
+    stubMatchMedia()
+  })
+
+  it('jeder Schlüssel der Vorschau und des Ergebnisses hat eine Bezeichnung', () => {
+    const schluessel = [...Object.keys(planAntwortZeit().plan.estimated_changes), ...Object.keys(ERGEBNIS_ZEIT)]
+    expect(schluessel.filter((k) => !(k in REPARATUR_AENDERUNG_LABELS))).toEqual([])
+  })
+
+  it('Vorschau und Ergebnis zeigen die Bezeichnungen, keinen rohen Schlüssel', async () => {
+    kanalAuswahl.mockResolvedValue({ kanaele: auswahlAlle() })
+    planFn.mockResolvedValue(planAntwortZeit())
+    executeFn.mockResolvedValue({
+      plan_id: 'p2', anlage_id: 7, operation: 'verwerfen_vor_zeitpunkt', executed_at: '2026-11-23T10:05:00Z',
+      actual_changes: ERGEBNIS_ZEIT, audit_log_ids: [], operation_summary: {},
+    })
+    renderMitProvidern(<RepairWorkbench anlageId={7} />)
+    waehleVerwerfenZeit()
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Feld' }), { target: { value: 'inv:1:km_gefahren' } })
+    fireEvent.click(screen.getByRole('button', { name: /Plan erstellen/ }))
+    expect(await screen.findByText('Zählerstände vor dem Zeitpunkt')).toBeInTheDocument()
+    expect(screen.getByText('Monate mit gespeichertem Monatswert (bleiben)')).toBeInTheDocument()
+    for (const k of Object.keys(planAntwortZeit().plan.estimated_changes)) expect(screen.queryByText(k)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /Operation ausführen/ }))
+    const banner = await screen.findByText(/Werte eines Felds vor einem Zeitpunkt verwerfen ausgeführt:/)
+    expect(banner.textContent).toContain('2536 Zählerstände gelöscht')
+    expect(banner.textContent).toContain('1 Quelle geteilt')
+    expect(banner.textContent).toContain('1 Tage werden neu gebildet')
+    for (const k of Object.keys(ERGEBNIS_ZEIT)) expect(banner.textContent).not.toContain(k)
   })
 })

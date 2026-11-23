@@ -32,7 +32,7 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services.energie_profil._helpers import _speicher_investitionen
-from backend.services.energie_profil.abruf_bestand import abruf_mit_bestand
+from backend.services.energie_profil.abruf_bestand import abruf_mit_bestand, schreibe_stunde_ohne_menge
 from backend.services.energie_profil._provenance_helpers import (
     seed_tep_provenance,
     seed_tz_provenance,
@@ -2176,6 +2176,8 @@ async def aggregate_day(
 
     for punkt in punkte:
         verarbeite_stunde(punkt, kontext, akku, db, auto_writer)
+    for h in abruf.stunden_ohne_menge({int(p["zeit"].split(":")[0]) for p in punkte}):   # Fund-Päckchen H
+        schreibe_stunde_ohne_menge(h, kontext, db, auto_writer)
     abruf.gti(akku)
 
     (

@@ -50,7 +50,7 @@ import {
 } from '../../pages/datenCheckerMeldungen'
 import { mitAnzahl } from '../../lib/plural'
 import { useWerkbankPlanAusUrl } from '../../hooks/useWerkbankPlanAusUrl'
-import { VERWERFEN_LEER, VerwerfenParams, verwerfenParams, type VerwerfenWerte } from './VerwerfenParams'
+import { VERWERFEN_LEER, VerwerfenParams, verwerfenParams, zeitpunktInZukunft, type VerwerfenWerte } from './VerwerfenParams'
 
 /** Deutscher Name eines Vorschau-/Ergebnis-Zählers; unbekannte Schlüssel
  *  bleiben roh stehen, damit ein neuer Zähler nicht still verschwindet. */
@@ -91,6 +91,8 @@ interface OperationParamsState {
   providers: string  // Komma-Liste, leer = alle
   // verwerfen_vor_quellbeginn (HA-Bauform S3, E-S3-5)
   verwerfen: VerwerfenWerte
+  // verwerfen_vor_zeitpunkt (Fund-Päckchen H): eigene Werte, die Feldliste ist eine andere
+  verwerfenZeit: VerwerfenWerte
   // geraetewerte_loeschen (E3): `YYYY-MM`
   monat: string
 }
@@ -104,6 +106,7 @@ const DEFAULT_PARAMS: OperationParamsState = {
   scope: 'beides',
   providers: '',
   verwerfen: VERWERFEN_LEER,
+  verwerfenZeit: VERWERFEN_LEER,
   monat: '',
 }
 
@@ -165,7 +168,7 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
     setError(null)
   }, [
     params.datum, params.von, params.bis, params.mit_resnap,
-    params.range_confirmed, params.scope, params.providers, params.verwerfen, params.monat,
+    params.range_confirmed, params.scope, params.providers, params.verwerfen, params.verwerfenZeit, params.monat,
   ])
 
   // Operation-Wechsel: Plan-Vorschau + Result zurücksetzen
@@ -234,6 +237,8 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
       }
       case 'verwerfen_vor_quellbeginn':
         return verwerfenParams(params.verwerfen)
+      case 'verwerfen_vor_zeitpunkt':
+        return verwerfenParams(params.verwerfenZeit)
       case 'spiegel_abgleich_tag':
         return { datum: params.datum }
       case 'geraetewerte_loeschen': {
@@ -254,6 +259,12 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
     }
     if (selectedOp === 'verwerfen_vor_quellbeginn' && (!params.verwerfen.kanal || !params.verwerfen.datum)) {
       return 'Bitte ein Feld mit Sensortausch und den Zeitpunkt wählen.'
+    }
+    if (selectedOp === 'verwerfen_vor_zeitpunkt') {
+      if (!params.verwerfenZeit.kanal || !params.verwerfenZeit.datum) return 'Bitte ein Feld und den Zeitpunkt wählen.'
+      if (zeitpunktInZukunft(params.verwerfenZeit)) {
+        return 'Der Zeitpunkt liegt in der Zukunft — verworfen werden nur Werte, die eedc schon hat.'
+      }
     }
     if (selectedOp === 'reaggregate_range') {
       if (!params.von || !params.bis) {
@@ -537,6 +548,17 @@ interface ParamsEditorProps {
 }
 
 function OperationParamsEditor({ anlageId, operation, params, setParams, disabled }: ParamsEditorProps) {
+  if (operation === 'verwerfen_vor_zeitpunkt') {
+    return (
+      <VerwerfenParams
+        anlageId={anlageId}
+        alle
+        werte={params.verwerfenZeit}
+        onChange={(w) => setParams((p) => ({ ...p, verwerfenZeit: w }))}
+        disabled={disabled}
+      />
+    )
+  }
   if (operation === 'verwerfen_vor_quellbeginn') {
     return (
       <VerwerfenParams
@@ -932,7 +954,7 @@ function formatTime(iso: string): string {
 function summarizeResult(result: RepairResult): string {
   const parts: string[] = []
   for (const [k, v] of Object.entries(result.actual_changes)) {
-    parts.push(`${v} ${k}`)
+    parts.push(`${v} ${aenderungLabel(k)}`)
   }
   const audit = result.audit_log_ids.length
   parts.push(`${audit} Audit-Log-Eintrag${audit === 1 ? '' : 'e'}`)

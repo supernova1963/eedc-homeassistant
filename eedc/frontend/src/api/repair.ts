@@ -147,19 +147,21 @@ export const OPERATION_META: OperationMeta[] = [
     label: 'Werte vor dem Sensorbeginn verwerfen',
     description:
       'Nach einem Sensortausch: verwirft für EIN Feld die Werte des alten Sensors vor dem Beginn des neuen — ' +
-      'im HA-Spiegel, in den Stunden- und Tageswerten und in den Zählerständen. Mit Home Assistant übernimmt eedc ' +
-      'danach die Geschichte des neuen Sensors, soweit Home Assistant sie führt, und bildet die betroffenen Tage im ' +
-      'Hintergrund neu. Gespeicherte Monatswerte bleiben. Kein Rückweg in eedc: die Vorschau sagt, was danach geschieht.',
+      'im HA-Spiegel und in den Stunden- und Tageswerten dieses Felds (Monate mit Monatsabschluss bleiben unberührt). ' +
+      'Zählerstände, gespeicherte Monatswerte und alle anderen Felder bleiben; eedc bildet keine Tage neu. ' +
+      'Kein Rückweg in eedc: die Vorschau sagt, was danach geschieht.',
     inWorkbench: true,
   },
   {
-    // Fund-Päckchen H (H1): im Backend gebaut, in der Werkbank noch nicht angeboten (Halt im Bericht FUNDE-H).
+    // Fund-Päckchen H (H1): Backend `services/verwerfen_vor_zeitpunkt.py`.
     type: 'verwerfen_vor_zeitpunkt',
     label: 'Werte eines Felds vor einem Zeitpunkt verwerfen',
     description:
-      'Verwirft für EIN Feld alle Werte vor einem gewählten Zeitpunkt, als wäre seine Quelle erst ab dann zugeordnet. ' +
-      'Gespeicherte Monatswerte bleiben. Kein Rückweg in eedc.',
-    inWorkbench: false,
+      'Verwirft für EIN Feld alle Werte vor einem gewählten Zeitpunkt — im HA-Spiegel, in den Zählerständen und in ' +
+      'den Stunden- und Tageswerten dieses Felds, auch in Monaten mit Monatsabschluss —, als wäre seine Quelle erst ' +
+      'ab dann zugeordnet; danach bildet eedc die betroffenen Tage im Hintergrund neu. Jedes andere Feld, Wetter, ' +
+      'Preise und gespeicherte Monatswerte bleiben. Kein Rückweg in eedc: die Vorschau sagt, was danach geschieht.',
+    inWorkbench: true,
   },
   // E3 Daten-Checker: die Knöpfe der Befunde als Operationen (Labels wörtlich wie `repair_protokoll.OPERATION_LABELS`,
   // Vitest-Spiegel `src/test/operation-labels.test.ts`).
@@ -266,9 +268,10 @@ export const repairApi = {
   discard: (planId: string): Promise<void> =>
     api.delete(`/repair/plans/${planId}`),
 
-  /** Felder mit Sensortausch für „Werte vor dem Sensorbeginn verwerfen" (nur lesend). */
-  kanalAuswahl: (anlageId: number): Promise<{ kanaele: KanalAuswahlEintrag[] }> =>
-    api.get(`/repair/kanal-auswahl?anlage_id=${anlageId}`),
+  /** Felder mit Sensortausch für „Werte vor dem Sensorbeginn verwerfen"; mit `alle` jedes Feld mit Zähler- oder
+   * Stand-Kanal für „Werte eines Felds vor einem Zeitpunkt verwerfen" (nur lesend). */
+  kanalAuswahl: (anlageId: number, alle = false): Promise<{ kanaele: KanalAuswahlEintrag[] }> =>
+    api.get(`/repair/kanal-auswahl?anlage_id=${anlageId}${alle ? '&alle=true' : ''}`),
 
   /** HA-Spiegel jetzt abgleichen (direkter Pfad ohne Plan, wie das Löschen). */
   kanalAbgleich: (anlageId: number): Promise<KanalAbgleichErgebnis> =>

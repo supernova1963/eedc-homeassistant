@@ -19,7 +19,7 @@ eedc heilt den Bruch nicht selbst: dafür müsste es raten, welcher der beiden S
    ([Monatsdaten](eedc:/einstellungen/daten?block=monatsdaten)); stimmt er, ist der Bruch echt und bleibt stehen.
 4. **Umstieg auf eedc 4.0.25:** bis dahin schrieb eedc für Verbrauchszähler die Verbrauchssumme von Home Assistant statt
    des Zählerstands. Dann fällt die Reihe genau einmal, an der Umstellung, und es ist nichts kaputt. In der
-   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) mit «Mehrere Tage neu aggregieren»
+   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) (*Einstellungen → Daten → Energieprofil-Pflege*) mit «Mehrere Tage neu aggregieren»
    zieht eedc die Historie nach, soweit Home Assistant sie noch hat.
 5. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden oder nennt weniger Stellen; ein
    Bruch aus einem Zählerwechsel bleibt auch nach der Stilllegung stehen — die Zeile erklärt ihn weiterhin, solange

@@ -1,8 +1,10 @@
 /**
- * Parameter-Editor der Werkbank-Operation „Werte vor dem Sensorbeginn verwerfen" (HA-Bauform S3, E-S3-5).
+ * Parameter-Editor der Werkbank-Operationen „Werte vor dem Sensorbeginn verwerfen" (HA-Bauform S3, E-S3-5) und — mit
+ * `alle` — „Werte eines Felds vor einem Zeitpunkt verwerfen" (Fund-Päckchen H, H1).
  *
- * Auswahl: die Felder mit Sensortausch (mindestens zwei Quellen) aus `GET /repair/kanal-auswahl` — je Feld die Quellen
- * mit ihrem Beginn. Zeitpunkt: Tag (DatumFeld-SoT) + volle Stunde, vorbelegt mit dem Beginn der jüngsten Quelle (Backend).
+ * Auswahl: die Felder mit Sensortausch (mindestens zwei Quellen) aus `GET /repair/kanal-auswahl`, mit `alle` jedes Feld
+ * mit Zähler- oder Stand-Kanal (`&alle=true`) — je Feld die Quellen mit ihrem Beginn. Zeitpunkt: Tag (DatumFeld-SoT) +
+ * volle Stunde, vorbelegt mit dem Beginn der jüngsten Quelle (Backend).
  * Der Client rechnet nichts: Vorbelegung, Quellen und die Vorschau-Sätze kommen vom Backend; hier wird nur die
  * `YYYY-MM-DDTHH:MM`-Zeichenkette zerlegt und wieder zusammengesetzt.
  */
@@ -12,7 +14,7 @@ import { Loader2 } from 'lucide-react'
 import { DatumFeld, Select } from '../ui'
 import { repairApi, type KanalAuswahlEintrag } from '../../api/repair'
 import { compareTyp } from '../../lib/constants'
-import { formatDatumZeit } from '../../lib/datum'
+import { formatDatumZeit, heuteIso, toIsoDatum } from '../../lib/datum'
 
 export interface VerwerfenWerte {
   kanal: string
@@ -25,6 +27,13 @@ export const VERWERFEN_LEER: VerwerfenWerte = { kanal: '', datum: '', stunde: '0
 /** `{kanal, zeitpunkt}` für `/repair/plan` — die Stunde ist immer voll (`HH:00`). */
 export function verwerfenParams(w: VerwerfenWerte): Record<string, unknown> {
   return { kanal: w.kanal, zeitpunkt: `${w.datum}T${w.stunde}:00` } /* de-de-allow: API-Parameter (ISO), keine Anzeige */
+}
+
+/** Liegt der gewählte Zeitpunkt nach der laufenden vollen Stunde? (Das Backend prüft dasselbe und lehnt ab.) */
+export function zeitpunktInZukunft(w: VerwerfenWerte, jetzt: Date = new Date()): boolean {
+  const heute = toIsoDatum(jetzt)
+  if (w.datum !== heute) return w.datum > heute
+  return Number(w.stunde) > jetzt.getHours()
 }
 
 const STUNDEN = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0'))
@@ -42,12 +51,14 @@ function vorbelegt(eintrag: KanalAuswahlEintrag): VerwerfenWerte {
 
 interface Props {
   anlageId: number
+  /** „Werte eines Felds vor einem Zeitpunkt verwerfen": jedes Feld mit Zähler- oder Stand-Kanal. */
+  alle?: boolean
   werte: VerwerfenWerte
   onChange: (w: VerwerfenWerte) => void
   disabled: boolean
 }
 
-export function VerwerfenParams({ anlageId, werte, onChange, disabled }: Props) {
+export function VerwerfenParams({ anlageId, alle = false, werte, onChange, disabled }: Props) {
   const [kanaele, setKanaele] = useState<KanalAuswahlEintrag[] | null>(null)
   const [fehler, setFehler] = useState<string | null>(null)
 
@@ -55,11 +66,11 @@ export function VerwerfenParams({ anlageId, werte, onChange, disabled }: Props) 
     let aktiv = true
     setKanaele(null)
     setFehler(null)
-    repairApi.kanalAuswahl(anlageId)
+    repairApi.kanalAuswahl(anlageId, alle)
       .then((res) => { if (aktiv) setKanaele(sortiere(res.kanaele)) })
       .catch((e) => { if (aktiv) setFehler(e instanceof Error ? e.message : 'Auswahl konnte nicht geladen werden') })
     return () => { aktiv = false }
-  }, [anlageId])
+  }, [anlageId, alle])
 
   if (fehler) return <p className="text-sm text-red-600 dark:text-red-400">{fehler}</p>
   if (kanaele === null) {
@@ -72,7 +83,9 @@ export function VerwerfenParams({ anlageId, werte, onChange, disabled }: Props) 
   if (kanaele.length === 0) {
     return (
       <p className="text-sm text-gray-600 dark:text-gray-400">
-        Kein Feld dieser Anlage hat einen Sensortausch — es gibt keine Werte eines alten Sensors zu verwerfen.
+        {alle
+          ? 'Kein Feld dieser Anlage hat einen Zähler- oder Stand-Kanal — es gibt keine Werte zu verwerfen.'
+          : 'Kein Feld dieser Anlage hat einen Sensortausch — es gibt keine Werte eines alten Sensors zu verwerfen.'}
       </p>
     )
   }
@@ -88,7 +101,7 @@ export function VerwerfenParams({ anlageId, werte, onChange, disabled }: Props) 
           onChange(eintrag ? vorbelegt(eintrag) : VERWERFEN_LEER)
         }}
         disabled={disabled}
-        placeholder="Feld mit Sensortausch wählen"
+        placeholder={alle ? 'Feld wählen' : 'Feld mit Sensortausch wählen'}
         options={kanaele.map((k) => ({ value: k.key, label: k.label }))}
       />
       {gewaehlt && (
@@ -96,7 +109,7 @@ export function VerwerfenParams({ anlageId, werte, onChange, disabled }: Props) 
           {gewaehlt.quellen.map((q) => (
             <li key={q.gueltig_ab}>
               <span className="font-mono">{q.statistic_id ?? q.familie}</span> ab {formatDatumZeit(q.gueltig_ab)}
-              {q.verworfen_am && <> — Werte davor verworfen am {formatDatumZeit(q.verworfen_am)}</>}
+              {q.verworfen_am && <> — Werte dieser Quelle verworfen am {formatDatumZeit(q.verworfen_am)}</>}
             </li>
           ))}
         </ul>
@@ -108,6 +121,7 @@ export function VerwerfenParams({ anlageId, werte, onChange, disabled }: Props) 
             value={werte.datum}
             onChange={(v) => onChange({ ...werte, datum: v })}
             disabled={disabled}
+            max={alle ? heuteIso() : undefined}
           />
           <Select
             id="verwerfen-stunde"
@@ -121,8 +135,12 @@ export function VerwerfenParams({ anlageId, werte, onChange, disabled }: Props) 
       )}
       {gewaehlt && (
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          Vorbelegt ist der Beginn des jüngsten Sensors. Die Vorschau nennt Quellen, Tage und Monate und was mit ihnen
-          geschieht, bevor etwas geändert wird.
+          {alle
+            ? 'Vorbelegt ist der Beginn der jüngsten Quelle. Verworfen wird alles dieses Felds vor dem gewählten ' +
+              'Zeitpunkt. Die Vorschau nennt, was gelöscht wird, was bleibt und welche Monatswerte gespeichert sind, ' +
+              'bevor etwas geändert wird.'
+            : 'Vorbelegt ist der Beginn des jüngsten Sensors. Die Vorschau nennt Quellen, Tage und Monate und was mit ' +
+              'ihnen geschieht, bevor etwas geändert wird.'}
         </p>
       )}
     </div>

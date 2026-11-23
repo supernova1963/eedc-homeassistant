@@ -11,7 +11,7 @@ aufgebaut sind, gilt sie als Quelle.
    einem Tag aus eedcs eigener Erfassung; Tage dazwischen, die eedc direkt aus Home Assistant führt, behalten ihre
    Mengen — die Vorschau nennt sie.
 2. Steht am Befund kein solcher Knopf, gibt es in diesem Fenster keinen Tag, den eedc neu aufbauen müsste. Einen einzelnen
-   Tag baut in der [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) die Operation «Tag neu
+   Tag baut in der [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) (*Einstellungen → Daten → Energieprofil-Pflege*) die Operation «Tag neu
    aggregieren» neu auf.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — statt dieser Zeile nennt die Kategorie die Statistik von Home
    Assistant als aktive Quelle.

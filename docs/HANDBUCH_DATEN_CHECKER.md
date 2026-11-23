@@ -2213,7 +2213,7 @@ nächste Monat gegen den vorletzten Stand und weist zwei Monate als einen aus �
 1. Am Befund **«Monat erfassen»** klicken — der Monatsabschluss dieses Monats öffnet sich.
 2. Einspeisung und Netzbezug eintragen und speichern — die Messwerte gehören dann wieder dazu. Das ist der Regelfall.
 3. Nur wenn die Werte wirklich weg sollen: in der
-   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) die Operation «Messwerte ohne
+   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) (*Einstellungen → Daten → Energieprofil-Pflege*) die Operation «Messwerte ohne
    Monatszeile entfernen» wählen, den Monat wählen, **«Plan erstellen»**, die Vorschau lesen und anwenden — das ist
    endgültig.
 4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Monat ist aus der Liste verschwunden.
@@ -2818,7 +2818,7 @@ aus Zählerständen gerechnet ist. Dieselbe Form hat ein Zählersprung nach eine
 1. Die genannten Mengen prüfen (der Knopf **«Was gilt»** am Befund öffnet diesen Text). Stimmen sie, ist nichts zu tun.
 2. Stimmt eine nicht, liegt der Fehler in der Zähler-Historie der Quelle: in Home Assistant unter
    *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) beim Sensor mit „Summe anpassen“ berichtigen. Danach den Tag in der
-   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) neu holen: «Aus Home Assistant
+   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) (*Einstellungen → Daten → Energieprofil-Pflege*) neu holen: «Aus Home Assistant
    neu übernehmen» für einen Tag aus der Statistik von Home Assistant, sonst «Tag neu aggregieren».
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt, solange ein solcher Nachtrag in den Tagen steht.
 
@@ -2920,7 +2920,7 @@ eigenen Stundenwerten.
 1. Am Befund **«Tag neu aufbauen»** klicken, die Vorschau lesen und **«Anwenden»** — eedc holt die Zählerstände des Tages
    neu und rechnet den Tag in einem Schritt neu.
 2. Sind mehrere Tage betroffen, in der
-   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) «Mehrere Tage neu aggregieren» mit
+   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) (*Einstellungen → Daten → Energieprofil-Pflege*) «Mehrere Tage neu aggregieren» mit
    dem passenden Von-/Bis-Bereich nutzen; das reicht auch für Tage, die älter als 30 Tage sind.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Tag ist verschwunden, oder an der Stelle steht «Keine
    Counter-Spikes in den letzten 30 Tagen».
@@ -3221,7 +3221,7 @@ wird die ganze übernommene Statistik, nicht nur die letzten 30 Tage.
    Klick gleicht eedc die berichtigte Statistik beim nächtlichen Abgleich von selbst ab.
 3. Stammt der Rückgang von einem Sensor, den du inzwischen ersetzt hast (die Meldung sagt „Vorgänger-Sensor, zugeordnet
    bis …“): statt in Home Assistant zu berichtigen, in der
-   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) die Operation «Werte vor dem
+   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) (*Einstellungen → Daten → Energieprofil-Pflege*) die Operation «Werte vor dem
    Sensorbeginn verwerfen» ausführen.
 4. Hast du einen betroffenen Monat schon gespeichert (mit «Aus HA laden» oder per Import), den Monat unter
    [Monatsdaten](eedc:/einstellungen/daten?block=monatsdaten) öffnen und mit «Aus HA laden» neu übernehmen — ein
@@ -3504,15 +3504,36 @@ Meldung sagt dann „die Summe beginnt neu, der Stand läuft weiter“ und nennt
    Verbrauchszähler). Beim nächsten Tausch zählt kein Sprung, wenn du in Home Assistant für den neuen Zähler einen eigenen
    Sensor oder Helfer anlegst, ihn in eedc unter [Datenquellen](eedc:/einstellungen/datenquellen) dem Feld zuordnest
    und im Dialog «Bisherige Werte bleiben» wählst.
-5. **Summe beginnt neu, der Stand läuft weiter** (gefahrene Kilometer; die Meldung sagt es): wie in Schritt 1 „Summe
+5. **Summe beginnt neu, der Stand läuft weiter** (gefahrene Kilometer; die Meldung sagt es) — zwei Wege.
+   **Weg 1, die Summe in Home Assistant berichtigen:** wie in Schritt 1 „Summe
    anpassen“ öffnen, unter „Zeitpunkt auswählen“ die genannte Stunde wählen und bei „Neuer Wert“ die Zunahme des Stands in
    dieser Stunde eintragen (der Unterschied der beiden Stände, die die Meldung in Klammern nennt), dann „Anpassen“. Danach
    Schritt 2 und, für gespeicherte Monate, Schritt 3 — oder den Monat unter
    [Monatsdaten](eedc:/einstellungen/daten?block=monatsdaten) von Hand berichtigen. Damit zählen Tag, Tabelle und Monatswert
    dieselbe Zahl (auf den Kilometer genau); die Kilometer der Lücke stehen dann im Tag des Neubeginns, wie der Stand sie
    zeigt. Ein schon gespeicherter Monat ändert sich erst, wenn du ihn neu übernimmst oder von Hand berichtigst.
-6. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach den Schritten 1 und 2 (bzw. 5) ist der Befund aus der Liste
-   verschwunden. Ein Sprung an einem Zählerstand (Schritt 4) bleibt stehen; die Zeile erklärt ihn weiterhin.
+
+   **Weg 2, die Werte vor der Stunde des Neubeginns verwerfen** — wenn die Kilometer davor ohnehin nicht stimmen (etwa
+   weil vorher ein falscher Sensor zugeordnet war) und eedc das Feld erst ab dieser Stunde zählen soll:
+   1. In eedc unter *Einstellungen → Daten → Energieprofil-Pflege* die [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) öffnen und unter
+      „Operation“ **«Werte eines Felds vor einem Zeitpunkt verwerfen»** wählen.
+   2. Unter „Feld“ das Feld aus der Meldung wählen („… · Gefahrene km“ mit dem Namen deines Autos), unter
+      „Verwerfen vor (Tag)“ den Tag und unter „Uhrzeit“ die Stunde aus der Meldung („am …, Stunde ab …“).
+   3. **«Plan erstellen»** und die Vorschau lesen: sie nennt, was gelöscht wird (die Stunden des Felds im HA-Spiegel,
+      seine Zählerstände und seine Stunden- und Tageswerte vor dem Zeitpunkt), was bleibt (jedes andere Feld, Wetter,
+      Preise, Prognosen und die gespeicherten Monatswerte — mit den Monaten), und endet mit „Das lässt sich nicht
+      rückgängig machen.“
+   4. **«Operation ausführen»** — eedc bildet die betroffenen Tage im Hintergrund neu.
+
+   Danach zeigt das Feld vor dem Zeitpunkt „—“ in Tag und Tabelle; der Tag des Neubeginns zählt die Kilometer ab der
+   gewählten Stunde (die Stunde selbst zeigt „—“, sie hat keinen Stand davor); die Kilometer, um die der Stand über die
+   Lücke gesprungen ist, zählen nicht mehr. Home Assistant behält seine Statistik; eedc holt die Zeit vor dem Zeitpunkt
+   nicht wieder — auch nicht mit «Aus Home Assistant neu übernehmen» oder „Tag neu aggregieren“. Gespeicherte Monatswerte bleiben, wie sie sind: soll ein
+   Monat zu den verbliebenen Werten passen, berichtige ihn unter
+   [Monatsdaten](eedc:/einstellungen/daten?block=monatsdaten) von Hand. Der Rückweg ist eine Sicherung der
+   eedc-Datenbank von vorher.
+6. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach den Schritten 1 und 2 (bzw. 5, Weg 1 oder 2) ist der Befund
+   aus der Liste verschwunden. Ein Sprung an einem Zählerstand (Schritt 4) bleibt stehen; die Zeile erklärt ihn weiterhin.
 
 Bleibt der Befund danach: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das Diagnose-Paket:
 im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Herunterladen»** und die Datei
@@ -3745,7 +3766,7 @@ deshalb stehen dort Werte, während die Tagesansicht im Cockpit und die Stundenw
    `state_class: total_increasing` per `customize` setzen (Neustart von Home Assistant nötig).
 2. Am Befund **«Anderen Sensor wählen»** klicken — die Datenquellen-Zuordnung öffnet sich am ersten betroffenen Feld; dort den
    Helfer zuordnen.
-3. Die Tage danach in der [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) mit «Mehrere
+3. Die Tage danach in der [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) (*Einstellungen → Daten → Energieprofil-Pflege*) mit «Mehrere
    Tage neu aggregieren» neu berechnen — Home Assistant sammelt die Summenwerte erst ab der Umstellung.
 4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden, sobald jeder genannte Sensor eine
    Summen-Spalte hat.
@@ -3859,7 +3880,7 @@ kWh-Zähler: Es müssen die kWh-Zeilen belegt sein, nicht nur die Watt-Zeilen.
 1. Nach der Einrichtung zuerst den nächsten Lauf abwarten.
 2. Bleibt die Zeile: in der [Datenquellen-Zuordnung](eedc:/einstellungen/datenquellen) die kWh-Zähler zuordnen
    (Einspeisung, Netzbezug, PV und die Komponenten).
-3. Zurückliegende Tage holt in der [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) die
+3. Zurückliegende Tage holt in der [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) (*Einstellungen → Daten → Energieprofil-Pflege*) die
    Operation «Lücken aus HA-LTS nachfüllen».
 4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — statt dieser Zeile nennt die Kategorie die aktive Quelle als
    bestanden.
@@ -3880,7 +3901,7 @@ aufgebaut sind, gilt sie als Quelle.
    einem Tag aus eedcs eigener Erfassung; Tage dazwischen, die eedc direkt aus Home Assistant führt, behalten ihre
    Mengen — die Vorschau nennt sie.
 2. Steht am Befund kein solcher Knopf, gibt es in diesem Fenster keinen Tag, den eedc neu aufbauen müsste. Einen einzelnen
-   Tag baut in der [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) die Operation «Tag neu
+   Tag baut in der [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) (*Einstellungen → Daten → Energieprofil-Pflege*) die Operation «Tag neu
    aggregieren» neu auf.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — statt dieser Zeile nennt die Kategorie die Statistik von Home
    Assistant als aktive Quelle.
@@ -4053,7 +4074,7 @@ im Cockpit, Energieprofil, Tagesabschlüsse.
 2. Standalone (eigener Container): dort die Umgebungsvariable `TZ` auf die Zeitzone von Home Assistant setzen, die die
    Details nennen (in `docker-compose.yml` unter `environment`), und den Container neu starten.
 3. Bereits gespeicherte Tage ändern sich dadurch nicht. Sie lassen sich danach in der
-   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) mit «Mehrere Tage neu aggregieren» neu
+   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) (*Einstellungen → Daten → Energieprofil-Pflege*) mit «Mehrere Tage neu aggregieren» neu
    berechnen.
 4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
@@ -4428,7 +4449,7 @@ Gerät weicht an Tagen von Home Assistant ab“).
    *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) beim Sensor mit „Summe anpassen“ für diesen Tag berichtigen.
 2. Zurück in eedc am Befund **«Aus Home Assistant neu übernehmen»** klicken (ohne Spiegel heißt der Knopf «Tag neu
    aufbauen»), die Vorschau lesen und **«Anwenden»**. Für viele Tage auf einmal: in der
-   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) «Mehrere Tage neu aggregieren».
+   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) (*Einstellungen → Daten → Energieprofil-Pflege*) «Mehrere Tage neu aggregieren».
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Tag ist aus der Zeile verschwunden.
 
 Bleibt der Befund danach: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das Diagnose-Paket:
@@ -4465,7 +4486,7 @@ letzte geprüfte Tag (gestern) ungeprüft, solange Home Assistant die Stunde 23�
    Liest eedc deine Anlage aus der Statistik von Home Assistant, übernimmt der Knopf die Statistik aller gespiegelten
    Zähler der Anlage neu (ab der ersten abweichenden Stunde) und baut den genannten Tag danach auf. Sonst heißt er «Tag neu aufbauen» und baut nur
    den genannten Tag neu; für alle Tage des Geräts auf einmal: in der
-   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) «Mehrere Tage neu aggregieren».
+   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) (*Einstellungen → Daten → Energieprofil-Pflege*) «Mehrere Tage neu aggregieren».
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — das Gerät ist aus der Liste verschwunden oder nennt weniger Tage.
 
 Bleibt der Befund danach: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das Diagnose-Paket:
@@ -4787,7 +4808,7 @@ eedc heilt den Bruch nicht selbst: dafür müsste es raten, welcher der beiden S
    ([Monatsdaten](eedc:/einstellungen/daten?block=monatsdaten)); stimmt er, ist der Bruch echt und bleibt stehen.
 4. **Umstieg auf eedc 4.0.25:** bis dahin schrieb eedc für Verbrauchszähler die Verbrauchssumme von Home Assistant statt
    des Zählerstands. Dann fällt die Reihe genau einmal, an der Umstellung, und es ist nichts kaputt. In der
-   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) mit «Mehrere Tage neu aggregieren»
+   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) (*Einstellungen → Daten → Energieprofil-Pflege*) mit «Mehrere Tage neu aggregieren»
    zieht eedc die Historie nach, soweit Home Assistant sie noch hat.
 5. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden oder nennt weniger Stellen; ein
    Bruch aus einem Zählerwechsel bleibt auch nach der Stilllegung stehen — die Zeile erklärt ihn weiterhin, solange

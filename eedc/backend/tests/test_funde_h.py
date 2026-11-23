@@ -122,7 +122,7 @@ async def test_h1_operation_ueber_den_orchestrator_stand_feld(ha, datei, monkeyp
         p = await plan(req, s)
     assert p.warnings[0].startswith("Verworfen werden die Werte von «Gas")
     assert p.warnings[-1] == "Das lässt sich nicht rückgängig machen."
-    assert any(x.startswith("Es bleiben: jedes andere Feld, Wetter") for x in p.warnings)
+    assert any(x.startswith("Gespeichert bleiben: die Werte jedes anderen Felds, Wetter") for x in p.warnings)
     async with sitzungen() as s:
         res = await execute(p.plan_id, s)
     summary = res.operation_summary
@@ -208,3 +208,82 @@ def test_h1_zeitpunkt_an_umstellungstagen_ist_wanduhr(text):
     ts = zeitpunkt_aus_text(text)
     assert ts % 1800 == 0                                                 # volle Stunde (auch in Zonen mit halber Stunde)
     assert zeitpunkt_aus_text(text_aus_zeitpunkt(ts)) == ts               # Hin und zurück dieselbe Sekunde
+
+
+# ── Teil 2 (23.11.2026 abends): T1 — eine Stunde ohne Menge mit Abruf-Werten bleibt beim Neuaufbau stehen ─────────────
+
+
+async def test_t1_stunde_ohne_menge_behaelt_wetter_und_boerse(db):
+    """Regel Gernot 23.11.2026 «Quellen ohne Historie dürfen nicht gelöscht werden»: eine gespeicherte Stunde mit Wetter und
+    Börsenpreis, für die der Neuaufbau keine Menge findet, bleibt als Zeile — mit den Abruf-Werten (liefert der Abruf einen
+    Wert, gewinnt er) und, wie an jeder geschriebenen Stunde, mit Betriebsart, Ladestand und Endkundenpreis aus der
+    N-595-Rettung (Quelle ohne Wert ⇒ der gespeicherte bleibt, mit seiner alten Herkunft); alle Mengen leer (kein 0, kein
+    alter Zählerwert). Eine Stunde ohne Abruf-Werte entsteht nicht (N-595 P7), die Tageszeile zählt die Stunde nicht."""
+    from backend.core.betriebsmodus import KUEHLEN
+    from backend.models.tages_energie_profil import TagesZusammenfassung
+    from backend.tests.test_n595_neu_aggregieren_rettet_stundenwerte import (
+        ALT_BACKWARD, TAG, _HaLts, _alte_zeile, _aufbau, _lauf, _umgebung,
+    )
+
+    anlage, (wp,), _ = await _aufbau(db, preis=True)
+    await _alte_zeile(db, anlage, TAG, 5, erstellt=ALT_BACKWARD, temperatur_c=7.5, globalstrahlung_wm2=100.0,
+                      bewoelkung_prozent=80.0, niederschlag_mm=0.2, wetter_code=3, boersenpreis_cent=8.8, pv_kw=1.0,
+                      wallbox_kw=0.0, wp_starts_anzahl=2, soc_prozent=50.0, strompreis_cent=30.0,
+                      betriebsmodus_je_wp={str(wp.id): KUEHLEN}, komponenten={})
+    await _alte_zeile(db, anlage, TAG, 6, erstellt=ALT_BACKWARD, soc_prozent=40.0, strompreis_cent=30.0)
+    with _umgebung(zustand={}, lts=_HaLts()):
+        nachher = await _lauf(db, anlage)
+    assert sorted(nachher) == [0, 5, 12, 13]                      # 6 ohne Abruf-Werte entsteht nicht (wie P7)
+    z = nachher[5]
+    assert (z.temperatur_c, z.globalstrahlung_wm2, z.bewoelkung_prozent, z.niederschlag_mm, z.wetter_code,
+            z.boersenpreis_cent) == (7.5, 100.0, 80.0, 0.2, 3, 8.8)
+    assert (z.soc_prozent, z.strompreis_cent, z.betriebsmodus_je_wp) == (50.0, 30.0, {str(wp.id): KUEHLEN})
+    assert z.source_provenance["soc_prozent"]["writer"] != z.source_provenance["temperatur_c"]["writer"]  # alte Herkunft
+    mengen = ("pv_kw", "verbrauch_kw", "einspeisung_kw", "netzbezug_kw", "batterie_kw", "waermepumpe_kw", "wallbox_kw",
+              "ueberschuss_kw", "defizit_kw", "komponenten", "spannen", "wp_starts_anzahl", "wp_betriebsstunden")
+    assert {f: getattr(z, f) for f in mengen if getattr(z, f) is not None} == {}
+    tz = (await db.execute(select(TagesZusammenfassung).where(
+        TagesZusammenfassung.anlage_id == anlage.id, TagesZusammenfassung.datum == TAG))).scalar_one()
+    assert tz.stunden_verfuegbar == 3                             # die Stunde ohne Menge zählt nicht
+
+    with _umgebung(zustand={}, lts=_HaLts(preis={"sensor.preis": {5: 31.0}}), boerse={5: 9.9}):   # die Quelle liefert
+        neu = await _lauf(db, anlage)
+    assert (neu[5].boersenpreis_cent, neu[5].strompreis_cent, neu[5].temperatur_c) == (9.9, 31.0, 7.5)
+    with _umgebung(zustand={}, lts=_HaLts()):                     # wiederholbar: nichts geht verloren
+        wieder = await _lauf(db, anlage)
+    assert sorted(wieder) == [0, 5, 12, 13]
+    assert (wieder[5].boersenpreis_cent, wieder[5].strompreis_cent, wieder[5].soc_prozent) == (9.9, 31.0, 50.0)
+
+
+def test_t2_tag_von_t_nur_fuer_ha_feld_mit_tageswert():
+    """Halt 2 (a): «Tag von t» als Satz — ein HA-Feld mit Tageswert zeigt am Tag des Zeitpunkts den ganzen Tag aus Home
+    Assistant. Kein Satz bei MQTT, bei einem Stand-Feld ohne Tageswert und bei t = 00:00 (der ganze Tag liegt ab t)."""
+    from datetime import datetime
+
+    from backend.services import verwerfen_vor_zeitpunkt as vz
+
+    def la(quelle, tz_keys, t):
+        return SimpleNamespace(quelle=quelle, ziele=SimpleNamespace(tz_keys=frozenset(tz_keys)),
+                               t=int(t.timestamp()))
+
+    mit = vz._tag_von_t(la(vz.QUELLE_HA, {"einspeisung"}, datetime(2025, 5, 10, 6, 0)))
+    assert mit == ("Am 10.05.2025 zeigt dieses Feld den ganzen Tag, wie Home Assistant ihn führt — auch die Stunden vor 06:00 "
+                   "Uhr; die übrigen Felder dieses Tages liest eedc dann aus den gespeicherten Tageswerten, sie können sich an "
+                   "diesem Tag ändern.")
+    assert vz._tag_von_t(la(vz.QUELLE_MQTT, {"einspeisung"}, datetime(2025, 5, 10, 6, 0))) == ""
+    assert vz._tag_von_t(la(vz.QUELLE_HA, set(), datetime(2025, 5, 10, 6, 0))) == ""
+    assert vz._tag_von_t(la(vz.QUELLE_HA, {"einspeisung"}, datetime(2025, 5, 10, 0, 0))) == ""
+
+
+def test_t2_was_weg_nennt_die_verzeichneten_sensorwechsel():
+    """Lesedurchgang H: die Vorschau nennt die verzeichneten Sensorwechsel, die mit verworfen werden (dieselbe Auswahl wie das
+    Löschen, ``feld_loeschen.zaehle_wechsel``); ohne Wechsel kein Teil."""
+    from backend.services import verwerfen_vor_zeitpunkt as vz
+
+    def la(wechsel):
+        return SimpleNamespace(kanal=SimpleNamespace(zeilen=0, tage=()), staende=3, rohstaende=0, wechsel=wechsel,
+                               bestand=SimpleNamespace(tage=set(), abschluss_tage=set()))
+
+    assert vz._was_weg(la(0)) == "Gelöscht werden nur Daten dieses Felds vor dem Zeitpunkt: 3 Zählerstände."
+    assert vz._was_weg(la(2)) == ("Gelöscht werden nur Daten dieses Felds vor dem Zeitpunkt: 3 Zählerstände; 2 verzeichnete "
+                                  "Sensorwechsel dieses Felds bis zur ersten Stunde ab dem Zeitpunkt.")

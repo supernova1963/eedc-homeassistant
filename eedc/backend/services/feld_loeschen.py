@@ -138,7 +138,28 @@ async def loesche_wechsel(db: AsyncSession, anlage_id: int, key: str, *, bis: Op
     dorthin — ein Tausch in der ersten Stunde ab dem Zeitpunkt bleibt verzeichnet, sonst zählte sein Sprung wieder als Menge
     (Korrekturrunde WEGB-K, Nachmessung B1). In der Sitzung des Aufrufers, ohne Commit. Returns: Zahl der gelöschten Zeilen."""
     from backend.models.zuordnung_wechsel import ZuordnungWechsel
-    from backend.services.zuordnung_wechsel.zeitpunkt import gleiche_quelle, vergiss
+    from backend.services.zuordnung_wechsel.zeitpunkt import vergiss
+
+    bed = await _wechsel_bedingung(db, anlage_id, key, bis, gleiche_quelle_bis)
+    n = int((await db.execute(delete(ZuordnungWechsel).where(and_(*bed)))).rowcount or 0)
+    vergiss(db, anlage_id)
+    return n
+
+
+async def zaehle_wechsel(db: AsyncSession, anlage_id: int, key: str, *, bis: Optional[datetime] = None,
+                         gleiche_quelle_bis: Optional[datetime] = None) -> int:
+    """Wie viele Wechsel ``loesche_wechsel`` mit denselben Angaben löschen würde (Vorschau, Fund-Päckchen H)."""
+    from backend.models.zuordnung_wechsel import ZuordnungWechsel
+
+    bed = await _wechsel_bedingung(db, anlage_id, key, bis, gleiche_quelle_bis)
+    return int((await db.execute(select(func.count()).select_from(ZuordnungWechsel).where(and_(*bed)))).scalar_one())
+
+
+async def _wechsel_bedingung(db: AsyncSession, anlage_id: int, key: str, bis: Optional[datetime],
+                             gleiche_quelle_bis: Optional[datetime]) -> list:
+    """Die eine Auswahl der Wechsel für ``loesche_wechsel`` und ``zaehle_wechsel``."""
+    from backend.models.zuordnung_wechsel import ZuordnungWechsel
+    from backend.services.zuordnung_wechsel.zeitpunkt import gleiche_quelle
 
     bed = [ZuordnungWechsel.anlage_id == anlage_id, ZuordnungWechsel.sensor_key == key]
     if bis is not None:
@@ -147,9 +168,7 @@ async def loesche_wechsel(db: AsyncSession, anlage_id: int, key: str, *, bis: Op
         bleibt = [w.id for w in (await db.execute(select(ZuordnungWechsel).where(and_(*bed)))).scalars().all()
                   if w.ab_ts > gleiche_quelle_bis and gleiche_quelle(w.vorher, w.nachher)]
         bed.append(ZuordnungWechsel.id.not_in(bleibt))
-    n = int((await db.execute(delete(ZuordnungWechsel).where(and_(*bed)))).rowcount or 0)
-    vergiss(db, anlage_id)
-    return n
+    return bed
 
 
 async def loesche_vor(db: AsyncSession, anlage, key: str, t: datetime, *, auch_abschluss: bool, zum_platzhalter: bool,

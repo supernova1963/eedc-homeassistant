@@ -24,7 +24,7 @@ letzte geprüfte Tag (gestern) ungeprüft, solange Home Assistant die Stunde 23�
    Liest eedc deine Anlage aus der Statistik von Home Assistant, übernimmt der Knopf die Statistik aller gespiegelten
    Zähler der Anlage neu (ab der ersten abweichenden Stunde) und baut den genannten Tag danach auf. Sonst heißt er «Tag neu aufbauen» und baut nur
    den genannten Tag neu; für alle Tage des Geräts auf einmal: in der
-   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) «Mehrere Tage neu aggregieren».
+   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) (*Einstellungen → Daten → Energieprofil-Pflege*) «Mehrere Tage neu aggregieren».
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — das Gerät ist aus der Liste verschwunden oder nennt weniger Tage.
 
 Bleibt der Befund danach: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das Diagnose-Paket:

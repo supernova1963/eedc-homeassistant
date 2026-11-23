@@ -12,7 +12,7 @@ im Cockpit, Energieprofil, Tagesabschlüsse.
 2. Standalone (eigener Container): dort die Umgebungsvariable `TZ` auf die Zeitzone von Home Assistant setzen, die die
    Details nennen (in `docker-compose.yml` unter `environment`), und den Container neu starten.
 3. Bereits gespeicherte Tage ändern sich dadurch nicht. Sie lassen sich danach in der
-   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) mit «Mehrere Tage neu aggregieren» neu
+   [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) (*Einstellungen → Daten → Energieprofil-Pflege*) mit «Mehrere Tage neu aggregieren» neu
    berechnen.
 4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 

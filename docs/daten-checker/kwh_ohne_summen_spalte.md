@@ -12,7 +12,7 @@ deshalb stehen dort Werte, während die Tagesansicht im Cockpit und die Stundenw
    `state_class: total_increasing` per `customize` setzen (Neustart von Home Assistant nötig).
 2. Am Befund **«Anderen Sensor wählen»** klicken — die Datenquellen-Zuordnung öffnet sich am ersten betroffenen Feld; dort den
    Helfer zuordnen.
-3. Die Tage danach in der [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) mit «Mehrere
+3. Die Tage danach in der [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) (*Einstellungen → Daten → Energieprofil-Pflege*) mit «Mehrere
    Tage neu aggregieren» neu berechnen — Home Assistant sammelt die Summenwerte erst ab der Umstellung.
 4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden, sobald jeder genannte Sensor eine
    Summen-Spalte hat.
