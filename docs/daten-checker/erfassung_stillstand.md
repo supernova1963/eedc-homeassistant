@@ -8,15 +8,17 @@ Zähler und wie eedc Überschuss, Defizit und Direktverbrauch dieses Tages besti
 nicht bestimmbar (die drei Spalten bleiben leer) oder wie an jedem anderen Tag, wenn die nachgetragene Menge kaum PV
 enthält. Reicht ein Ausfall über mehrere Tage, steht die Menge dieser Tage am letzten. Steht die Erfassung so oft still,
 dass es zur Art der Erfassung gehört, sagt die Meldung das in einem Satz. In der Tagestabelle tragen Überschuss, Defizit
-und Direktverbrauch eines solchen Tages das Zeichen «geschätzt»; der Link «Im Daten-Checker nachlesen» öffnet diesen Text,
+und Direktverbrauch eines solchen Tages das Zeichen «aus Zählerständen gerechnet»; der Link «Im Daten-Checker nachlesen» öffnet diesen Text,
 auch für Tage, die älter als 90 Tage sind.
 
 ## Lösungsweg
 1. Die genannten Tage ansehen. Ein einzelner Ausfall braucht keine Handlung: die Mengen stimmen, und eedc rechnet die drei
    Spalten des Tages aus den Zählerständen, so gut es geht.
 2. Steht die Erfassung oft oder lange, die Ursache in Home Assistant suchen: läuft der Rechner durch, startet Home
-   Assistant regelmäßig neu, verliert die Integration des Wechselrichters oder Zählers die Verbindung? Die Stundenwerte
-   eines vergangenen Ausfalls lassen sich nicht nachholen — auch Home Assistant hat sie nicht.
+   Assistant regelmäßig neu, verliert die Integration des Wechselrichters oder Zählers die Verbindung? Kommen die Zähler über
+   MQTT, hat der Sender in diesen Stunden keinen Zählerstand geliefert: am Sender (Gerät, Skript, Gateway) prüfen, ob er
+   durchläuft, die Verbindung zum Broker hält und jede Stunde mindestens einen Stand sendet. Die Stundenwerte eines
+   vergangenen Ausfalls lassen sich nicht nachholen — auch Home Assistant bzw. der Sender hat sie nicht.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt, solange ein solcher Tag in den letzten 90 Tagen
    liegt, und steht danach unter den bestandenen Prüfungen.
 
@@ -52,8 +54,11 @@ Was eedc nicht erkennt oder nicht kennzeichnet:
 - Ein Ausfall von nur einer Stunde bleibt wie bisher: die Menge zweier Stunden steht in einer.
 - Ein Zähler, der nur in groben Schritten (0,1 kWh oder mehr) meldet, und eine Erfassung, die regelmäßig stehen bleibt,
   werden nicht gekennzeichnet — dort zählt die nachgetragene Menge als eine Stunde.
-- Tage, die eedc aus eigenen Zählerständen statt aus der Statistik von Home Assistant rechnet, tragen keine Kennzeichnung;
-  dort nennt der Befund «Nachtrag nach eingefrorenem Zähler» eine solche Stunde.
+- Einen Stillstand (Zähler melden weiter, aber unverändert) kennzeichnet eedc an Tagen, die es aus eigenen Zählerständen statt
+  aus der Statistik von Home Assistant rechnet, nicht; dort nennt der Befund «Nachtrag nach eingefrorenem Zähler» eine solche
+  Stunde. Fehlen an einem solchen Tag Zählerstände ganz (etwa ein MQTT-Sender ohne Stand), steht die Menge in der ersten
+  Stunde danach, und dieser Befund nennt den Tag — für Tage, die eedc seit dieser Version gebildet hat; ein älterer Tag trägt
+  die Stunden, wie sie damals gespeichert wurden (die Menge der Lücke gleichmäßig verteilt), bis er neu gebildet wird.
 - Der PV-Anteil einer Heimladung und die Kosten der Stunde, in der die Menge nachgetragen wurde, bleiben eine Näherung:
   eedc bewertet die Menge mit dem Preis dieser einen Stunde.
 - Ein Ausfall, der länger als 90 Tage dauert, wird nur in seinen letzten 90 Tagen erkannt.

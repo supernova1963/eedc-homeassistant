@@ -170,10 +170,10 @@ describe('Fortschritt und Einstieg «Zähler getauscht»', () => {
     unmount()
 
     vi.mocked(datenquellenApi.pruefeZaehlerGetauscht).mockResolvedValue({
-      weg: 'fortsetzung', sensor_key: 'inv:2:ladung_kwh', saetze: ['eedc überbrückt den Tausch.'], eintragen: true,
+      weg: 'fortsetzung', sensor_key: 'inv:2:ladung_kwh', saetze: ['eedc trägt den Tausch ein.'], eintragen: true,
       getauscht_am: '2026-11-17T09:15:00' })
     vi.mocked(datenquellenApi.zaehlerGetauscht).mockResolvedValue({
-      weg: 'fortsetzung', sensor_key: 'inv:2:ladung_kwh', saetze: ['eedc überbrückt den Tausch.'], eintragen: true,
+      weg: 'fortsetzung', sensor_key: 'inv:2:ladung_kwh', saetze: ['eedc trägt den Tausch ein.'], eintragen: true,
       getauscht_am: '2026-11-17T09:15:00', eingetragen: true })
     render(<ZaehlerGetauschtDialog anlageId={1} feldId={FID} feldLabel="PV" onClose={() => {}} />)
     await waitFor(() => expect(document.querySelector('[data-zg-eintragen]')).not.toBeNull())
@@ -260,7 +260,7 @@ describe('Korrekturrunde 3b-K — Fortschritt übersteht das Neuladen, Proben de
       t === '2020-01-01T08:00'
         ? { weg: 'vor_erstem_wert', sensor_key: 'x', saetze: ['Erst ab 01.09.2026 12:00 Uhr.'], eintragen: false,
             getauscht_am: t }
-        : { weg: 'fortsetzung', sensor_key: 'x', saetze: ['eedc überbrückt den Tausch.'], eintragen: true,
+        : { weg: 'fortsetzung', sensor_key: 'x', saetze: ['eedc trägt den Tausch ein.'], eintragen: true,
             getauscht_am: t ?? null }))
     vi.mocked(datenquellenApi.zaehlerGetauscht).mockResolvedValue({ weg: 'fortsetzung', sensor_key: 'x', saetze: [],
       eintragen: true, getauscht_am: '2026-11-10T08:15', eingetragen: true })

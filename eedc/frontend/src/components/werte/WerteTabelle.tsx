@@ -526,12 +526,13 @@ export function WerteTabelle({
                     // S3: Wo der Layer eine Kennzahl verweigert, traegt die Zelle
                     // den Grund als Tooltip statt eines nackten „—". N-799: ein Grund
                     // mit Befund-Ziel an einem VORHANDENEN Wert heißt «gerechnet» —
-                    // die Zelle trägt das Zeichen, der Satz steht unter der Tabelle.
+                    // die Zelle trägt das Zeichen «aus Zählerständen gerechnet» (F5),
+                    // der Satz steht unter der Tabelle.
                     const zellGrund = r.grund?.(m.key) ?? undefined
-                    const geschaetzt = v != null && zellGrund != null && !!r.grundZiel?.(m.key)
-                    const grund = v == null || geschaetzt ? zellGrund : undefined
-                    const inhalt = geschaetzt
-                      ? <span className="inline-flex items-center justify-end gap-1">{fmtWert(v, m.decimals)}<ErfassungZustandBadge zustand="geschaetzt" iconOnly className="w-3.5 h-3.5" /></span>
+                    const gerechnet = v != null && zellGrund != null && !!r.grundZiel?.(m.key)
+                    const grund = v == null || gerechnet ? zellGrund : undefined
+                    const inhalt = gerechnet
+                      ? <span className="inline-flex items-center justify-end gap-1">{fmtWert(v, m.decimals)}<ErfassungZustandBadge zustand="gerechnet" iconOnly className="w-3.5 h-3.5" /></span>
                       : fmtWert(v, m.decimals)
                     if (zeigeVergleich) {
                       const pv = prev ? prev.wert(m.key) : null

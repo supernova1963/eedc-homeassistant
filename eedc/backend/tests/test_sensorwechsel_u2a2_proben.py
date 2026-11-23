@@ -349,9 +349,11 @@ async def test_zeit_proben_umstellung_0740(db, monkeypatch, zeit):
 #: liest das Ansetzen den Rand-Stand epoch-genau aus der Zeile — bei Umstellung am Tag des Tauschs **treffen Tag und Monat
 #: das Soll in jeder Sicht**; es bleibt die Verschiebung der Stunde in der Reihe (der Naht-Slot zeigt einen Teil, der Rest steht
 #: im Slot daneben). Bei Umstellung nach dem Tag liest der Schreiber die Stände neu (dort bleibt sein Bestand, BERECHNUNGEN
-#: Grenze (4)). Kanal, Tagesabschluss aus HA-Slots und Monat treffen das Soll.
+#: Grenze (4)). Kanal, Tagesabschluss aus HA-Slots und Monat treffen das Soll. Fund-Päckchen F (N-817): fehlt der Stand um
+#: 03:00 (doppelte Herbststunde), füllt eedc ihn nicht mehr linear (bis 23.11.2026: Naht-Slot 0,9) — der Slot bleibt leer, die
+#: Menge steht im Slot danach (Tag unverändert, ``reihe_tag`` = Soll).
 DST_GRENZE = {
-    "herbst_doppelt": {"reihe_slot": (pytest.approx(0.9), 1.3)},
+    "herbst_doppelt": {"reihe_slot": (None, 1.3)},
     "fruehjahr_fehlt": {"reihe_slot": (pytest.approx(0.7), 1.3)},
 }
 

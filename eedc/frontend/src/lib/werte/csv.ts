@@ -29,7 +29,7 @@ export interface WerteCsvOptions {
  *  Überschuss, Defizit, Direktverbrauch exportiert wird; sonst bleibt der Export wie bisher. */
 export const CSV_KENNZEICHEN_KOPF = 'Kennzeichen Überschuss/Defizit/Direktverbrauch'
 export const CSV_KENNZEICHEN: Record<'fenster' | 'nicht_rechenbar', string> = {
-  fenster: 'geschätzt (aus Zählerständen gerechnet)',
+  fenster: 'aus Zählerständen gerechnet',
   nicht_rechenbar: 'nicht bestimmbar',
 }
 

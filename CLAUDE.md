@@ -55,14 +55,20 @@ Version: [CHANGELOG.md](CHANGELOG.md) (oberster Abschnitt) bzw. `eedc/backend/co
    den Apparat des Bauplans (Golden Master, Lab, `nachmesser-fable`).
    **Gekürzt (Gernot 16.10.2026, nach vier Runden à 0,5–1,5 h):** Punkte **sammeln und in einem Lauf** bauen statt serieller Runden;
    Melder-Eingänge warten bis zum nächsten Päckchen, außer P1. **Keine Sprengsätze.** Golden Master **nur**, wenn Monats-Fakten oder
-   der Layer (`core/berechnungen/`) berührt sind. **Volle Suite einmal am Ende durch die Bau-Session**; der Master liest die archivierte
+   der Layer (`core/berechnungen/`) berührt sind. **Volle Suite einmal am Ende des Vorhabens durch die Bau-Session**; der Master liest die archivierte
    Summenzeile und fährt sie **nicht** noch einmal. Komplexität prüft der Wächter in der Suite, keine Einzelmessung im Bericht.
    **Bericht: Kopf · je Punkt drei Zeilen (gemessen · gebaut · Checker) · eine Gate-Zeile · Commit-Paket** — keine Etappen-Prosa,
    Ablage nur für Messskripte, die ein Register-Eintrag nennt.
+   **Suite und Gate (Gernot 22./23.11.2026):** eine volle Backend-Suite **je Vorhaben**, nicht je Päckchen — mehrere Päckchen eines
+   Vorhabens teilen sich den Lauf am Ende. Davor je Päckchen das **frühe Gate als ein Befehl**: `ruff`, die berührten Testdateien und
+   die feste Wächter-Liste (`-k "konformitaet or waechter or wurzelmuster or rechenstellen or komplexitaet or dateilaenge or layer or
+   budget or uebersicht or schwester"`). Läuft danach in derselben Sitzung die volle Suite, gehören die schweren Familien
+   (`test_kanal_*`, die beiden Matrizen, `test_sensorwechsel_*`) nicht in den gezielten Lauf. Golden Master nur die, deren Kopien den
+   berührten Pfad tragen; die Reichweite steht im Bericht.
 4. **Fable nur zur Triage** auf Gernots Ruf, kurz.
 5. **Commit je Päckchen mit expliziten Pfaden** (nie `git add -A`); **kein Push, kein Tag außerhalb von `scripts/release.sh`** (Gernot
    10.10.: mehrere Repos, nur das Release hält sie gleich; «pushen ohne taggen» hat Probleme gemacht). Volle Backend-Suite lokal am Ende
-   jedes Päckchens mit gekürzter Ausgabe (`| tail -3`). Release, wenn ein Melder-Fix drin ist, sonst derzeit monatlich (Gernot 12.11.2026) — per `scripts/release.sh <version>` auf Gernots Wort.
+   jedes Vorhabens (Nr. 3) mit gekürzter Ausgabe (`| tail -3`). Release, wenn ein Melder-Fix drin ist, sonst derzeit monatlich (Gernot 12.11.2026) — per `scripts/release.sh <version>` auf Gernots Wort.
 6. **Nichts öffentlich ohne Go** — Issue-Kommentare, Foren-Texte, #110-Änderungen legt die Session vor, Gernot entscheidet (GitHub
    darf die Session nach dem Go selbst posten; Foren postet Gernot).
 7. **Doku gehört zum Fix:** CHANGELOG `[Unreleased]`, `docs/WAS-IST-NEU.md`, betroffenes Handbuch; `./scripts/sync-help.sh` spiegelt.
@@ -77,7 +83,7 @@ ruff check backend                                    # Lint-Gate (F + E9, eedc/
 python -m pytest backend/tests/<berührte Dateien> -q  # plus die Wächter: backend/tests/test_wurzelmuster_konformitaet.py
 cd eedc/frontend && npm run lint && npx tsc --noEmit && npm run test
 ./scripts/sync-help.sh && (cd website && npm run build)   # nur bei Doku-Änderung
-# Volle Backend-Suite (≈ 25 min mit `-n 6` auf der 8-Kern-Box, `-n 3` ≈ 28 min; Stand 9.11.2026, 12 107 Tests) am Ende jedes Päckchens, Ausgabe `| tail -3`; CI fährt sie beim Release-Push in UTC und Auckland.
+# Volle Backend-Suite (≈ 25 min mit `-n 6` auf der 8-Kern-Box, `-n 3` ≈ 28 min; Stand 9.11.2026, 12 107 Tests) am Ende jedes Vorhabens (Nr. 3), Ausgabe `| tail -3`; CI fährt sie beim Release-Push in UTC und Auckland.
 # Summenzeile = `N passed` und sonst nichts — skipped/xfailed/warnings sind Arbeitsvorrat, kein Normalstand (Gernot 24.10.2026);
 # benannte Matrix-Grenzen zählen grün und stehen im Register der Matrixdatei (test_pv_achse_matrix.py::URSACHE/ROT).
 ```

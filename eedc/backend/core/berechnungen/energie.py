@@ -46,6 +46,22 @@ SONSTIGES_KOMPONENTEN_PREFIX: str = "sonstige_"
 #: weiter nur die Heimladung trägt). Kein Stundenwert, keine Spalte der Stundenzeile — und KEIN Präfix der
 #: Wallbox-/E-Auto-Summe oben: V2H ist Quelle, nicht Ladung.
 V2H_KOMPONENTEN_PREFIX: str = "v2h_"
+#: Die Verbraucher-Schlüssel, die der Zählerpfad (Beitragsschicht ``komponenten_beitraege``, Kanal-Leser) als Betrag (≥ 0)
+#: und der Leistungspfad (Live-Σ eines Tags ohne Zähler, ``lts_tagesverlauf``: ``-abs`` für Senken) negativ schreibt.
+VERBRAUCHER_BETRAG_PREFIXE: tuple[str, ...] = WALLBOX_KOMPONENTEN_PREFIXE + WAERMEPUMPE_KOMPONENTEN_PREFIXE
+
+
+def verbraucher_als_betrag(komponenten_kwh: Optional[dict]) -> Optional[dict]:
+    """Eine Schreibweise je Komponenten-Schlüssel über die Tage (Fund-Päckchen F, F3): die Verbraucher-Schlüssel
+    (``wallbox_*``, ``eauto_*``, ``waermepumpe_*``) als Betrag, wie die Beitragsschicht sie schreibt. Ein Tag, dessen
+    Wert aus der Live-Σ stehen blieb (negativ), und ein Tag aus dem Zähler (positiv) summieren sich sonst gegeneinander
+    (Lab Winterborn November 2026: Wallbox 108,8 statt 214,8 kWh). Die gespeicherte Zeile bleibt; der Betrag entsteht
+    beim Lesen. Batterie (Ladung −, Entladung +), Sonstiges (Verbraucher in beiden Pfaden −) und ``haushalt`` bleiben,
+    wie sie sind; ``None`` bleibt ``None``."""
+    if not komponenten_kwh:
+        return komponenten_kwh
+    return {k: (abs(v) if isinstance(v, (int, float)) and str(k).startswith(VERBRAUCHER_BETRAG_PREFIXE) else v)
+            for k, v in komponenten_kwh.items()}
 
 
 # ─── Σ-Helper ───────────────────────────────────────────────────────────────

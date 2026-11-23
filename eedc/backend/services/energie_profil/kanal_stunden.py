@@ -40,7 +40,7 @@ from typing import Any, Iterable, Mapping, Optional, Sequence
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen.energie import (
-    SONSTIGES_KOMPONENTEN_PREFIX, WAERMEPUMPE_KOMPONENTEN_PREFIXE, WALLBOX_KOMPONENTEN_PREFIXE,
+    SONSTIGES_KOMPONENTEN_PREFIX, WAERMEPUMPE_KOMPONENTEN_PREFIXE, WALLBOX_KOMPONENTEN_PREFIXE, verbraucher_als_betrag,
 )
 from backend.core.berechnungen.slot_konvention import (
     FORWARD_FELDER, RASTER_BEGINN, RASTER_ENDE, bestandszeile_fuer_stundenbeginn,
@@ -584,9 +584,15 @@ async def komponenten_der_tage(db: AsyncSession, anlage_id: int, von: date, bis:
     Tageszeile.
 
     ``komponenten_je_tag`` ``None`` (HA-Bauform S5, E-S5-2): die Lesestelle lädt die Tageszeilen ``von`` … ``bis``
-    selbst (jede Zeile, auch ohne Komponenten — ``None``), der Aufrufer liest keine Mengen-Spalte (Wächter S5-R6)."""
+    selbst (jede Zeile, auch ohne Komponenten — ``None``), der Aufrufer liest keine Mengen-Spalte (Wächter S5-R6).
+
+    **Eine Schreibweise je Schlüssel (Fund-Päckchen F, F3):** die Verbraucher-Schlüssel der Tageszeilen (Wallbox, E-Auto,
+    Wärmepumpe) als Betrag wie die Beitragsschicht und die Kanäle (``energie.verbraucher_als_betrag``) — ein Tag mit
+    Live-Σ-Wert (negativ) und ein Tag aus dem Zähler summieren sich sonst gegeneinander. Die Zeilen bleiben gespeichert,
+    wie sie sind."""
     if komponenten_je_tag is None:
         komponenten_je_tag = await _komponenten_der_tageszeilen(db, anlage_id, von, bis)
+    komponenten_je_tag = {d: verbraucher_als_betrag(k) for d, k in komponenten_je_tag.items()}
     out = dict(komponenten_je_tag)
     gemischt = await _bilanz_gemischt(db, anlage_id, von, bis, komponenten_je_tag)
     if gemischt:

@@ -146,14 +146,15 @@ async def test_l5_l6_naht_slot_zaehlt_seine_menge(db):
     assert await zwei() == (pytest.approx(0.0), pytest.approx(23.0), 0.0, pytest.approx(23.0))
 
 
-async def test_l5_luecke_neben_einer_naht_mit_rand_fuellt_ueber_die_hebung(db):
-    """E1 (#145) füllt fehlende Stände linear — über eine Naht mit Rand-Ständen in der gehobenen Reihe (kein Sprung)."""
+async def test_l5_luecke_neben_einer_naht_mit_rand_buendelt_ueber_die_hebung(db):
+    """Eine Lücke neben einer Naht mit Rand-Ständen: die gehobene Reihe trägt keinen Sprung — die Menge der Lücke steht
+    in der ersten Stunde danach (N-817, Fund-Päckchen F; bis 23.11.2026 füllte E1/#145 linear: je Stunde 1,0)."""
     a = await s2._anlage(db, ["ladung_kwh"])
     luecke = {s2.TAG0 + timedelta(hours=10), s2.TAG0 + timedelta(hours=11)}
     await s2._reihe(db, a.id, "inv:2:ladung_kwh", {t: s2._stand(t) for t in s2.FENSTER if t not in luecke})
     await _wechsel_mit_rand(db, a.id, "inv:2:ladung_kwh")
     t = await s2._tabelle(db, a, {"2": await db.get(Investition, 2)})
-    assert [t.stunden[h]["wallbox"] for h in (10, 11, 12)] == [pytest.approx(1.0)] * 3
+    assert [t.stunden[h]["wallbox"] for h in (10, 11, 12)] == [None, None, pytest.approx(3.0)]
     assert t.komponenten_kwh["wallbox_2"] == pytest.approx(24.0)
 
 

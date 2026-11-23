@@ -1829,10 +1829,10 @@ Zehn Mechanismen, jeder mit seinem Anlass. Sie greifen **nacheinander**, nicht a
 | --- | --- | --- | --- |
 | 1 | **Quellen-Vorprüfung** | `aggregations_quelle.py` | Ein Lauf ohne jede Quelle bricht *vor* dem Löschen ab, statt eine leere Zeile zu schreiben |
 | 2 | **Zwei Zählerpfade** | `lts_aggregator` → `sensor_snapshot_service` | HA-LTS ist SoT; fehlt sie (Standalone/MQTT), übernimmt der Snapshot-Pfad mit **demselben Ausgabe-Vertrag** |
-| 3 | **Lücken-Interpolation** | `snapshot/aggregator.py::_fill_gaps_linear` (#145) | Einzelne fehlende Zählerstände **vor** der Delta-Bildung. Ränder werden **nicht** extrapoliert — ohne Anker keine Schätzung |
+| 3 | **Lücke als Bündel** | `snapshot/aggregator.py::slots_aus_staenden` (N-817, Fund-Päckchen F; bis 23.11.2026 `_fill_gaps_linear`, #145) | Fehlt ein Zählerstand, bleibt die Stunde leer und die erste Stunde danach trägt die Menge (wie HA). Ränder werden **nicht** extrapoliert |
 | 4 | **Either-Or je Fallback-Gruppe** | `snapshot/aggregator.py` (#298) | Zwei Sensoren für dieselbe Größe zählen nicht doppelt — Auflösung auf **Tages**-Ebene, nicht je Stunde |
 | 5 | **Plausibilitäts-Cap** | `snapshot/aggregator.py`, `snapshot/fallback.py` (#184) | Ein Zähler-Rücksprung oder ein Lifetime-großer Stunden-Spike wird gekappt statt eingebucht |
-| 6 | **Counter-Σ aus dem Tages-Diff** | `verteile_counter_auf_stunden` | Bei Lücken wird die Stunden-Σ so reskaliert, dass sie auf den Tages-Boundary-Diff führt — **eine** Quelle je Tag |
+| 6 | **Counter-Stunden aus den Ständen** | `snapshot/aggregator.py::_counter_slots` (F6, Fund-Päckchen F; bis 23.11.2026 `verteile_counter_auf_stunden`) | Keine Reskalierung: eine Lücke bündelt die Menge in der Stunde danach; die Invariante prüft gegen die Menge im Fenster der Stunden |
 | 7 | **Rettung fremdbefüllter Felder** | `aggregator.py` (`_PROGNOSE_FELDER_RETTEN`, #190/#319) | `aggregate_day` löscht und schreibt neu; Prognose- und Kraftstoffpreis-Felder kommen von **anderen** Schreibern und würden sonst jedes Mal verschwinden |
 | 8 | **Drei Konsistenz-Invarianten** | `aggregator.py` am Ende des Laufs | Achse 1 Stunden- gegen Tagespfad · Achse 2 **Leistungs-JSON gegen Zähler-Spalten** (#315) · Counter-Daily-Drift. Alle drei melden per `warning` — sie **verwerfen keinen Tag** |
 | 9 | **Selbstheilung + Nachlauf** | `energie_profil_aggregation_recovery` (02:15, #136) · `sensor_snapshot_startup_recovery` (letzte 6 h nach Neustart) | Verspätete HA-Statistik und verpasste Läufe nach einem Neustart |

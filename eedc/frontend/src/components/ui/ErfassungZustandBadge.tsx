@@ -19,22 +19,25 @@
  * Badge-Art (Regel 0a; [[feedback_kpicard_drei_versionen]]).
  */
 
-import { CheckCircle2, BadgeCheck, AlertTriangle, Circle, CircleDashed, AlertCircle, type LucideIcon } from 'lucide-react'
+import { CheckCircle2, BadgeCheck, AlertTriangle, Calculator, Circle, CircleDashed, AlertCircle, type LucideIcon } from 'lucide-react'
 import { ERFASSUNG_ZUSTAND } from '../../lib/colors'
 
 /**
  * Erfassungs-Zustände (aus `FeldStatus.quelle` + Vergleich + Bestätigung abgeleitet).
  * 6 Labels auf 4 Farb-Achsen (Gernot 2026-07-12): grün = fertig (gemessen | geprüft),
  * gelb = prüfen (geschätzt), orange = weicht ab, grau = offen; „optional" = leises Grau
- * für quellenlose Leerfelder (zählt nicht).
+ * für quellenlose Leerfelder (zählt nicht). `gerechnet` (Fund-Päckchen F, F5, Gernot 23.11.2026) ist nur ein
+ * Anzeige-Zustand: Überschuss, Defizit und Direktverbrauch eines Tages mit gebündelten Stunden (N-799) — «aus
+ * Zählerständen gerechnet» statt «geschätzt», weil eedc nichts schätzt; Farbe wie `geschaetzt`, eigenes Icon.
  */
-export type ErfassungZustand = 'gemessen' | 'geprueft' | 'geschaetzt' | 'weicht_ab' | 'fehlt' | 'optional'
+export type ErfassungZustand = 'gemessen' | 'geprueft' | 'geschaetzt' | 'gerechnet' | 'weicht_ab' | 'fehlt' | 'optional'
 
 /** Zentrale Icon-/Label-Quelle je Zustand — von Badge, Kopf-Ampel und Tabelle geteilt. */
 export const ZUSTAND_META: Record<ErfassungZustand, { label: string; Icon: LucideIcon }> = {
   gemessen:   { label: 'gemessen',  Icon: CheckCircle2 },  // automatisch (Sensor/Import)
   geprueft:   { label: 'geprüft',   Icon: BadgeCheck },    // von dir eingegeben/bestätigt
   geschaetzt: { label: 'geschätzt', Icon: AlertTriangle }, // Schätzung → „prüfen"
+  gerechnet:  { label: 'aus Zählerständen gerechnet', Icon: Calculator }, // N-799-Tag (F5): Anzeige, kein Auftrag
   weicht_ab:  { label: 'weicht ab', Icon: AlertCircle },
   fehlt:      { label: 'offen',     Icon: Circle },
   optional:   { label: 'optional',  Icon: CircleDashed },

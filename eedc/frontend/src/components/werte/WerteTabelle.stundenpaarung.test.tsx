@@ -1,6 +1,6 @@
 /**
  * N-799 Sitzung 2 (E-11 b/c): die drei stundengepaarten Tagesspalten eines Tages mit Zähler-Rechnung bzw. ohne
- * Stunden-Paarung — Zeichen `geschaetzt` an der vorhandenen Zahl, der Satz sichtbar unter der Tabelle mit dem Link auf den
+ * Stunden-Paarung — Zeichen `gerechnet` («aus Zählerständen gerechnet», F5) an der vorhandenen Zahl, der Satz sichtbar unter der Tabelle mit dem Link auf den
  * Befund (`befund=erfassung_stillstand`), der Fuß-Hinweis der Summe. Der Client rechnet nichts: Wert, Kennzeichen und Satz
  * kommen aus `tage-werte`.
  *
@@ -37,11 +37,11 @@ describe('N-799: Kennzeichen der drei Tagesspalten in der WerteTabelle', () => {
   beforeEach(() => { vi.setSystemTime(new Date(2026, 10, 16, 12)) })
   afterEach(() => { vi.useRealTimers() })
 
-  it('Zahl mit Zeichen «geschätzt», Satz unter der Tabelle mit Link auf den Befund', () => {
+  it('Zahl mit Zeichen «aus Zählerständen gerechnet», Satz unter der Tabelle mit Link auf den Befund', () => {
     zeigen()
     const zelle = screen.getAllByTitle(GRUND_F)
     expect(zelle).toHaveLength(3)                                  // drei Spalten, je die Zahl + Zeichen
-    expect(within(zelle[0]).getByRole('img', { name: 'geschätzt' })).toBeTruthy()
+    expect(within(zelle[0]).getByRole('img', { name: 'aus Zählerständen gerechnet' })).toBeTruthy()
     const satz = screen.getByText((_t, el) => el?.tagName === 'LI' && (el.textContent ?? '').includes(GRUND_F))
     expect(satz.textContent).toContain('Do 12.11.')
     const link = within(satz).getByRole('link', { name: LINK_DATEN_CHECKER })
@@ -65,7 +65,7 @@ describe('N-799: Kennzeichen der drei Tagesspalten in der WerteTabelle', () => {
 
   it('ohne Kennzeichen: kein Zeichen, kein Satz, kein Fuß-Hinweis (Sprengsatz der Bedingung)', () => {
     zeigen([tagesZeile(tagWerte('2026-11-11')), tagesZeile(tagWerte('2026-11-12'))])
-    expect(screen.queryByRole('img', { name: 'geschätzt' })).toBeNull()
+    expect(screen.queryByRole('img', { name: 'aus Zählerständen gerechnet' })).toBeNull()
     expect(screen.queryByRole('link', { name: LINK_DATEN_CHECKER })).toBeNull()
     expect(screen.queryByText(/Zähler-Rechnung/)).toBeNull()
   })

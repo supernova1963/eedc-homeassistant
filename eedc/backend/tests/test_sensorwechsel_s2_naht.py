@@ -211,8 +211,8 @@ async def test_form2_naht_slot_zaehlt_nur_den_neuen_abschnitt(db, monkeypatch):
 
 
 async def test_form2_keine_gerade_ueber_die_naht(db, monkeypatch):
-    """Fehlen die Stände 9:00 und 10:00, füllt E1 (#145) linear — über eine Naht nicht: der Sprung verteilte sich sonst
-    auf 9, 10 und 11 Uhr."""
+    """Fehlen die Stände 9:00 und 10:00, trägt die Stunde danach die Menge (N-817, Bündel) — über eine Naht nichts: der
+    Sprung stünde sonst in der Stunde bis 11 Uhr (bis 23.11.2026 füllte E1/#145 linear, über eine Naht nicht)."""
     a = await _anlage(db, ["ladung_kwh"])
     luecke = {TAG0 + timedelta(hours=9), TAG0 + timedelta(hours=10)}
     await _reihe(db, a.id, "inv:2:ladung_kwh", {t: _stand(t) for t in FENSTER if t not in luecke})
@@ -627,8 +627,8 @@ async def test_b3_nur_eine_nicht_aufgehobene_fortsetzung_ist_naht(db, grund, auf
 
 
 async def test_b3_stundenform_keine_gerade_ueber_die_naht(db, monkeypatch):
-    """``stunden_leser.lade_stundenformen``: fehlen 9:00 und 10:00, füllt E1 linear — über die Naht nicht (sonst verteilte die
-    Gerade den Sprung auf 9 und 10 Uhr). Gegenprobe: ohne Naht ⇒ Stunden über 600."""
+    """``stunden_leser.lade_stundenformen``: fehlen 9:00 und 10:00, trägt die Stunde danach die Menge (N-817, Bündel) — über
+    die Naht nichts (sonst stünde der Sprung im Bündel). Gegenprobe: ohne Naht ⇒ eine Stunde über 600."""
     from backend.services.snapshot.stunden_leser import lade_stundenformen
 
     a = await _anlage(db, ["stromverbrauch_kwh"], typ="waermepumpe")

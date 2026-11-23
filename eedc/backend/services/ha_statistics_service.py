@@ -1606,8 +1606,9 @@ class HAStatisticsService:
         # Counter-Spikes von der Größenordnung des Lifetime-Werts,
         # sobald ein Slot `sum=NULL` hat (z. B. nach HA-Restart bevor
         # `recompile_statistics` lief). Bei `sum=NULL` lieber `None`
-        # zurückgeben — der Aufrufer interpoliert (sensor_snapshot
-        # _service._fill_gaps_linear).
+        # zurückgeben — der Stand fehlt dann; die Menge steht in der
+        # ersten Stunde danach (N-817, wie HA; bis 23.11.2026 füllte der
+        # Snapshot-Pfad linear).
         if meta.has_sum:
             wert = row[0]
         else:

@@ -13,7 +13,10 @@ verglichen und durch die Tage seit seinem letzten Zuwachs geteilt (mindestens 1)
 Zehnfachen — wenn der Zähler schon ein Jahr mit gewöhnlichem Betrieb kennt (ein Jahr Statistik, an mindestens 14 Tagen etwas
 gezählt, an einem davon mindestens 1 kWh) oder die Menge mehr ist, als eine Anlage in einer Stunde leisten kann (100 kWh oder
 1,5 × die Anlagenleistung in kWp, was größer ist; nur bei kWh). Ein Neubeginn, der nicht bei 0 liegt, ist ein Befund ab dem
-Dreifachen. Verglichen werden nur Stunden desselben Sensors.
+Dreifachen. Beginnt eine Statistik mit einem Stand über dieser Grenze statt bei 0 (eine importierte Statistik, ein Zähler,
+der beim ersten Wert springt), nennt der Befund ihre erste Stunde («die Statistik beginnt mit diesem Stand statt bei 0») —
+eedc zählt sie wie Home Assistant ganz ([Handbuch Einstellungen §7.7c](HANDBUCH_EINSTELLUNGEN.md#77c-was-passiert-wenn)).
+Verglichen werden nur Stunden desselben Sensors.
 
 **Was kein Befund ist.** Eine Stunde, die nach einer Lücke die Menge mehrerer Stunden nachträgt; ein großer Verbrauch nach
 langer Ruhe (Wallbox nach Wochen, Wärmepumpe im ersten kalten Monat, PV nach Schnee); die erste gewöhnliche Stunde eines
@@ -21,8 +24,7 @@ Zählers, der bisher nur Standby kannte; ein Zähler, der in den Tagen davor an 
 (Neubeginn); ein Zähler, der bei 0 neu beginnt; ein Sensor, der kurz 0 gemeldet hat und
 zurückkehrt ([§4.8b](#48b-zaehlerstaende--sprung-in-home-assistant)); der Wechsel zwischen zwei Sensoren
 ([Handbuch Einstellungen §7.7a](HANDBUCH_EINSTELLUNGEN.md#77a-die-frage-beim-wechsel-zwei-antworten)); die erste Stunde einer
-neuen Statistik, auch mit einem großen Wert (eine importierte Statistik, ein Zähler, der beim ersten Wert springt — eedc zeigt
-sie wie Home Assistant, [Handbuch Einstellungen §7.7c](HANDBUCH_EINSTELLUNGEN.md#77c-was-passiert-wenn)). Ein gefallener Zählerstand steht in
+neuen Statistik bis zu dieser Grenze. Ein gefallener Zählerstand steht in
 [§4.8c](#48c-zaehlerstaende--rueckgang-in-home-assistant) bzw. bei Verbrauchszählern in [§4.23](#423-verbrauchszaehler-zaehlerstaende).
 
 **Zählerstände** (Gas, Wasser, Öl, Kilometerstand): eedc rechnet dort mit dem Stand, den der Sensor anzeigt, nicht mit der

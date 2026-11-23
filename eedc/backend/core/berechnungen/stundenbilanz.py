@@ -47,11 +47,11 @@ von ``docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md`` §3 („Differenz ⇒ unterdrücke
    niedrigerer, als vollständig ausgewiesener**. Probe:
    ``test_stundenbilanz_sot.py::test_teilunterdrueckung_waere_schlimmer``.
 
-⚑ **Und die sporadische Lücke ist hier ohnehin kein Thema:** ein einzelner
-Sensor-Ausfall mitten am Tag wird eine Schicht vorher interpoliert
-(``snapshot/aggregator.py::_fill_gaps_linear``, #145), dazu Self-Healing 02:15
-und die idempotente Re-Aggregation. Insgesamt neun Schichten kümmern sich um
-Tageslücken.
+⚑ **Und die sporadische Lücke ist hier ohnehin kein Thema:** die Menge eines
+einzelnen Sensor-Ausfalls mitten am Tag steht eine Schicht vorher als Bündel in
+der ersten Stunde danach (``snapshot/aggregator.py::snapshot_tagestabelle``,
+N-817, wie HA — bis 23.11.2026 linear gefüllt, #145), dazu Self-Healing 02:15
+und die idempotente Re-Aggregation.
 
 ✅ **Der SATZ ist gebaut (31.08.2026, N-346).** Beide Meldungen in
 ``daten_checker/energieprofil.py`` nennen die Folge jetzt beim Namen: die

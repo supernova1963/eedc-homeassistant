@@ -96,7 +96,7 @@ SATZ_HA_STAND = ("Dieser Zähler kommt aus Home Assistant, und eedc rechnet mit 
                  "Verbrauch zählt, gibt es zwei Wege: in Home Assistant für den neuen Zähler einen eigenen Sensor oder Helfer "
                  "anlegen, ihn diesem Feld zuordnen und im Dialog „Bisherige Werte bleiben“ wählen; oder den neuen Zähler als "
                  "eigenes Gerät anlegen und am alten ein Stilllegungsdatum setzen (Handbuch Einstellungen, Verbrauchszähler).")
-SATZ_FORTSETZUNG = ("eedc überbrückt den Tausch am {zeit}: der Unterschied zwischen altem und neuem Zählerstand zählt nicht "
+SATZ_FORTSETZUNG = ("eedc trägt den Tausch am {zeit} ein: der Unterschied zwischen altem und neuem Zählerstand zählt nicht "
                     "als Menge. Die Werte vor und nach dem Tausch bleiben; wo eedc aus den gespeicherten Zählerständen rechnet, "
                     "zählt die Stunde des Tauschs keinen Zuwachs.")
 SATZ_NACHTRAG = ("Die Stunde ab {stunde} Uhr ist schon gespeichert; sie zählt danach keinen Zuwachs — auch nicht, was in "
@@ -107,11 +107,11 @@ SATZ_NACHTRAG_BISHER = "Bisher zählt sie {zuwachs} {einheit}."
 #: §14» Nr. 95 (4)): nur, wenn die Tageszeile dieses Tages den Wert des Felds wirklich trägt — dann mit Tag und Wert.
 SATZ_TAG_FEST = ("Für den {tag} hat eedc schon einen festen Tageswert dieses Felds gespeichert ({wert} {einheit}); er bleibt, "
                  "wie er ist, und kann den Unterschied weiter enthalten.")
-SATZ_OHNE_WERTE = "Dieses Feld hat noch keine eigenen Werte — es gibt keinen Sprung zu überbrücken."
+SATZ_OHNE_WERTE = "Dieses Feld hat noch keine eigenen Werte — es gibt keinen Tausch einzutragen."
 SATZ_KEINE_QUELLE = "Dieses Feld hat keine Quelle — ordne zuerst eine zu."
 SATZ_SCHON = "Dieser Tausch ist schon eingetragen."
-SATZ_VOR_ERSTEM_WERT = ("Dieses Feld hat erst ab {zeit} Uhr eigene Werte — vor dem ersten Wert gibt es keinen Sprung zu "
-                        "überbrücken; hier wird nichts eingetragen.")
+SATZ_VOR_ERSTEM_WERT = ("Dieses Feld hat erst ab {zeit} Uhr eigene Werte — vor dem ersten Wert gibt es keinen Tausch "
+                        "einzutragen; hier wird nichts eingetragen.")
 #: U3 b (G5): die Rand-Stände aus den Rohständen.
 SATZ_FORTSETZUNG_ROH = ("eedc trägt den Tausch am {zeit} Uhr ein: dort springt der Zählerstand von {alt} auf {neu} {einheit}. "
                         "Dieser Unterschied zählt nicht als Menge; die Stunde des Tauschs zählt, was der alte Zähler bis zu "
@@ -145,7 +145,7 @@ SATZ_EIN_EINTRAG = "Für die Stunde bis {bis} Uhr ist danach kein weiterer Tausc
 SATZ_LIVE = ("Die Live-Anzeige rechnet direkt aus den Zählerständen: sie zeigt den Sprung am Tag des Tauschs unter „heute“ "
              "und am Tag danach unter „gestern“ weiter; Tag, Monat und Jahr zählen ihn nach dem Eintrag nicht.")
 SATZ_NICHT_MOEGLICH = ("Für die Zeit des Tauschs ({zeit}) kann eedc hier nichts eintragen: für diese Zeit hat eedc keine Werte "
-                       "dieses Zählers, die sich überbrücken lassen (etwa weil sie mit „Daten vor der Änderung löschen“ "
+                       "dieses Zählers, an denen sich ein Tausch eintragen lässt (etwa weil sie mit „Daten vor der Änderung löschen“ "
                        "oder in der Reparatur-Werkbank mit „Werte vor dem Sensorbeginn verwerfen“ entfernt wurden).")
 
 

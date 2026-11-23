@@ -65,8 +65,10 @@ REIHEN_LESER: dict[str, tuple[str, str, bool, str]] = {
     "services/snapshot/aggregator.py::_tagesdetail_boundary_diff_mit_grund": (
         "L2", NAHT, True, "Ränder und Rückfall; die Menge über _tageswert_aus_raendern. In get_tagesdetail_kwh gilt davor "
         "Kanal vor Reihe je Zähler (_typ_summe → kanal/feld_leser.kanal_feldwerte) — die 15 Tage der Produktiv-Anlage"),
-    "services/snapshot/aggregator.py::snapshot_tagestabelle": (
-        "L5", NAHT, True, "Naht-Slot zählt nur den neuen Abschnitt, keine Gerade über eine Naht (_naht_trenner); eine Naht "
+    "services/snapshot/aggregator.py::slots_aus_staenden": (
+        "L5", NAHT, True, "Slot-Bildung von snapshot_tagestabelle (seit Fund-Päckchen F eine Funktion, auch für ein MQTT-Feld "
+        "neben HA-Feldern in lts_tagestabelle): Naht-Slot zählt nur den neuen Abschnitt, auch als Bündel über eine Lücke "
+        "(N-817); eine Naht "
         "mit Rand-Ständen (U2 a1, F5) hebt die Stände beim Laden (zaehler_naht.gehobene_staende) und teilt nicht; "
         "die Heimlade-Slots (zusatz_slots) für die Ladeblöcke (L13) gehen durch dieselbe Schleife"),
     "services/snapshot/aggregator.py::get_daily_counter_deltas_by_inv": (
@@ -84,7 +86,7 @@ REIHEN_LESER: dict[str, tuple[str, str, bool, str]] = {
         "Stück dessen Ende, Nr. 112); die Menge bildet _randstaende je Abschnitt (reader.tageswert_ueber_abschnitte, "
         "Lücken-Regel zaehler_naht); Wärme-Verlauf (a) liest so"),
     "services/snapshot/stunden_leser.py::lade_stundenformen": (
-        "L6", NAHT, True, "Stundenform der WP-Zähler ohne WP-Kanal: Naht-Slot 0, keine Gerade über eine Naht; mit "
+        "L6", NAHT, True, "Stundenform der WP-Zähler ohne WP-Kanal: Naht-Slot 0, auch als Bündel über eine Lücke; mit "
         "Rand-Ständen (U2 a1) gehoben beim Laden"),
     "services/snapshot/reader.py::delta": (
         "L4", NAHT, True, "Menge über ein Fenster je Abschnitt (MQTT-Monat, Cockpit → Monat)"),

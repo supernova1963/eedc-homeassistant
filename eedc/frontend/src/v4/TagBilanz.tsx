@@ -376,7 +376,7 @@ export function TagBilanz({
           <HerkunftZeile
             className="mt-2"
             herkunft={{
-              zustand: t.stundenpaarung === 'fenster' ? 'geschaetzt' : 'fehlt',
+              zustand: t.stundenpaarung === 'fenster' ? 'gerechnet' : 'fehlt',
               bezug: 'Direktverbrauch, Überschuss, Defizit',
               hinweis: t.stundenpaarung_grund,
             }}

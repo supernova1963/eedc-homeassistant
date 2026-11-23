@@ -272,7 +272,7 @@ describe('Cockpit → Tag — kWh mit einer Nachkommastelle (#426)', () => {
   })
 })
 
-// N-799 Sitzung 2 (E-11 b): ein Tag mit Zähler-Rechnung nennt sie sichtbar unter der Bilanz — Zeichen «geschätzt», der
+// N-799 Sitzung 2 (E-11 b): ein Tag mit Zähler-Rechnung nennt sie sichtbar unter der Bilanz — Zeichen «aus Zählerständen gerechnet» (F5), der
 // Satz aus `tage-werte` und der Link auf den Befund im Daten-Checker. Ohne Kennzeichen keine Zeile.
 describe('Cockpit → Tag — Herkunft der drei stundengepaarten Größen (N-799)', () => {
   const GRUND = 'Für die Stunden von 6 bis 18 Uhr gab es keine Stundenwerte — Überschuss, Defizit und Direktverbrauch sind dort aus den Zählerständen gerechnet.'
@@ -283,7 +283,7 @@ describe('Cockpit → Tag — Herkunft der drei stundengepaarten Größen (N-799
       <TagBilanz t={tag({ stundenpaarung: 'fenster', stundenpaarung_grund: GRUND })} vt={null} wtStats={null} wochentagName="Donnerstag" />,
     )
     expect(screen.getByText(GRUND, { exact: false })).toBeTruthy()
-    expect(screen.getByRole('img', { name: 'geschätzt' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'aus Zählerständen gerechnet' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Im Daten-Checker nachlesen' }).getAttribute('href'))
       .toBe('/einstellungen/daten?block=datenchecker&befund=erfassung_stillstand')
   })

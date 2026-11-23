@@ -1,12 +1,9 @@
-"""Counter-Daily-Drift — Variante 2-light (KONZEPT-COUNTER-DAILY-DRIFT.md).
+"""Counter-Drift (WP-Starts, Betriebsstunden) — seit Fund-Päckchen F (F6, 23.11.2026) ohne Reskalierung.
 
-Die Stunden-Σ (`TagesEnergieProfil.wp_starts_anzahl[h]`) wird aus dem Tages-
-Boundary-Diff (`TagesZusammenfassung.komponenten_starts`) abgeleitet — eine
-Quelle pro Tag. Bei sauberen Snapshots verhaltensneutral; bei NULL-Slots /
-Snapshot-Lücken wird die Stunden-Σ so reskaliert, dass
-`Σ_h wp_starts_anzahl[h] == Σ_inv komponenten_starts` bleibt.
-
-Pflicht-Invariante `pruefe_counter_konsistent` feuert bei künstlicher Drift.
+Bis dahin wurde die Stunden-Σ auf den Tages-Boundary-Diff reskaliert (Variante 2-light, KONZEPT-COUNTER-DAILY-DRIFT.md).
+Jetzt tragen die Stunden, was die Stände hergeben: eine Lücke bündelt die Menge in der ersten Stunde danach, Σ Stunden ist
+die Menge im Fenster der Stunden (``CounterStunden.fenster``). Pflicht-Invariante `pruefe_counter_konsistent` feuert bei
+künstlicher Drift. Proben zu Fenster und Lücke: ``test_funde_f.py``.
 """
 
 from __future__ import annotations
@@ -19,7 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.berechnungen import (
     assert_counter_konsistent,
     pruefe_counter_konsistent,
-    verteile_counter_auf_stunden,
 )
 from backend.models import Anlage, Investition  # noqa: F401
 from backend.models.sensor_snapshot import SensorSnapshot
@@ -29,40 +25,7 @@ from backend.services.snapshot import (
 )
 
 
-# ─── Helper-Unit-Tests ──────────────────────────────────────────────────────
-
-def test_saubere_daten_unveraendert():
-    """Σ_h == Tages-Σ → Stunden-Σ bleibt bit-genau erhalten (verhaltensneutral)."""
-    stunden = {h: 5 for h in range(24)}  # Σ = 120
-    out = verteile_counter_auf_stunden(stunden, 120.0, as_float=False)
-    assert out == stunden
-
-
-def test_null_slot_wird_auf_tagessumme_reskaliert():
-    """Ein NULL-Slot senkt die Stunden-Σ; nach Ableitung gilt wieder Σ_h == Tages-Σ."""
-    stunden = {h: (None if h in (12, 13) else 5) for h in range(24)}  # Σ_belegt = 110
-    assert sum(v for v in stunden.values() if v is not None) == 110
-    out = verteile_counter_auf_stunden(stunden, 120.0, as_float=False)
-    # Σ exakt wiederhergestellt, Lücken bleiben Lücken, alles ganzzahlig.
-    assert sum(v for v in out.values() if v is not None) == 120
-    assert out[12] is None and out[13] is None
-    assert all(isinstance(v, int) for v in out.values() if v is not None)
-
-
-def test_float_counter_reskaliert_gebrochen():
-    """Float-Counter (Betriebsstunden) behalten Nachkommastellen beim Ableiten."""
-    stunden = {h: (None if h == 6 else 0.5) for h in range(24)}  # Σ_belegt = 11.5
-    out = verteile_counter_auf_stunden(stunden, 12.0, as_float=True)
-    assert sum(v for v in out.values() if v is not None) == pytest.approx(12.0, abs=0.05)
-    assert out[6] is None
-
-
-def test_tages_summe_null_zieht_belegte_slots_auf_null():
-    """Boundary-Diff sagt 0 Ereignisse → belegte Slots werden 0, Lücken bleiben."""
-    stunden = {0: 3, 1: None, 2: 4}
-    out = verteile_counter_auf_stunden(stunden, 0.0, as_float=False)
-    assert out == {0: 0, 1: None, 2: 0}
-
+# ─── Invariante ─────────────────────────────────────────────────────────────
 
 def test_invariante_feuert_bei_drift():
     """`pruefe_counter_konsistent` erkennt Drift; `assert_*` wirft."""
@@ -72,13 +35,6 @@ def test_invariante_feuert_bei_drift():
     assert bericht.erwartet == 120.0 and bericht.tatsaechlich == 115
     with pytest.raises(AssertionError):
         assert_counter_konsistent(stunden, 120.0)
-
-
-def test_invariante_ok_nach_ableitung():
-    """Nach `verteile_counter_auf_stunden` ist die Invariante erfüllt."""
-    stunden = {h: (None if h in (12, 13) else 5) for h in range(24)}
-    out = verteile_counter_auf_stunden(stunden, 120.0, as_float=False)
-    assert pruefe_counter_konsistent(out, 120.0).konsistent
 
 
 # ─── Integration mit echten Snapshots ─────────────────────────────────────────
@@ -101,17 +57,15 @@ async def _make_anlage_mit_wp(session: AsyncSession) -> tuple[Anlage, Investitio
 
 
 async def test_null_slot_snapshot_integration(db):
-    """Echter NULL-Slot: ein fehlender Stunden-Snapshot senkt die Stunden-Σ,
-    der Tages-Boundary-Diff bleibt unberührt. Nach Ableitung aus dem Boundary-
-    Diff gilt wieder Σ_h == komponenten_starts[inv_id]."""
+    """Echter NULL-Slot (F6): ein fehlender Stunden-Snapshot lässt die Stunde 12 leer, die Stunde 13 trägt das Bündel; die
+    Stunden-Σ ist ohne Umrechnung die Menge im Fenster und hier der Tageswert (gleichmäßiger Zähler)."""
     anlage, inv = await _make_anlage_mit_wp(db)
     datum = date(2026, 5, 10)
     sensor_key = f"inv:{inv.id}:wp_starts_anzahl"
-    # Vortag-23 .. Folgetag-0: +5 Starts/h. Tages-Total = 120.
-    # Den Snapshot an Stunde 12:00 AUSLASSEN → Slots 12 und 13 werden NULL.
+    # Vortag-23 .. Folgetag-0: +5 Starts/h. Tages-Total = 120. Den Snapshot an Stunde 12:00 AUSLASSEN.
     for h in range(26):
         if h - 1 == 12:
-            continue  # NULL-Slot simulieren
+            continue
         ts = datetime.combine(datum, datetime.min.time()) + timedelta(hours=h - 1)
         db.add(SensorSnapshot(
             anlage_id=anlage.id, sensor_key=sensor_key, zeitpunkt=ts,
@@ -124,14 +78,7 @@ async def test_null_slot_snapshot_integration(db):
     daily = await get_daily_counter_deltas_by_inv(db, anlage, invs, datum)
     daily_total = float(sum(daily["wp_starts_anzahl"].values()))
 
-    # Vorbedingung: der NULL-Slot hat die Stunden-Σ unter den Tages-Wert gedrückt.
-    roh_summe = sum(v for v in hourly.values() if v is not None)
-    assert roh_summe < daily_total, (
-        f"NULL-Slot sollte Drift erzeugen: hourly={roh_summe}, daily={daily_total}"
-    )
-    assert not pruefe_counter_konsistent(hourly, daily_total).konsistent
-
-    # Ableitung aus dem Boundary-Diff stellt die Konsistenz her.
-    abgeleitet = verteile_counter_auf_stunden(hourly, daily_total, as_float=False)
-    assert sum(v for v in abgeleitet.values() if v is not None) == int(daily_total)
-    assert pruefe_counter_konsistent(abgeleitet, daily_total).konsistent
+    assert hourly[12] is None and hourly[13] == 10                      # Bündel in der Stunde danach
+    assert sum(v for v in hourly.values() if v is not None) == 120 == daily_total
+    assert hourly.fenster == 120.0
+    assert pruefe_counter_konsistent(hourly, hourly.fenster).konsistent

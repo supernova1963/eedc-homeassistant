@@ -11,9 +11,9 @@ import ErfassungZustandBadge, { ZUSTAND_META, type ErfassungZustand } from './Er
 import { ERFASSUNG_ZUSTAND } from '../../lib/colors'
 
 describe('ErfassungZustandBadge — Zustands-Vokabular', () => {
-  it('deckt genau die sechs Zustände ab (Meta ≡ Farb-SoT)', () => {
+  it('deckt genau die sieben Zustände ab (seit F5 mit «gerechnet») (Meta ≡ Farb-SoT)', () => {
     const zustaende = Object.keys(ZUSTAND_META).sort()
-    expect(zustaende).toEqual(['fehlt', 'gemessen', 'geprueft', 'geschaetzt', 'optional', 'weicht_ab'])
+    expect(zustaende).toEqual(['fehlt', 'gemessen', 'geprueft', 'gerechnet', 'geschaetzt', 'optional', 'weicht_ab'])
     expect(Object.keys(ERFASSUNG_ZUSTAND).sort()).toEqual(zustaende)
   })
 

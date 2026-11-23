@@ -44,7 +44,7 @@ describe('Sensorwechsel S4 — Einstieg ohne Rückweg (§12 Nr. 62)', () => {
 
   it('vor dem Eintragen steht der Satz; ohne «Eintragen» nicht', async () => {
     vi.mocked(datenquellenApi.pruefeZaehlerGetauscht).mockResolvedValue({
-      weg: 'fortsetzung', sensor_key: 'inv:2:ladung_kwh', saetze: ['eedc überbrückt den Tausch.'], eintragen: true,
+      weg: 'fortsetzung', sensor_key: 'inv:2:ladung_kwh', saetze: ['eedc trägt den Tausch ein.'], eintragen: true,
       getauscht_am: '2026-11-17T09:15:00' })
     const { unmount } = render(<ZaehlerGetauschtDialog anlageId={1} feldId="x" feldLabel="PV" onClose={() => {}} />)
     expect(await screen.findByText(ZG_ENDGUELTIG)).toBeInTheDocument()

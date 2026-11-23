@@ -22,8 +22,8 @@ Submodule:
 - `pv_anteil_ladung` — abgeleiteter PV-Anteil einer Heimladung aus den eigenen
   Stundengrößen, wo keine Wallbox ihn misst (N-141 (c); Ergebnis ist eine
   Schätzung und muss gekennzeichnet werden)
-- `counter` — Counter-Aggregate (WP-Starts/Betriebsstunden): Stunden-Σ aus
-  Tages-Boundary-Diff ableiten + Pflicht-Invariante (Variante 2-light)
+- `counter` — Counter-Aggregate (WP-Starts/Betriebsstunden): Pflicht-Invariante Stunden-Σ ↔ Menge im
+  Fenster der Stunden (seit F6 keine Reskalierung mehr)
 - `invarianten` — Konsistenz-Asserts (Σ Hourly == Daily, Σ pv == komponenten_pv etc.)
 - `co2_aequivalente` — CO₂-Menge in Bäumen, Auto-km, Kurzstreckenflügen, Flug-km
   (Faktoren mit Herkunft; Route `/cockpit/nachhaltigkeit` je Monat und gesamt, Päckchen Y)
@@ -78,7 +78,6 @@ from backend.core.berechnungen.counter import (
     CounterKonsistenzBericht,
     assert_counter_konsistent,
     pruefe_counter_konsistent,
-    verteile_counter_auf_stunden,
 )
 from backend.core.berechnungen.datenquellen import (
     connector_deckt_monatsanfang,
@@ -198,6 +197,7 @@ from backend.core.berechnungen.energie import (
     PV_KOMPONENTEN_PREFIXE,
     SONSTIGES_KOMPONENTEN_PREFIX,
     V2H_KOMPONENTEN_PREFIX,
+    VERBRAUCHER_BETRAG_PREFIXE,
     WAERMEPUMPE_KOMPONENTEN_PREFIXE,
     WALLBOX_KOMPONENTEN_PREFIXE,
     SonstigesTagesSummen,
@@ -216,6 +216,7 @@ from backend.core.berechnungen.energie import (
     summe_waermepumpe_kwh,
     waermepumpe_kwh_je_investition,
     summe_wallbox_eauto_kwh,
+    verbraucher_als_betrag,
     wert_basis_kwh,
 )
 from backend.core.berechnungen.fenster import (
@@ -426,7 +427,6 @@ __all__ = [
     "CounterKonsistenzBericht",
     "assert_counter_konsistent",
     "pruefe_counter_konsistent",
-    "verteile_counter_auf_stunden",
     "connector_deckt_monatsanfang",
     "gewinner_je_feld",
     "merge_datenquellen",
@@ -533,6 +533,8 @@ __all__ = [
     "batterie_kw_spalte",
     "summe_batterie_netto_kwh",
     "summe_v2h_kwh",
+    "VERBRAUCHER_BETRAG_PREFIXE",
+    "verbraucher_als_betrag",
     "wert_basis_kwh",
     "assert_tep_tz_konsistent",
     "pruefe_tep_tz_konsistenz",

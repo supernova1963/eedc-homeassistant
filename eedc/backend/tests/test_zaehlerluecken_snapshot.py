@@ -118,15 +118,20 @@ async def test_p14_anker_gestern_15_uhr_buendel_n_13_keine_interpolation(db):
     assert snap.komponenten_kwh == pytest.approx(lts.komponenten_kwh)
 
 
-async def test_e1_linear_nur_zwischen_staenden_im_fenster(db):
+async def test_n817_innere_luecke_buendel_in_der_stunde_danach(db):
+    """N-817 (Fund-Päckchen F, Entscheid Gernot 22./23.11.2026 — wie HA): eine innere Lücke wird nicht mehr linear gefüllt
+    (bis dahin E1/#145: je Stunde 2,0, keine Spanne). Die Stunden ohne Stand bleiben leer, die erste Stunde danach trägt die
+    Menge mit Spanne; der Tageswert bleibt."""
     netz = _staende(T0 - timedelta(hours=1), T0 + timedelta(hours=23), 100.0, 2.0,
                     ohne={T0 + timedelta(hours=h) for h in (5, 6, 7)})
     await _snapshot_db(db, {"basis:netzbezug": netz})
     with _ohne_ha():
         tab = await snapshot_tagestabelle(db, ANLAGE, INVS, DATUM)
-    # innere Lücke: interpoliert, je Stunde 2,0, keine Spanne (E1 wie #145)
-    assert [tab.stunden[h]["netzbezug"] for h in (5, 6, 7, 8)] == pytest.approx([2.0] * 4)
-    assert all(tab.stunden[h]["spannen"] is None for h in range(24))
+    assert [tab.stunden[h]["netzbezug"] for h in (5, 6, 7)] == [None, None, None]
+    assert tab.stunden[8]["netzbezug"] == pytest.approx(8.0)
+    assert tab.stunden[8]["spannen"] == {"netzbezug": 4}
+    assert all(tab.stunden[h]["spannen"] is None for h in range(24) if h != 8)
+    assert tab.komponenten_kwh["netzbezug"] == pytest.approx(48.0)
 
 
 # ── R4 im Snapshot-Pfad: Tagesreset ist eine Menge, der Tageswert keine Aussage ──

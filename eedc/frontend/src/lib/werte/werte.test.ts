@@ -377,7 +377,7 @@ describe('exportWerteCsv (Schema)', () => {
     exportWerteCsv({ rows: tage, vorjahrRows: null, jahrLabel: 'Nov', vergleichLabel: null, metriken: drei, einheitLabel: 'Tage', dateiname: 't.csv' })
     const [headers, out] = vi.mocked(exportToCSV).mock.calls[0]
     expect(headers[headers.length - 1]).toBe('Kennzeichen Überschuss/Defizit/Direktverbrauch')
-    expect(out.map((z) => z[z.length - 1])).toEqual(['', 'geschätzt (aus Zählerständen gerechnet)', 'nicht bestimmbar', ''])
+    expect(out.map((z) => z[z.length - 1])).toEqual(['', 'aus Zählerständen gerechnet', 'nicht bestimmbar', ''])
     vi.mocked(exportToCSV).mockClear()
     exportWerteCsv({ rows: [tagesZeile(tw('2026-11-11'))], vorjahrRows: null, jahrLabel: 'Nov', vergleichLabel: null,
       metriken: drei, einheitLabel: 'Tage', dateiname: 't.csv' })

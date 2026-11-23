@@ -23,8 +23,8 @@ geschrieben hat — seit HA-Bauform S4 (E-S4-1) die Kanal-Stunde ``h`` (Beginn) 
   als ``kWp × 1,5 × n`` (der Bestand deckelt, R3; das Fenster kann größer sein — dann deckelt er nicht und es gibt
   keine Abweichung);
 * ``spannen_fuellung`` (MQTT) bzw. ``luecke_ha`` (HA) — ein Kanal einer betroffenen Achse hat in der Stunde keine Zeile
-  oder eine Spanne > 1 h (der Snapshot-Pfad füllt Lücken linear, ``_fill_gaps_linear``; HA und der Kanal tragen die
-  Menge in der Folgestunde);
+  oder eine Spanne > 1 h (bis 23.11.2026 füllte der Snapshot-Pfad Lücken linear; seit N-817 trägt er wie HA und der
+  Kanal die Menge in der Folgestunde);
 * ``klemm`` — eine Klemm-Stunde (W2-R5 hat einen kWp-Rest auf 0 geklemmt) für die PV und die abhängigen Felder;
 * ``rest_skaliert`` — eine Stunde, deren Rest des Anlagenzählers auf den Tagesrest skaliert ist (S3-R4, berichtigt
   15.10.: ``rest_faktor`` ≠ 1 — der Tag hat eine Lücke oder eine Klemmung); der Bestand verteilt den ungekürzten Rest;

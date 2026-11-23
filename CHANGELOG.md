@@ -55,6 +55,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Changed
 
+- **„aus Zählerständen gerechnet“ statt „geschätzt“.** Überschuss, Defizit und Direktverbrauch eines Tages, an dem die
+  Erfassung einige Stunden ausfiel, tragen in der Tagestabelle, unter der Bilanz in *Cockpit → Tag* und in der CSV-Spalte
+  „Kennzeichen“ jetzt das Zeichen „aus Zählerständen gerechnet“ — eedc schätzt dort nichts, die Rechnung ist dieselbe.
+  Ebenso sagt der Dialog „Zähler getauscht (gleiche Quelle)“ jetzt „eedc trägt den Tausch … ein“ statt „überbrückt“.
+
 - **Reparatur-Werkbank „Werte vor dem Sensorbeginn verwerfen“:** hebt verzeichnete Sensorwechsel des Felds bis zur ersten
   Stunde ab dem gewählten Zeitpunkt mit auf — danach rechnet eedc für das Feld, als hätte es den Wechsel nicht gegeben. Ein
   „Zähler getauscht“ in dieser ersten Stunde bleibt eingetragen; sein Sprung zählt weiter nicht als Menge.
@@ -66,6 +71,30 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   wer sie über die API genutzt hat, bekommt jetzt 404.
 
 ### Fixed
+
+- **Zählerlücke ohne Home Assistant: die Menge steht in der ersten Stunde danach, wie in Home Assistant.** Fehlten einer
+  Anlage ohne Home-Assistant-Statistik (Standalone, MQTT) Zählerstände einige Stunden lang, verteilte eedc die Menge
+  zwischen dem letzten Stand davor und dem ersten danach gleichmäßig auf die Stunden dazwischen — Stundenwerte, die kein
+  Zähler gemeldet hat. Jetzt bleiben diese Stunden leer, und die erste Stunde danach trägt die ganze Menge (in
+  *Cockpit → Tag* „· enthält n h“); Überschuss, Defizit und Direktverbrauch des Tages sind für diese Stunden aus den
+  Zählerständen gerechnet, und der Daten-Checker nennt den Tag unter „Stunden ohne Stundenwerte“. Dasselbe gilt für die
+  Stunden der Wärmepumpe im Wärme-Verlauf. Tag, Monat und Jahr bleiben gleich (gemessen: Lücke 08:00–13:00, PV 10,0 kWh in
+  der Stunde bis 13 Uhr statt 2,0 je Stunde, Tag 48,0 kWh vorher wie nachher). **Was sich an bestehenden Zahlen ändern
+  kann:** die Stunden eines Tages mit Lücke, sobald eedc den Tag neu bildet (laufender Tag, Reparatur-Werkbank); vorher
+  gespeicherte Tage behalten ihre Stunden. Der Wärme-Verlauf je Stunde zeigt die Regel sofort für alle Tage.
+- **Wärmepumpe: Kompressor-Starts und Betriebsstunden je Stunde aus den Zählerständen.** eedc rechnete die Stunden
+  dieser Zähler auf den Tageswert um — an einem Tag mit Lücke lagen die fehlenden Starts dann in den ersten Stunden
+  des Tages statt nach der Lücke, und Starts zwischen 23 und 24 Uhr des Vortags verschwanden aus den Stunden (der Tageswert
+  zählt den Kalendertag, die Stunden reichen von 23 bis 23 Uhr). Jetzt tragen die Stunden, was die Zähler gemeldet haben;
+  nach einer Lücke steht die Menge in der Stunde danach. Der Tageswert bleibt. Vorher gespeicherte Tage behalten ihre Stunden,
+  bis sie neu gebildet werden.
+- **Energieprofil → Monat: Wallbox und Wärmepumpe zählen jeden Tag mit.** Kam der Tageswert eines Geräts an einigen
+  Tagen aus der Live-Leistung (ohne Zähler) und an anderen aus dem Zähler, rechnete die Monatssumme die Tage
+  gegeneinander — die Live-Tage stehen intern mit negativem Vorzeichen (gemessen: Wallbox im November 108,8 statt
+  214,84 kWh; die Kategorie Wärmepumpe im Oktober 46,72 statt 98,88 kWh, weil eine Wärmepumpe aus dem Zähler und eine aus der
+  Live-Leistung kam). Jetzt liest eedc Wallbox, E-Auto und Wärmepumpe an jedem Tag als Menge. **Was sich an bestehenden Zahlen
+  ändern kann:** die Monatssumme und der Anteil eines solchen Geräts in Monaten, in denen beide Sorten Tage vorkommen;
+  an Anlagen, deren Geräte immer aus dem Zähler kommen, ändert sich nichts.
 
 - **Monatsdaten: «Wert entfernen» an einem Feld, das das Gerät führt, nennt den wahren Weg.** Die Ablehnung sagte «bitte
   dort leeren» und verwies auf den Monatsabschluss, der kein Leeren kennt; jetzt nennt sie *Einstellungen → Daten →
@@ -98,7 +127,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   **Überschuss, Defizit und Direktverbrauch des Tages** waren an solchen Tagen dagegen falsch
   (die Mengen mehrerer Stunden wurden wie eine Stunde gegeneinander gerechnet — etwa Überschuss 0 bei 8 kWh Einspeisung):
   für die Stunden ohne Stundenwerte rechnet eedc sie jetzt aus den Zählerständen. Die Zahl trägt in der Tagestabelle das
-  Zeichen „geschätzt“, darunter steht, für welche Stunden das gilt, mit dem Link „Im Daten-Checker nachlesen“; *Cockpit → Tag*
+  Zeichen „aus Zählerständen gerechnet“, darunter steht, für welche Stunden das gilt, mit dem Link „Im Daten-Checker nachlesen“; *Cockpit → Tag*
   nennt es unter der Bilanz. Passen die nachgetragenen Mengen nicht zu denselben Stunden, steht „—“ mit dem Grund, und die
   Summe des Zeitraums sagt, wie viele Tage sie enthält bzw. auslässt. Der Ladepreis aus dem Netz sagt an einem solchen Tag
   „nicht bestimmbar (Erfassungslücke)“ statt „keine Netzladung“. Erkannt wird nur der Stillstand aller Zähler zugleich, ab zwei Stunden; wiederholt
@@ -228,8 +257,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   ein Feld allein über MQTT — etwa der Netzbezug nach „Bisherige Werte bleiben“ beim Wechsel von Home Assistant zu MQTT,
   oder die Ladung einer Wallbox über MQTT —, zeigten die Tageswerte dieses Feld an allen Tagen „—“ und der Monat 0 bzw. gar
   nichts (gemessen: Netzbezug Monat 0,0 statt 71,33 kWh; Kosten und Autarkie des Monats rechneten mit 0). Das betraf auch
-  v4.3.1. Jetzt liest eedc an Tagen mit Stundenwerten jedes Feld aus der Quelle, der es zugeordnet ist. An Tagen ohne
-  Stundenwerte (Tageswerte aus den gespeicherten Werten) bleibt es wie bisher.
+  v4.3.1. Jetzt liest eedc jedes Feld aus der Quelle, der es zugeordnet ist — an Tagen mit Stundenwerten und an Tagen ohne
+  Stundenwerte, sobald eedc einen solchen Tag bildet (das MQTT-Feld aus seinen gespeicherten Zählerständen; ohne zwei
+  Zählerstände am Tag „—“). **Was sich an bestehenden Zahlen ändern kann:** ein Tag ohne Stundenwerte, den eedc neu bildet
+  (laufender Tag, Reparatur-Werkbank), zeigt das MQTT-Feld (gemessen: Netzbezug „—“ → 12,0 kWh je Tag, Monat 0,0 → 35,5 kWh);
+  vorher gespeicherte Tage bleiben, bis sie neu gebildet werden.
 - **Daten-Checker: eine Statistik, die mit einem großen Stand beginnt, nennt „Zählerstand springt“.** Beginnt die
   Statistik eines Sensors in Home Assistant nicht bei 0, sondern mit einem großen Stand (etwa nach einem Import), zählen
   Home Assistant und eedc diesen Stand als Menge der ersten Stunde — im gemessenen Beispiel 5 004,66 kWh Ladung an einem

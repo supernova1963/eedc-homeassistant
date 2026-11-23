@@ -11,7 +11,7 @@ und anfällig für Lücken. Die Meldung nennt das Feld, die Details die zugeordn
    **„Warum wechselt die Quelle?"** — hier passt meist **„Daten vor der Änderung löschen — das Feld beginnt mit dem neuen
    Sensor neu"**: die Werte dieses Felds aus der Zeit davor gehen weg, und eedc übernimmt, was Home Assistant für den neuen
    Zähler führt. Unter **„Was danach geschieht"** steht vorher, welche gespeicherten Monatswerte bleiben; das Löschen lässt
-   sich nicht rückgängig machen (Handbuch Einstellungen, Abschnitt „Sensorwechsel“).
+   sich nicht rückgängig machen (Handbuch Einstellungen, §7.7a „Die Frage beim Wechsel: zwei Antworten“).
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 ## Was ohne Handlung gilt

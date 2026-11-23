@@ -63,7 +63,7 @@ export interface WerteZeile {
   /**
    * N-799 (E-11 b/c): wohin ein Grund verweist (Pfad auf den Befund im Daten-Checker) — nur Gründe, die ein Befund
    * erklärt. Ein Grund an einem **vorhandenen** Wert heißt «gerechnet, nicht gemessen» (`WerteTabelle` setzt das Zeichen
-   * `geschaetzt` an die Zelle); die Liste unter der Tabelle nennt dann die Zeile vor dem Satz und den Link.
+   * `gerechnet` an die Zelle, F5); die Liste unter der Tabelle nennt dann die Zeile vor dem Satz und den Link.
    */
   grundZiel?: (key: string) => string | null
   /** N-799 (E-11 b): Kennzeichen der drei stundengepaarten Spalten der Zeile (Fuß-Hinweis der Summe). */

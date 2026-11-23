@@ -301,7 +301,9 @@ Daraus die drei Klauseln:
 > daraus Drift.
 >
 > - **Zustands-Vokabular ist geteilt** (`ErfassungZustand`, s. A3): `geschaetzt` = der Wert ist
->   **gerechnet statt gemessen** (z. B. „geschätzt (kWp-Anteil)"), `weicht_ab` = der Wert ist
+>   **gerechnet statt gemessen** (z. B. „geschätzt (kWp-Anteil)"), `gerechnet` = Überschuss, Defizit und Direktverbrauch eines
+>   Tages mit gebündelten Stunden (N-799) **aus Zählerständen gerechnet** — eigener Zustand seit Fund-Päckchen F (F5, Gernot
+>   23.11.2026: eedc schätzt dort nichts), Farbe wie `geschaetzt`, Icon `Calculator`, Label „aus Zählerständen gerechnet“, `weicht_ab` = der Wert ist
 >   **unvollständig** und damit systematisch zu niedrig (z. B. ein ausgefallener Wetter-Teilabruf).
 >   Die zwei nicht verwechseln — eine gerechnete Zahl ist vollständig, eine unvollständige nicht
 >   geschätzt.
@@ -313,7 +315,7 @@ Daraus die drei Klauseln:
 >   Daten-Checker) bzw. `lib/prognoseHinweise.ts` (Unvollständigkeit aus den Backend-`hinweise`).
 >   Ein `hinweise`-Feld, das keine Sicht rendert, wäre dasselbe Schweigen mit mehr Code.
 > - **Ausnahme «nicht pro Zelle» in `WerteTabelle` (N-799, 16.11.2026):** in der Werte-Tabelle darf ein gerechneter Wert
->   das Zeichen `geschaetzt` (`ErfassungZustandBadge iconOnly`) **an der Zelle** tragen — die Zeile ist ein Tag, und nur
+>   das Zeichen `gerechnet` («aus Zählerständen gerechnet», `ErfassungZustandBadge iconOnly`; bis 23.11.2026 `geschaetzt`) **an der Zelle** tragen — die Zeile ist ein Tag, und nur
 >   einzelne Tage sind gerechnet (Zähler-Rechnung eines Erfassungs-Stillstands). Der Erklärsatz steht **sichtbar unter der
 >   Tabelle** (Tag · Spalten: Satz) mit dem Link «Im Daten-Checker nachlesen» auf den Befund (`befund=<code>`), am Hover der
 >   Zelle derselbe Satz. Quelle des Satzes ist die Antwort (`tage-werte`, `stundenpaarung_grund`); der Client rechnet nichts.

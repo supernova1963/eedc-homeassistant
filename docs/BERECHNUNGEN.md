@@ -111,9 +111,17 @@ Felder erfasst.
 >   Quelle; die Auswahl der Felder (`kanal/bilanz_adapter.zaehler_eintraege`) ist die HA-Auswahl, solange kein Feld allein über
 >   MQTT kommt, sonst die EINE Auswahl über beide Quellen (`snapshot/aggregator._snapshot_eintraege`: Entweder-oder,
 >   Wallbox-Regel, K3 einmal). Ein Feld mit HA-Sensor und MQTT-Ständen steht einmal darin (ein Schlüssel, ein Kanal). Reine
->   HA- und reine MQTT-Anlagen wählen wie bisher; die MQTT-Schlüssel liest der Kanal-Leser einmal je Anfrage. ⚑ **Benannte
->   Grenze:** an Tagen ohne Stundenwerte (Bestandstage, `snapshot/lts_aggregator`, `kanal/bilanz_leser._bilanz_sensoren`)
->   bleibt es bei einer Auswahl je Anlage — ein MQTT-Feld neben HA-Feldern fehlt dort.
+>   HA- und reine MQTT-Anlagen wählen wie bisher; die MQTT-Schlüssel liest der Kanal-Leser einmal je Anfrage. **An Tagen ohne
+>   Stundenwerte** (Bestandstage) gilt dieselbe Regel seit Fund-Päckchen F (Entscheid Gernot 23.11.2026): der Tagesschreiber
+>   (`aggregate_day` → `lts_aggregator.lts_tagestabelle`, ebenso die Vorschau der Werkbank) nimmt bei einer Anlage mit
+>   MQTT-Ständen (`mischform_kwargs`) die EINE Auswahl über beide Quellen (`_mqtt_neben_ha`), liest jedes HA-Feld aus HAs
+>   Statistik und jedes Feld allein über MQTT aus seinen Ständen (`snapshot.aggregator.slots_aus_staenden`: Bündel nach einer
+>   Lücke, R4, B-3; hat das Feld an dem Tag keine zwei Stände, bleibt es «—»). Reine HA- und reine MQTT-Anlagen bitgleich;
+>   gespeicherte Tageszeilen ändern sich erst, wenn der Tag neu gebildet wird. Gemessen (`golden-master/funde-f-2026-11-23/
+>   test_mess_f2_mischform.py`, PV über HA, Netzbezug und Wallbox über MQTT, alle Tage Bestandstage): Netzbezug «—» → 11,5/12,0/12,0,
+>   Wallbox «—» → 30,36/31,68/31,68, Oktober Netzbezug 0,0 → 35,5, aktueller Monat Netzbezug «—» → 35,5. Die HA-Monatswerte
+>   (`kanal/bilanz_leser._bilanz_sensoren` → `kanal_kalendermonate`, «Aus HA laden», laufender Monat) ersetzen nur Werte, die
+>   HA führt (Schlüssel = HA-Entity) — ein MQTT-Feld kommt dort aus seinem MQTT-Weg; die Auswahl bleibt HA.
 > * **Quellenwahl je Zeitraum** (ADR-002/**P14**): je Tag bzw. Monat und Gruppe EINE Wahl — die Kanäle nur, wenn
 >   **jeder** Eingang der Formel deckt (in einer Entweder-oder-Gruppe der erste deckende); sonst rechnet der bisherige
 >   Leser den **ganzen** Zeitraum aus Stunden-, Tages- und Monatszeilen (*Lesart 1*). Gruppen: Bilanz (Netz ·
@@ -2324,6 +2332,19 @@ behalten den Anteil im Rest — eedc rechnet die Historie nicht nach.
 > **positiv** (Zählerpfad). `waermepumpe_kwh_je_investition` liefert für beide Beträge — und ist
 > zugleich die Stelle, die `waermepumpe_1` von `waermepumpe_12` unterscheidet (die ID ist **kein**
 > Präfix) und Suffix-Keys (`…_heizen`) demselben Gerät zuschlägt.
+>
+> **Eine Schreibweise je Schlüssel über die Tage (Fund-Päckchen F, F3, 23.11.2026).** Ein Tag ohne Zähler kann in
+> `TagesZusammenfassung.komponenten_kwh` den Wert der Live-Σ tragen (`aggregate_day`: «Live-Σ bleibt nur für Keys, die weder
+> LTS noch Snapshot abdecken»; Senke ⇒ negativ), ein Tag aus dem Zähler oder dem Kanal den Betrag. Die eine Mischung
+> `kanal_stunden.komponenten_der_tage` liest deshalb die Verbraucher-Schlüssel `wallbox_*`, `eauto_*`, `waermepumpe_*` jeder
+> Tageszeile als Betrag (`energie.verbraucher_als_betrag`, die Schreibweise der Beitragsschicht); die gespeicherte Zeile bleibt.
+> Batterie (Ladung −, Entladung +), `sonstige_*` (Verbraucher in beiden Pfaden −) und `haushalt` bleiben, wie sie sind. Ohne
+> das summierte *Energieprofil → Monat* (`monat._komponenten_summen`) beide Sorten Tage gegeneinander (gemessen Lab-Kopie rc47,
+> Winterborn November 2026: Wallbox 108,8 statt 214,84 kWh; Oktober Kategorie Wärmepumpe −46,72 statt 98,88 — eine
+> Wärmepumpe aus dem Zähler +, eine aus der Live-Σ −). Leser über `komponenten_der_tage`: Monat, `/tage`, `tage-werte`,
+> E-Mob-Zusatz, Modus-Split-Bezug, Komponenten-Serien, Daten-Checker (Drift, Speicher, E-Mob, Quellen). Ohne die Mischung lesen
+> nur Leser, die je Tag den Betrag nehmen (`waermepumpe_kwh_je_investition`, «Ladung heute») oder keine Verbraucher-Schlüssel
+> summieren (`monats_aus_tagen`: PV/BKW), dazu die Invarianten des Schreibers (je Tag, Stunde gegen Tag).
 
 > **Normierung ist opportunistisch, die Invariante ist der Schutz.** Wo der Zählerpfad eine
 > Tagesmenge kennt, wird die Stundenform darauf normiert (Präzedenz v3.45.5). Er kennt sie nicht
@@ -4521,30 +4542,38 @@ Stunden-kWh entstehen als **Differenz kumulativer Zähler-Snapshots**, nicht aus
    für h = 0..23 (Snapshot-Range -1..23, damit Slot 0 aus Vortag-23:00 fließt).
 ```
 
-**Snapshot-Lücken-Interpolation (v3.20.0, #145):**
+**Lücke zwischen zwei Zählerständen (N-817, Entscheid Gernot 22./23.11.2026 — wie HA):**
 
-Wenn ein Snapshot fehlt (Scheduler-Ausfall, HA-Statistics-Timeout, MQTT-Cache leer), interpoliert eedc linear zwischen den vorhandenen Nachbar-Stunden (`snapshot/aggregator.py::_fill_gaps_linear`) — die Energie der Lücke verteilt sich auf ihre Stunden, statt als Spike in der nächsten zu stehen:
+Fehlt ein Stand (Scheduler-Ausfall, MQTT-Sender ohne Stand, HA-Statistics-Timeout), bleiben die Stunden ohne Stand leer («—»,
+nicht 0); die Menge der Lücke steht in der **ersten Stunde danach** als Bündel mit Spanne `n` (Stunden seit dem letzten Stand
+davor) — wie im HA-Energie-Dashboard, wie am Fensterbeginn (T3, `letzter_stand_vor`) und wie der Kanal-Pfad:
 
 ```
-snap[h] = snap[a] + (snap[b] − snap[a]) × (h − a) / (b − a)      a < h < b, a und b die belegten Nachbarn
+Slot h (Stand bei h vorhanden) = stand[h] − letzter Stand davor (im Fenster oder davor, T3);  n = Stunden zwischen beiden
+Slots zwischen den beiden Ständen = leer
+Tageswert = Σ Slots (die Randstände trägt das Bündel; unverändert gegenüber der früheren Füllung)
 ```
 
-Ränder (h0 fehlend am Tagesanfang, h24 am Tagesende) werden **nicht** extrapoliert — der Wert bleibt None und die betroffene Stunde fällt aus der Delta-Bildung. Tagessumme bleibt in jedem Fall korrekt (`snap[24] − snap[0]`).
-
-> ⚠ **Die Interpolation gilt nur innen und nur im Zählerstands-Pfad** („Zählerlücken wie HA", v4.0.51) (Standalone/MQTT ohne HA-Statistik, `snapshot/aggregator.py`). Im HA-Pfad wird nichts aufgefüllt: die Energie einer fehlenden Stunde steht wie im HA-Energie-Dashboard in der Stunde danach (Bündel mit Spanne `n`), und der Rand am Tagesanfang wird über den letzten vorhandenen Stand davor verankert — auch in diesem Pfad, statt die erste Stunde auszulassen. Regeln und Leser: Abschnitt *Zählerlücken wie HA* weiter unten.
->
-> ⚑ **Benannte Grenze N-817 (gemessen 22.11.2026, Fund-Päckchen D):** `_fill_gaps_linear` verteilt die Menge zwischen zwei
-> Zählerständen gleichmäßig auf die Stunden dazwischen — Stundenwerte, die keine Quelle führt; die Tagessumme bleibt (die
-> Randstände sind fest). Sie läuft nur im Zählerstands-Pfad: (a) beim Lesen in `snapshot/stunden_leser.lade_stundenformen` für
-> einen Wärmepumpen-Zähler ohne Kanal-Tag (`kanal_stunden.wp_stundenformen` → *Cockpit → Tag*, Wärme-Verlauf je Stunde und
-> Wärme-Verteilung am Tag); (b) beim Schreiben eines Tags in `snapshot_tagestabelle`, wenn die HA-Langzeitstatistik für den Tag
-> nichts liefert (Standalone/MQTT, HA nicht erreichbar) — die gespeicherten Stunden des Bestandstags (Tagesverlauf,
-> Überschuss/Defizit, Spitzen) tragen dann die Gerade. Gemessen an der Kopie `devbox-r28-demo.db` ohne HA (alle Tage mit
-> Tageszeile, die Lese-Sichten `stunden`, `tag-detail`, `waerme-verlauf-stunden`): Anlage «Prüfstand Wärme/Klima» an allen
-> 159 Tagen im Wärme-Verlauf je Stunde gefüllt (Demo-Stände nur um 23:00/00:00, z. B. 08.04.2026: Slots 1–22 linear),
-> Anlage «Demo-Anlage» an keinem Tag; `stunden` und `tag-detail` füllen beim Lesen nicht (sie lesen gespeicherte Stunden). Den
-> Schreibweg (b) konnte die Kopie nicht zeigen (ohne Leistungskurve bleibt ein gespeicherter Tag stehen). An einem Kanal-Tag
-> (HA-Spiegel oder MQTT-Mitschrift des Zählers) läuft keiner der beiden Wege.
+Eine Stelle: `snapshot/aggregator.py::slots_aus_staenden` (Schreibweg `snapshot_tagestabelle` der Bestandstage von
+Standalone-/MQTT-Anlagen und der MQTT-Felder neben HA-Feldern, F2); dieselbe Regel liest `snapshot/stunden_leser.lade_stundenformen`
+(Stundenform je Zähler für den Wärme-Verlauf, beim Lesen). Das Bündel geht in Überschuss/Defizit/Direktverbrauch über die
+Fenster-Rechnung (`tagesbilanz.py`, N-799 E-4, `stundenpaarung`), der Daten-Checker nennt den Tag unter «Stunden ohne
+Stundenwerte» (`erfassung_stillstand`, Lücken-Bündel mit Kennzeichen — gemessen am Bestandstag einer MQTT-Welt,
+`golden-master/funde-f-2026-11-23/test_mess_f1_mqtt_luecke.py`: Lücke 08:00–13:00, Bündel PV 10,0 / Einspeisung 5,0 / Netzbezug
+2,5 kWh, n = 5, Tag 48,0 / 24,0 / 12,0 vorher wie nachher). Über eine Fortsetzungs-Naht (B-3) trägt das Bündel 0 (nur der
+neue Abschnitt, wie bisher). **Bis 23.11.2026** füllte `_fill_gaps_linear` (#145, v3.20.0) die Stände dazwischen linear —
+Stundenmengen, die keine Quelle führt. **Gespeicherte Stunden vergangener Tage bleiben**, wie sie sind (keine Migration);
+sie ändern sich erst, wenn der Tag neu gebildet wird (Werkbank, Self-Healing). Der Wärme-Verlauf, der beim Lesen bildet, zeigt
+die Regel sofort für alle Tage. Ränder (kein Stand im Fenster davor in der Stundenform) werden nicht extrapoliert.
+**Eine Sicht, eine Quelle für alle Formen des Tages (H-F1, Entscheid Master 23.11.2026):** der Wärme-Verlauf je Stunde bildet
+an einem Tag ohne WP-Kanal-Deckung den Gesamtstrom je Slot aus denselben Ständen wie die Summanden-Formen
+(`api/routes/energie_profil/waerme._gesamtstrom_aus_staenden`, Σ der Gesamt-Zähler der Beitragsschicht je an dem Tag
+aktiver Wärmepumpe), wenn jedes Gerät solche Zähler mit Ständen hat und die Stände denselben Tageswert ergeben wie die
+gespeicherte Zählerspalte (bis 0,05 kWh Rundung) — getauscht wird nur die Verteilung, nie die Menge (Kachel «Strom
+verbraucht»); sonst bleibt die Zählerspalte der Stundenzeile. Ohne das stünde an einem
+Tag, dessen gespeicherte Stunden noch eine andere Form tragen, der Rest *System/Standby* (`max(0, Gesamt − Heizen −
+Warmwasser)` je Slot) aus zwei Quellen — gemessen GM energie-profil r28 «Prüfstand Wärme/Klima» nach N-817 ohne diese Regel:
+08.04.2026 6,51 kWh.
 
 **HA-Statistics-Toleranz (v3.20.0, #145):** **10 min**. Wenn die Zielstunde in HA-Statistics noch nicht vorhanden ist, schreibt der Job nichts (statt einen Nachbar-Wert zu liefern, der Slot N als 0 und Slot N+1 als 2-Stunden-Delta entstehen ließ). Der nächste `aggregate_day`-Lauf 15 Min später holt den Wert via Self-Healing nach.
 
@@ -4922,8 +4951,8 @@ nach denselben Regeln wie die Tagessummen:
   | S5a (Teil 1, E-S5-1) eine Mengenquelle je Tag für die Stundenleser | gebaut: jede Kennzahl, die Stundenmengen braucht (Speicher-Potenzial, -Sizing, effektiver Ladepreis, Ladeblöcke, Verbrauchsprognose, Verbrauchs- und Korrekturprofil, Preis-Aggregator, Grundlast, Prognose-IST, Tagesvergleich), liest die Stunden über `kanal_stunden.stunden_der_tage` — an einem Kanal-Tag die Mischzeilen wie *Cockpit → Tag*, an einem Bestandstag die Stundenzeile; Tagesmengen der Tageszeile (PV-IST, Komponenten, Regelmarke) an Kanal-Tagen aus `kanal_tage`. Daten-Checker, HA-Export-Steuerung (S5a Teil 2) siehe nächste Zeile, der Schreiber (S5b) die übernächste. Laufzeit (E-S5-1c): abgeschlossene Kanal-Tage (Adapter-Zeilen und Tageswahl der Bilanz; auch die Tageswerte der Geräte-Gruppen Wärmepumpe, E-Mobilität und Sonstiges je Tag und Gruppe, Speicher `GERAETE`, E-S5-4) merkt eedc je Prozess (`services/kanal/merken.py`, invalidiert beim Schreiben der Kanäle und bei jeder Änderung an Anlage, Investition, Kanal oder Quelle) — Sichten über die ganze Historie (Speicher-Sizing, -Potenzial, -Dashboard, aktueller Monat, HA-Export) brauchen ab dem zweiten Aufruf je Prozess wieder etwa so lange wie vor S5a. Benannte Grenze: der **erste** Aufruf je Prozess (nach einem Neustart oder nach einem Schreiben, das die Tage verwirft) rechnet die Kanal-Tage neu; der Speicher hält je Prozess höchstens 3 000 Tage (im Vollzustand ≈ 92 MB); fragt eine Sicht mehr Tage ab, als der Speicher hält, verdrängt sie sich selbst und rechnet jeden Aufruf neu |
   | S5a (Teil 2, E-S5-2) Daten-Checker, HA-Export-Steuerung, Wärme-Sichten, Vormerkungen | gebaut: die Checker-Regeln auf Mengen (PV-Doppelerfassung, Σ PV-Tageswerte des Monats, Drift zu HA, Batterie-Vorzeichen, leere Tage trotz Zähler, E-Mob-Doppelzählung, Einspeisung über Erzeugung, Spitzen) lesen die Lesestelle (`pv_ist_je_tag`, `komponenten_der_tage`, `verworfen_der_tage`, `stunden_der_tage`) — an einem Kanal-Tag ist die eedc-Seite des Vergleichs der Spiegel selbst; «Nachtrag nach eingefrorenem Zähler» nimmt Kanal-Tage aus; neu INFO «n Tage ohne Kanal-Deckung» (Lesart 1 sichtbar, S5-E2 b). HA-Export E1/E2/E5 aus `stunden_der_tage`, Überschuss heute an Kanal-Tagen Σ der Mischzeilen (`tagesbilanz.bilanz_aus_stundenrows`), Zeitangaben am Raster der Zeile. Wärme-Verlauf Modus-Split/Betriebsart aus dem Kanal (W-3), Spannen-Stunden leer statt 0,0 (S5-R5). Wächter S5-R6 `test_tep_mengen_leser_waechter.py` (Empfänger-Regel). Benannt: die E-Mob-Schlüssel (`wallbox_<id>`/`eauto_<id>`) bleiben an jedem Tag die der Tageszeile (seit E-S5-3 aus dem Kanal) |
   | S5b (Teil 1, E-S5-3) der Schreiber lässt Mengen an Kanal-Tagen weg | gebaut: `aggregate_day` gibt die fertig gebauten Zeilen durch die **Mengen-Weiche** (`services/energie_profil/mengen_weiche.py`, EIN Kanal-Stundentag, Uhr der Lese-Schicht): an einem **Kanal-Tag** (Bilanz-Gruppe mit Wahl `kanal`) bleiben je Gruppe mit Wahl `kanal` die TEP-Mengen (`pv_kw` … `defizit_kw` der Bilanz, `waermepumpe_kw`, `wallbox_kw`), ihre `spannen`-Achsen, TZ `ueberschuss/defizit_kwh`, ihre `komponenten_kwh`-Schlüssel (Bilanz wie `mische_komponenten`, Wärmepumpe/Sonstiges die Ziel-Schlüssel ihrer Zähler, E-Mobilität der ganze Präfix `wallbox_*`/`eauto_*`) und ihre `verworfen`/`nachtrag`-Achsen leer (`None`; die Regelmarke `{}` bleibt). Bahnen und Kennzahlen bleiben; PR, §51-Menge und Heimladungs-Anteil an Kanal-Tagen aus den Kanal-Stunden (`kanal_stunden.performance_ratio_des_kanal_tags`, `einspeisung_neg_preis_der_kanal_stunden`, `ladeanteil_der_kanal_stunden`; der Archiv-Nachzug ruft die PR-Stelle). Herkunft `TZ_QUELLE_KANAL` (`auto:kanal_tag`, Gruppen im Eintrag), `tageszeile_ist_rueckwaerts` ⇒ `False`. Richtung beidseitig (die Wahl zum Schreibzeitpunkt). Lesestelle vervollständigt: `komponenten_der_tage` mischt an Kanal-Tagen alle Gruppen (Tagesliste, `tage-werte`, *Energieprofil → Monat*, Modus-Split-Bezug), `ueberschuss_defizit_der_tage` (Tagesliste, Monats-Rollup, HA-Export). Werkbank-Vorschau und -Rückmeldung nennen die leeren Gruppen. **Lesart-1-Monate mit Kanal-Tagen** (Rand der Kanal-Deckung, laufender Monat mit Wahl `bestand`): `monats_aus_tagen.lade_monats_summen_aus_tagen` faltet die Bestandstage aus den Zeilen und die Kanal-Tage aus der Lesestelle (`KanalTag`: Bilanz, PV/BKW-Schlüssel, Marken; Heimladungs-Anteile aus der Tageszeile) — Monat = Σ Tage wie *Cockpit → Tag* (Entscheid Master H-1 → B). In der einen Mischung `komponenten_der_tage` schlägt die Bilanz-Komposition die Sonstiges-Gruppe für jeden Schlüssel, den sie trägt (Sonstiges-Erzeuger hinter dem Anlagenzähler; Entscheid Gernot 19.10. H-2 → B). Benannt: ein vor 4.1.8 gespeicherter Monatsabschluss (Bestand) kann von Σ der Kanal-Tage abweichen (Naht S4-R-3c-Klasse); die Alt/Neu-Tabelle der Reaggregat-Vorschau nennt seit E-S5-4 an einem Kanal-Tag nur die Achsen der Bestandsgruppen |
-  | S5b (Teil 2, E-S5-4) Bestands-Tagespfad nur Lesart 1, Reste | gebaut: **eine PR-Stelle für jeden gespeicherten Tag** (`kanal_stunden.performance_ratio_des_tages`: Kanal-Tag aus den Kanal-Stunden wie `aggregate_day`, Bestandstag aus den Stundenzeilen ohne die Sonstiges-Erzeuger über den Schlüssel der Konstante `SONSTIGES_KOMPONENTEN_PREFIX` — N-759). Wärme-Verlauf: Zählerstände nur für Tage ohne WP-Kanal-Wahl, A-2 (Kanal-Tag ohne Tageszeile). Netzladung der Monats-Fakten: die Wahl zuerst, das Fenster `TAGESFENSTER_JE_TYP` nur für Bestandstage. Merken der Geräte-Tageswerte (`kanal/merken.py`, dritter Speicher `GERAETE`, Schlüssel Anlage/Tag/Gruppe, dieselbe Generation, Invalidierung und Verfall, eigene Obergrenze 9 000 Einträge = 3 000 Tage × drei Gruppen; ≈ 610–630 B je Eintrag, Vollzustand ≈ 5,7 MB). HA-Monatsleser ohne Deckel und ohne `state`-Rückfall. Achse-2-Diagnose nennt die Kanal-Tage. **Benannt, nicht geschnitten:** *Cockpit → Tag* (`tages_eingaenge`) fragt an Kanal-Tagen weiter `get_tagesdetail_kwh`/`get_betriebsart_strom_tageswerte` (Kalendertag) — die Gründe «nicht zugeordnet»/«keine Zählerstände» der Tagesdetail-Zeilen (W-18), die Speicher-Netzladung und Gerätegruppen mit Wahl `bestand` kommen nur von dort; `_fill_gaps_linear` läuft an Kanal-Tagen weiter im Schreiber (Snapshot-Tabelle ohne HA) und für einen WP-Zähler ohne Kanal (`wp_stundenformen`); die Tagestabelle des Schreibers (`lts_tagestabelle`/`snapshot_tagestabelle`) wird an Kanal-Tagen weiter ganz gerechnet — ohne die Teile der Kanal-Gruppen änderte sich die Tageszeile (Leistungspfad-PV-Schlüssel ohne Zähler-Gegenstück, Heimladung bei E-Mob-Wahl `bestand`, Zeilen für Stunden ohne Leistungspunkt) |
-  | **S5 abgeschlossen (E-S5-0 … E-S5-5)** | **gilt:** eine Mengenquelle je Tag für alle Leser — jede Sicht, Kennzahl, Prognose-Lernfunktion und Checker-Regel, die Stunden- oder Tagesmengen braucht, liest sie über die Lesestelle (`kanal_stunden.stunden_der_tage`, `komponenten_der_tage`, `pv_ist_je_tag`, `verworfen_der_tage`, `ueberschuss_defizit_der_tage`): an einem Kanal-Tag aus den Kanälen, an einem Bestandstag aus der Stunden- bzw. Tageszeile; außerhalb der erlaubten Liste liest kein Modul TEP/TZ-Mengen (Wächter `test_tep_mengen_leser_waechter.py`, Stand leer). An einem Kanal-Tag schreibt `aggregate_day` keine Mengen der Kanal-Gruppen (Mengen-Weiche); Tage und Monate ohne volle Kanal-Deckung (Lesart 1) lesen wie vor S5, der Daten-Checker zählt sie (INFO). `TagesEnergieProfil` und `TagesZusammenfassung` bleiben als Tabellen für Bahnen, Kennzahlen und Lesart-1-Tage — keine Tabelle, keine Spalte gelöscht, Retention 730 Tage unverändert. **Benannt bleibt:** (a) *Cockpit → Tag* (`tages_eingaenge`) fragt an Kanal-Tagen weiter den Bestands-Tagespfad (`get_tagesdetail_kwh`/`get_betriebsart_strom_tageswerte`, Kalendertag) — nur von dort kommen die Gründe der Tagesdetail-Zeilen (W-18), die Speicher-Netzladung und Gerätegruppen mit Wahl `bestand`; die Snapshot-Kaskade schrumpft darum nicht; (b) die Tagestabelle des Schreibers (`lts_tagestabelle`/`snapshot_tagestabelle`) wird an Kanal-Tagen weiter ganz gerechnet (≈ 90 % der Laufzeit von `aggregate_day`); ohne die Teile der Kanal-Gruppen änderte sich die Tageszeile; (c) `_fill_gaps_linear` läuft an Kanal-Tagen weiter im Schreiber und für einen WP-Zähler ohne Kanal; (d) **W2-R5-Klemme** — Σ Tage ≠ Monat in PV-Summe und Wandlungsverlusten an Tagen, an denen der Rest des Anlagenzählers für ein Gerät ohne Kanal klemmt (Regel W2-5, N-760 widerlegt); (e) die Naht S4-R-3c zwischen Bestandstag und Kanal-Tag und ein vor 4.1.8 gespeicherter Abschluss gegen Σ der Kanal-Tage; (f) Tagesreset-Zähler in Live und im Monatsabschluss-Vorschlag ohne Kanal (S5-E4) |
+  | S5b (Teil 2, E-S5-4) Bestands-Tagespfad nur Lesart 1, Reste | gebaut: **eine PR-Stelle für jeden gespeicherten Tag** (`kanal_stunden.performance_ratio_des_tages`: Kanal-Tag aus den Kanal-Stunden wie `aggregate_day`, Bestandstag aus den Stundenzeilen ohne die Sonstiges-Erzeuger über den Schlüssel der Konstante `SONSTIGES_KOMPONENTEN_PREFIX` — N-759). Wärme-Verlauf: Zählerstände nur für Tage ohne WP-Kanal-Wahl, A-2 (Kanal-Tag ohne Tageszeile). Netzladung der Monats-Fakten: die Wahl zuerst, das Fenster `TAGESFENSTER_JE_TYP` nur für Bestandstage. Merken der Geräte-Tageswerte (`kanal/merken.py`, dritter Speicher `GERAETE`, Schlüssel Anlage/Tag/Gruppe, dieselbe Generation, Invalidierung und Verfall, eigene Obergrenze 9 000 Einträge = 3 000 Tage × drei Gruppen; ≈ 610–630 B je Eintrag, Vollzustand ≈ 5,7 MB). HA-Monatsleser ohne Deckel und ohne `state`-Rückfall. Achse-2-Diagnose nennt die Kanal-Tage. **Benannt, nicht geschnitten:** *Cockpit → Tag* (`tages_eingaenge`) fragt an Kanal-Tagen weiter `get_tagesdetail_kwh`/`get_betriebsart_strom_tageswerte` (Kalendertag) — die Gründe «nicht zugeordnet»/«keine Zählerstände» der Tagesdetail-Zeilen (W-18), die Speicher-Netzladung und Gerätegruppen mit Wahl `bestand` kommen nur von dort; `_fill_gaps_linear` lief an Kanal-Tagen weiter im Schreiber (Snapshot-Tabelle ohne HA) und für einen WP-Zähler ohne Kanal (`wp_stundenformen`) — seit Fund-Päckchen F (N-817) abgebaut; die Tagestabelle des Schreibers (`lts_tagestabelle`/`snapshot_tagestabelle`) wird an Kanal-Tagen weiter ganz gerechnet — ohne die Teile der Kanal-Gruppen änderte sich die Tageszeile (Leistungspfad-PV-Schlüssel ohne Zähler-Gegenstück, Heimladung bei E-Mob-Wahl `bestand`, Zeilen für Stunden ohne Leistungspunkt) |
+  | **S5 abgeschlossen (E-S5-0 … E-S5-5)** | **gilt:** eine Mengenquelle je Tag für alle Leser — jede Sicht, Kennzahl, Prognose-Lernfunktion und Checker-Regel, die Stunden- oder Tagesmengen braucht, liest sie über die Lesestelle (`kanal_stunden.stunden_der_tage`, `komponenten_der_tage`, `pv_ist_je_tag`, `verworfen_der_tage`, `ueberschuss_defizit_der_tage`): an einem Kanal-Tag aus den Kanälen, an einem Bestandstag aus der Stunden- bzw. Tageszeile; außerhalb der erlaubten Liste liest kein Modul TEP/TZ-Mengen (Wächter `test_tep_mengen_leser_waechter.py`, Stand leer). An einem Kanal-Tag schreibt `aggregate_day` keine Mengen der Kanal-Gruppen (Mengen-Weiche); Tage und Monate ohne volle Kanal-Deckung (Lesart 1) lesen wie vor S5, der Daten-Checker zählt sie (INFO). `TagesEnergieProfil` und `TagesZusammenfassung` bleiben als Tabellen für Bahnen, Kennzahlen und Lesart-1-Tage — keine Tabelle, keine Spalte gelöscht, Retention 730 Tage unverändert. **Benannt bleibt:** (a) *Cockpit → Tag* (`tages_eingaenge`) fragt an Kanal-Tagen weiter den Bestands-Tagespfad (`get_tagesdetail_kwh`/`get_betriebsart_strom_tageswerte`, Kalendertag) — nur von dort kommen die Gründe der Tagesdetail-Zeilen (W-18), die Speicher-Netzladung und Gerätegruppen mit Wahl `bestand`; die Snapshot-Kaskade schrumpft darum nicht; (b) die Tagestabelle des Schreibers (`lts_tagestabelle`/`snapshot_tagestabelle`) wird an Kanal-Tagen weiter ganz gerechnet (≈ 90 % der Laufzeit von `aggregate_day`); ohne die Teile der Kanal-Gruppen änderte sich die Tageszeile; (c) `_fill_gaps_linear` lief an Kanal-Tagen weiter im Schreiber und für einen WP-Zähler ohne Kanal — seit Fund-Päckchen F (N-817) abgebaut, die Menge einer Lücke steht in der ersten Stunde danach; (d) **W2-R5-Klemme** — Σ Tage ≠ Monat in PV-Summe und Wandlungsverlusten an Tagen, an denen der Rest des Anlagenzählers für ein Gerät ohne Kanal klemmt (Regel W2-5, N-760 widerlegt); (e) die Naht S4-R-3c zwischen Bestandstag und Kanal-Tag und ein vor 4.1.8 gespeicherter Abschluss gegen Σ der Kanal-Tage; (f) Tagesreset-Zähler in Live und im Monatsabschluss-Vorschlag ohne Kanal (S5-E4) |
 
 ### Stündliche Berechnung (aggregate_day)
 
@@ -5213,7 +5242,7 @@ den Tag des Sprungs («heute», am Tag danach «gestern») weiter (Saat: 2 012,0
 doppelten Herbststunde — die Rohstände tragen örtliche Zeit ohne Zone, beide Durchläufe der Stunde mischen sich (Saat: Kanal
 7 025,9, am HEAD 7 025,5; am selben Tag außerhalb der Stunde 12,458 = 25 Stunden); (d) «bleiben» sofort, wenn die neue Quelle schon
 vor dem verzeichneten Zeitpunkt sendet: der Stundenlauf teilt am Zeitpunkt, Kanal und Reihe zählen den Sprung (wie vor U3 der
-Kanal); (e) Mischform HA/MQTT in der Bilanz an Tagen ohne Stundenwerte (an Kanal-Tagen seit Fund-Päckchen D «Quelle je Feld», `kanal/bilanz_adapter.zaehler_eintraege`); (f) die Reihen-Leser
+Kanal); (e) entfällt seit Fund-Päckchen F — Mischform HA/MQTT: «Quelle je Feld» gilt an Kanal-Tagen (D, `kanal/bilanz_adapter.zaehler_eintraege`) und an Tagen ohne Stundenwerte (F, `lts_aggregator.lts_tagestabelle` mit `_mqtt_neben_ha`); (f) die Reihen-Leser
 (`reader.delta`) zeigen an den Tagen einer verworfenen Zeit keinen Wert (wie am HEAD; die Tagesansicht liest den Kanal);
 (g) entfällt seit U3-K4 (Bauplan Nr. 166) — «zwei vergleichbare Schritte in einer Stunde» und «ein kleiner Sprung nach oben ist
 nicht eintragbar» (U3-K B7 bis U3-K4): der Dialog trägt auf das Wort des Anwenders ein und sagt, ob er einen Sprung sieht. Neu
@@ -5441,7 +5470,7 @@ Abschnitte    = die Standfolge [(Rand_von, s0), Stände dazwischen, (Rand_bis, s
 Tageswert     = Σ tageswert_aus_reihe je Abschnitt (reader.tageswert_ueber_abschnitte); ein Abschnitt mit Rücksprung
                 ⇒ None wie bisher; ein Abschnitt aus einem Stand trägt 0          — Tagesansicht, Bereichs-Leser, delta
 Slot          = über eine Naht (vorher < ab_ts ≤ Stand) 0 — mit Ständen zur vollen Stunde trägt der neue Abschnitt im Slot
-                nichts; keine lineare Füllung (#145) über eine Naht                — snapshot_tagestabelle, Stundenform
+                nichts; ein Bündel über eine Lücke und die Naht ebenso 0          — snapshot_tagestabelle, Stundenform
 Zählwerk      = Tag: Σ max(0, letzter − erster) je Abschnitt; Stunde: Naht-Slot 0 — Starts, Betriebsstunden
 Zählerstand   = Differenz Σ (letzter − erster) je Abschnitt; ein Paar über eine Naht ist kein Reihenbruch
                                                                                     — zaehlerstaende.py, Daten-Checker
@@ -5765,21 +5794,17 @@ Produktiv-Kopie zwischen `5ee9400fe` und der Runde Wert für Wert gleich. Proben
 Je Grenze die Stelle, an der sie am Stand nach Sitzung B3b geprüft ist (Code, Test oder Messung). Die Grenzen der Befunde «Zählerstand
 springt» (a)–(d) und der MQTT-Regeln (a)–(l) stehen bei ihren Abschnitten oben; hier die übrigen und die, die der Anwender trifft.
 
-1. **Drift am ersten Tag einer Statistik:** die Prüfung (Tageszeilen der letzten 90 Tage bis gestern) liest den Vergleichswert
-   aus Home Assistant im Fenster `[Vortag 23:00, 23:00)`, eedc zählt am Kanal-Tag den Kalendertag. Am ersten Tag einer Statistik
-   fehlt dem Vergleichswert deshalb die Stunde ab 23 Uhr: trägt sie mindestens 2 kWh und 5 %, nennen `drift_tag` (PV) und
-   `drift_komponente` (je Gerät, etwa eine Wärmepumpe: 12,5 → 10,0, Tag = HA = 12,5) den Tag, obwohl eedc und Home Assistant gleich
-   sind; «Aus Home Assistant neu übernehmen» ändert nichts. Beide Lösungswege sagen es. Nicht gebaut (Korrekturrunde WEGB-K):
-   die Prüfung bräuchte je Gerät den Beginn der Statistik und den Wert des Kalendertags — keine kleine Änderung an einer Stelle,
-   und die importierte Statistik (Grenze 2) hat eine zweite Ursache. Ein Tag, an dem eine Statistik vor mehr als 90 Tagen begann,
-   erscheint nicht. **Allgemein (N-815):** dieselbe Fenster-Ursache traf jeden gewöhnlichen Kanal-Tag, wenn die Stunde 23–24 Uhr
-   zweier Folgetage um mindestens 2 kWh und 5 % verschieden war (gemessen `golden-master/funde-b-2026-11-22/test_mess_m2.py`:
-   Wärmepumpe 67,5 → 60,0, Tag = HA = 67,5); der erste Tag einer Statistik ist ein Fall davon. **Gebaut in Fund-Päckchen E
-   (Entscheid Gernot 22.11.2026):** `drift_komponente` vergleicht an einem Kanal-Tag der Gruppe gegen HAs Kalendertag (Abschnitt
-   «Drift-Prüfung Datenquellen») — für Wallbox, E-Auto, Wärmepumpe, Sonstiges, Einspeisung und Netzbezug ist die Grenze
-   beseitigt (`test_funde_e.py`). Es bleibt: (a) `drift_tag` (PV) vergleicht weiter im Fenster — PV erzeugt nachts nichts, was
-   die Schwelle erreicht; (b) führt Home Assistant die Zeile 23:00 eines Geräts nicht, obwohl seine Statistik davor läuft, wird
-   das Gerät an diesem Tag und am Vortag nicht verglichen (kein Ersatzwert).
+1. **Drift am ersten Tag einer Statistik (PV):** `drift_tag` (Tageszeilen der letzten 90 Tage bis gestern) liest den
+   Vergleichswert aus Home Assistant im Fenster `[Vortag 23:00, 23:00)`, eedc zählt am Kanal-Tag den Kalendertag. Am ersten Tag
+   einer Statistik fehlt dem Vergleichswert deshalb die Stunde ab 23 Uhr: trägt sie mindestens 2 kWh und 5 %, nennt `drift_tag`
+   den Tag, obwohl eedc und Home Assistant gleich sind; «Aus Home Assistant neu übernehmen» ändert nichts, der Lösungsweg sagt
+   es. Das trifft nur eine PV, die zwischen 23 und 24 Uhr erzeugt. Ein Tag, an dem eine Statistik vor mehr als 90 Tagen begann,
+   erscheint nicht. Die Geräte vergleicht `drift_komponente` seit Fund-Päckchen E (N-815, Entscheid Gernot 22.11.2026) an einem
+   Kanal-Tag ihrer Gruppe gegen HAs Kalendertag (Abschnitt «Drift-Prüfung Datenquellen», `test_funde_e.py`) — für Wallbox,
+   E-Auto, Wärmepumpe, Sonstiges, Einspeisung und Netzbezug gilt diese Grenze nicht (vor E gemessen
+   `golden-master/funde-b-2026-11-22/test_mess_m2.py`: Wärmepumpe 67,5 → 60,0, Tag = HA = 67,5). Führt Home Assistant die Zeile
+   23:00 eines Geräts nicht, obwohl seine Statistik davor läuft, wird das Gerät an diesem Tag und am Vortag nicht verglichen
+   (kein Ersatzwert).
 2. **Importierte Statistik mit großem erstem `sum`:** zählt wie in Home Assistant ganz. Seit Fund-Päckchen B (22.11.2026) nennt
    «Zählerstand springt» die erste Stunde an jedem Feld, wenn ihr Wert über der Grenze (b) liegt (`test_funde_b.py`). An einem
    PV-Feld nennt zusätzlich `drift_tag` den Tag (der Vergleichswert lässt die Stunde über der Plausibilitätsgrenze aus,
@@ -5927,12 +5952,15 @@ Datengrundlage für die §51-Sektion in [Cockpit → Monat](HANDBUCH_BEDIENUNG.m
 **WP-Kompressor-Starts (v3.24.0, #136):**
 
 ```
-TagesEnergieProfil.wp_starts_anzahl[h]   = snap_starts[h] - snap_starts[h-1]          (Summe aller WP-Investitionen je Stunde)
+TagesEnergieProfil.wp_starts_anzahl[h]   = snap_starts[h] - letzter Stand davor im Fenster   (Summe aller WP-Investitionen je
+                                            Stunde; ohne Stand bei h leer, nach einer Lücke das Bündel in der Stunde danach)
 TagesEnergieProfil.wp_betriebsstunden[h] = dasselbe für den Betriebsstunden-Zähler (Stunden, ungerundet)
 TagesZusammenfassung.komponenten_starts  = {"wp_starts_anzahl":   {"<inv_id>": <int>, ...},
                                             "wp_betriebsstunden": {"<inv_id>": <h>, ...}}
-                                            # Tages-Differenz je WP (Boundary-Diff, get_daily_counter_deltas_by_inv);
-                                            # die Stunden-Σ wird auf sie skaliert (verteile_counter_auf_stunden)
+                                            # Tages-Differenz je WP (Boundary-Diff, get_daily_counter_deltas_by_inv)
+                                            # über den Kalendertag [00:00, 24:00)
+Invariante                          = Σ_h wp_starts_anzahl[h] gegen die Menge im Fenster der Stunden [Vortag 23:00, 23:00)
+                                      (CounterStunden.fenster; pruefe_counter_konsistent, Warnung im Protokoll)
 
 Kennwert wp_starts (Tag)            = Σ komponenten_starts.wp_starts_anzahl   der am Tag aktiven WPs, nur Werte > 0
 Kennwert wp_betriebszeit_min (Tag)  = Σ komponenten_starts.wp_betriebsstunden der am Tag aktiven WPs × 60, ganze Minuten
@@ -5941,6 +5969,18 @@ Sensor wp_kompressor_starts (je WP) = Σ der Tageswerte > 0 dieser WP über alle
 Sensor wp_betriebsstunden (je WP)   = dasselbe für die Betriebsstunden; ohne einen Wert kein Sensor (#238,
                                       ha_export/investition_sensoren.py::_wp_zaehler)
 ```
+
+**Fund-Päckchen F (F6, Entscheid Master 23.11.2026):** bis dahin reskalierte `verteile_counter_auf_stunden` die Stunden auf
+den Tageswert — an Lückentagen verteilt (gemessen, Welt `golden-master/funde-f-2026-11-23/test_mess_f6_counter_welt.py`: 5
+fehlende Starts als 2/2/2/2/2 in den Stunden 0–4 statt an der Lücke) und an jedem Tag mit Starts zwischen 23 und 24 Uhr
+verfälscht (5 Starts am Vortag 23–24 Uhr ⇒ Stunde 0 = 5, Tageswert 0 ⇒ alle Stunden 0). Die Funktion ist entfernt: die
+Stunden tragen, was die Stände hergeben (`snapshot/aggregator._counter_slots`, Bündel wie N-817; Spike-Kappe 200 je Stunde ×
+Spanne), der Tageswert bleibt der Kalendertag. **Benannte Grenze (Fenster der Bestandstage):** Σ Stunden und Tageswert
+unterscheiden sich um die Starts zwischen 23 und 24 Uhr am Vortag und am Tag — die Stunden liegen im Fenster
+`[Vortag 23:00, 23:00)`, der Tageswert im Kalendertag; die Invariante prüft deshalb gegen die Menge im Fenster
+(`test_funde_f.py::test_f6_…`). Gespeicherte Stunden alter Tage bleiben, bis der Tag neu gebildet wird. Gemessen: Lab-, Produktiv-
+und GM-Kopien tragen keinen solchen Zähler (Häufigkeit 0); Leser der Stunden: `/stunden` (`serien.py`); Tag, Monat und Sensoren
+lesen `komponenten_starts`.
 
 Architektur trennt Counter-Felder strikt von kWh-Feldern in `KUMULATIVE_COUNTER_FELDER`, damit reine Counter nicht versehentlich in die Energie-Bilanz fließen. Vollbackfill aus HA Long-Term Statistics greift für Tages-Summen (Faktor 1.0 statt 0.001 bei unbekannter Einheit). Stunden-Detail wird ab Live-Erfassung gefüllt.
 

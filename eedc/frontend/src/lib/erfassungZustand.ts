@@ -256,7 +256,7 @@ export function gespeicherterNetzwert(
 /** Schweregrad für den Rollup: fehlt > weicht_ab > geschätzt > (gemessen=geprüft).
  *  `optional` ist neutral (−1) und wird vom Rollup ignoriert. */
 const RANG: Record<ErfassungZustand, number> = {
-  fehlt: 3, weicht_ab: 2, geschaetzt: 1, gemessen: 0, geprueft: 0, optional: -1,
+  fehlt: 3, weicht_ab: 2, geschaetzt: 1, gerechnet: 1, gemessen: 0, geprueft: 0, optional: -1,
 }
 
 /**

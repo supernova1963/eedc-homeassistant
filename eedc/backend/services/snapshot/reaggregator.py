@@ -385,8 +385,9 @@ async def _stunden_alt_neu(
     }
     tabelle_neu = None
     if ha_verfuegbar:
-        tabelle_neu = await _lts_aggregator.lts_tagestabelle(  # B-0: die Wechsel wie `aggregate_day`
-            anlage, investitionen_by_id, datum, **await _lts_aggregator.wechsel_kwargs(db, anlage.id))
+        tabelle_neu = await _lts_aggregator.lts_tagestabelle(  # B-0 und Quelle je Feld (F): wie `aggregate_day`
+            anlage, investitionen_by_id, datum, **await _lts_aggregator.wechsel_kwargs(db, anlage.id),
+            **await _lts_aggregator.mischform_kwargs(db, anlage.id))
     if tabelle_neu is None:
         tabelle_neu = await _snapshot_aggregator.snapshot_tagestabelle(
             db, anlage, investitionen_by_id, datum,

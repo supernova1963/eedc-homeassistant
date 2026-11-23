@@ -125,6 +125,7 @@ async def lts_tagestabelle(
     *,
     zusatz_schluessel: Iterable[str] = (),
     wechsel: Optional[dict] = None,
+    db: Optional[AsyncSession] = None,
 ) -> Optional[TagesTabelle]:
     """Stunden **und** Tag eines Tages aus der HA-Slot-Tabelle (R2–R5).
 
@@ -167,6 +168,13 @@ async def lts_tagestabelle(
     oder führt HA die frühere Entität nicht, liest der Tag nicht aus HA (``None`` ⇒ Snapshot-Pfad, dessen
     Reihe B-0 schützt). Ohne Wechsel bitgleich wie vorher.
 
+    ``db`` (Fund-Päckchen F, Entscheid Gernot 22./23.11.2026 «je Feld die zugeordnete Quelle»; ``aggregate_day`` und die
+    Werkbank-Vorschau reichen ihn): kommt neben HA-Feldern ein Feld allein über MQTT, gilt die EINE Auswahl über beide
+    Quellen (``_mqtt_neben_ha``, wie an Kanal-Tagen ``kanal/bilanz_adapter.zaehler_eintraege``) — jedes HA-Feld aus HAs
+    Statistik, jedes MQTT-Feld aus seinen Ständen (``snapshot.aggregator.slots_aus_staenden``: Bündel nach einer Lücke,
+    nichts geschätzt). Ohne ``db``, an reinen HA- und reinen MQTT-Anlagen bitgleich wie vorher (die Leser der HA-Sicht —
+    Tag-Status, Drift — fragen ohne ``db``).
+
     Returns:
         ``None``, wenn HA nicht erreichbar ist, kein Zähler zugeordnet ist oder
         HA für keinen davon eine Zeile im Fenster hat — der Aufrufer fällt
@@ -178,9 +186,14 @@ async def lts_tagestabelle(
     eintraege = _lts_eintraege(anlage, investitionen_by_id, datum)
     if not eintraege:
         return None
+    mqtt_eintraege: list[TabellenEintrag] = []
+    if db is not None:
+        eintraege, mqtt_eintraege = await _mqtt_neben_ha(db, anlage, investitionen_by_id, datum, eintraege)
+    mqtt_schluessel = {e.schluessel for e in mqtt_eintraege}
+    ha_eintraege = [e for e in eintraege if e.schluessel not in mqtt_schluessel]
 
-    eigene = {e.schluessel for e in eintraege}
-    plan = _slot_plan(eintraege, wechsel, datum)
+    eigene = {e.schluessel for e in ha_eintraege}
+    plan = _slot_plan(ha_eintraege, wechsel, datum)
     if plan is None:
         return None
     zusatz = [z for z in dict.fromkeys(zusatz_schluessel or ()) if z not in eigene]
@@ -188,7 +201,7 @@ async def lts_tagestabelle(
     zplan = _zusatz_plan(anlage, investitionen_by_id, datum, zusatz, wechsel) if (wechsel and zusatz) else {}
     zusatz = [z for z in zusatz if zplan.get(z, {}) is not None]
     frueher = {eid for je_slot in (*plan.values(), *(p for p in zplan.values() if p)) for eid in je_slot.values()}
-    dazu, null_ab = _naht_plan(eintraege, zusatz, anlage, investitionen_by_id, wechsel, datum) if wechsel else ({}, frozenset())
+    dazu, null_ab = _naht_plan(ha_eintraege, zusatz, anlage, investitionen_by_id, wechsel, datum) if wechsel else ({}, frozenset())
     sensor_ids = sorted(eigene | set(zusatz) | frueher | {eid for p in dazu.values() for eid in p.values()})
     reihen = await asyncio.to_thread(ha_svc.get_hourly_slots_for_day, sensor_ids, datum, *((null_ab,) if null_ab else ()))
     # Korrekturrunde Lab-K (F4): jede Ersetzung liest die Slots, wie HA sie führt — nie eine schon ersetzte Reihe. Ist die
@@ -205,13 +218,18 @@ async def lts_tagestabelle(
     if not reihen or not any(eid in eigene for eid in reihen):
         return None
 
+    slots_je = {
+        eid: {h: (slot.delta, slot.n) for h, slot in reihe.slots.items()}
+        for eid, reihe in reihen.items()
+        if eid in eigene
+    }
+    ohne_tageswert: frozenset[str] = frozenset()
+    if mqtt_eintraege:
+        mqtt_slots, ohne_tageswert = await _mqtt_slots(db, anlage, datum, mqtt_eintraege)
+        slots_je.update(mqtt_slots)
     tabelle = baue_tagestabelle(
-        anlage, investitionen_by_id, datum, eintraege,
-        {
-            eid: {h: (slot.delta, slot.n) for h, slot in reihe.slots.items()}
-            for eid, reihe in reihen.items()
-            if eid in eigene
-        },
+        anlage, investitionen_by_id, datum, eintraege, slots_je,
+        **({"ohne_tageswert": ohne_tageswert} if ohne_tageswert else {}),
     )
     tabelle.zusatz_slots = {
         eid: {h: (slot.delta, slot.n) for h, slot in reihen[eid].slots.items()}
@@ -219,6 +237,50 @@ async def lts_tagestabelle(
     }
     tabelle.erste_stunde = erste_stunde_je_ziel(tabelle, reihen, datum)
     return tabelle
+
+
+async def _mqtt_neben_ha(
+    db: AsyncSession, anlage, investitionen_by_id: dict, datum: date, eintraege: list[TabellenEintrag],
+) -> tuple[list[TabellenEintrag], list[TabellenEintrag]]:
+    """Fund-Päckchen F (Quelle je Feld an Tagen ohne Stundenwerte): ``(auswahl, nur_mqtt)``. Kommt kein Feld allein über
+    MQTT (MQTT-Stände angekommen, kein HA-Sensor), ``(eintraege, [])`` — die HA-Auswahl bleibt wörtlich. Sonst die EINE
+    Auswahl über beide Quellen (``snapshot.aggregator._snapshot_eintraege``: Entweder-oder, Wallbox-Regel, K3 einmal — dieselbe
+    wie ``kanal/bilanz_adapter.zaehler_eintraege`` an Kanal-Tagen): ein Feld der HA-Auswahl behält seinen HA-Eintrag
+    (``schluessel`` = Entity, gelesen aus HAs Statistik), ein Feld allein über MQTT steht mit ``schluessel`` = ``sensor_key``
+    (gelesen aus seinen Ständen)."""
+    from backend.services.snapshot.aggregator import _snapshot_eintraege
+    from backend.services.snapshot.reader import mqtt_zaehler_keys
+
+    ha_je_key = {e.sensor_key: e for e in eintraege}
+    mqtt = await mqtt_zaehler_keys(db, anlage.id)
+    if not mqtt - set(ha_je_key):
+        return eintraege, []
+    beide, _entity, _quellen = await _snapshot_eintraege(db, anlage, investitionen_by_id, datum, mqtt_keys=mqtt)
+    nur_mqtt = [e for e in beide if e.sensor_key not in ha_je_key]
+    if not nur_mqtt:
+        return eintraege, []
+    return [ha_je_key.get(e.sensor_key) or e for e in beide], nur_mqtt
+
+
+async def _mqtt_slots(
+    db: AsyncSession, anlage, datum: date, mqtt_eintraege: list[TabellenEintrag],
+) -> tuple[dict[str, dict[int, tuple[float, int]]], frozenset[str]]:
+    """Die Slots der Felder allein über MQTT aus ihren Ständen (``slots_aus_staenden``, wie im Snapshot-Pfad) und die
+    Schlüssel mit Tagesreset (deren Tageswert bleibt abgelehnt, R4)."""
+    from backend.services.snapshot.aggregator import slots_aus_staenden
+    from backend.services.snapshot.boundary_range import BoundaryRange
+
+    rng = BoundaryRange.for_hourly_slots(datum)
+    quellen_energy = extract_quellen_energy(anlage)
+    out: dict[str, dict[int, tuple[float, int]]] = {}
+    reset: set[str] = set()
+    for sk in dict.fromkeys(e.schluessel for e in mqtt_eintraege):
+        slots, mit_reset = await slots_aus_staenden(db, anlage.id, sk, None, rng, quellen_energy)
+        if mit_reset:
+            reset.add(sk)
+        if slots:
+            out[sk] = slots
+    return out, frozenset(reset)
 
 
 #: Toleranz «der Tageswert ist Σ seiner Stunden» (Gleitkomma der Summen).
@@ -388,6 +450,15 @@ async def wechsel_kwargs(db: AsyncSession, anlage_id: int) -> dict:
 
     wechsel = await lade_wechsel(db, anlage_id)
     return {"wechsel": wechsel} if wechsel else {}
+
+
+async def mischform_kwargs(db: AsyncSession, anlage_id: int) -> dict:
+    """``{"db": db}`` für ``lts_tagestabelle``, wenn an der Anlage MQTT-Zählerstände angekommen sind (Fund-Päckchen F:
+    dann kann ein Feld allein über MQTT neben HA-Feldern stehen) — sonst ``{}`` (der Aufruf bleibt wörtlich der alte, wie
+    ``wechsel_kwargs``). Eine Abfrage (``reader.mqtt_zaehler_keys``)."""
+    from backend.services.snapshot.reader import mqtt_zaehler_keys
+
+    return {"db": db} if await mqtt_zaehler_keys(db, anlage_id) else {}
 
 
 async def get_hourly_kwh_by_category_lts(

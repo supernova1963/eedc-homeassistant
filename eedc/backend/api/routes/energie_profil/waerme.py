@@ -233,6 +233,7 @@ class _WaermeStundenKontext:
     # ── Verteilung (`_stunden_verteilung`) ──
     verteilte_felder: dict = field(default_factory=dict)
     formen_je_key: dict = field(default_factory=dict)
+    gesamt_felder: dict = field(default_factory=dict)
     verteilung: Any = None
     basis_je_ausgabe: dict = field(default_factory=dict)
     # ── Linien und Wärme-Stapel (`_waerme_linie_d1`) ──
@@ -249,6 +250,7 @@ class _WaermeStundenKontext:
     funktion_ohne: float = 0.0
     leer_funktion: list = field(default_factory=list)
     wp_kw: dict = field(default_factory=dict)
+    anlage: Any = None
 
     def linie(self, ausgaben, *, nur_geraete=None) -> tuple[list, float, list[bool]]:
         """Eine Linie über die genannten Ausgabe-Keys (``_verteile_linie``)."""
@@ -343,7 +345,7 @@ async def _waerme_tag(db: AsyncSession, anlage, anlage_id: int, datum: date) -> 
     mqtt_keys = await mqtt_zaehler_keys(db, anlage.id)
     return _WaermeStundenKontext(anlage_id=anlage_id, investitionen_by_id=investitionen_by_id, eingaenge=eingaenge,
                                  beitraege=beitraege, detail=detail, mapping=mapping, quellen_energy=quellen_energy,
-                                 mqtt_keys=mqtt_keys)
+                                 mqtt_keys=mqtt_keys, anlage=anlage)
 
 
 def _zaehler_der_verteilung(ctx: _WaermeStundenKontext, investitionen_by_id: dict) -> tuple[dict, dict[str, list[str]]]:
@@ -449,6 +451,7 @@ async def _stunden_verteilung(db: AsyncSession, anlage, datum: date, ctx: _Waerm
         modus_stunden_je_inv=modus_stunden,
     )
     ctx.formen_je_key = formen_je_key
+    ctx.gesamt_felder = gesamt_felder
     ctx.verteilung = verteile_tages_stapel_auf_stunden(beitraege, formen)
 
     # ── Linien: je Gerät, je Feld verteilt, je Stunde aufgelöst (N-437) ────
@@ -544,7 +547,47 @@ async def _funktions_stapel(db: AsyncSession, datum: date, ctx: _WaermeStundenKo
     ctx.leer_funktion = _stapel_leer((funk_heizen, leer_heizen), (funk_ww, leer_ww))
 
     # Die Zählerspalte des Slots — ihre Summe ist die Kachel „Strom verbraucht" (an einem WP-Kanal-Tag der Adapter).
-    ctx.wp_kw = await wp_strom_je_stunde(db, ctx.anlage_id, datum)
+    gespeichert = await wp_strom_je_stunde(db, ctx.anlage_id, datum)
+    ctx.wp_kw = await _gesamtstrom_aus_staenden(db, datum, ctx, gespeichert) or gespeichert
+
+
+#: Rundung der gespeicherten Zählerspalte über 24 Slots — bis dahin ist «derselbe Tageswert» (H-F1).
+_GESAMT_TOL_KWH = 0.05
+
+
+async def _gesamtstrom_aus_staenden(db: AsyncSession, datum: date, ctx: _WaermeStundenKontext,
+                                   gespeichert: Optional[dict] = None) -> Optional[dict[int, Optional[float]]]:
+    """Fund-Päckchen F (H-F1, Entscheid Master 23.11.2026, «eine Sicht, eine Quelle für alle Formen des Tages»): an einem
+    Tag ohne WP-Kanal-Deckung kommt der Gesamtstrom je Slot aus denselben Ständen wie die Summanden-Formen
+    (``lade_stundenformen``: Lücke ⇒ Bündel in der Stunde danach, N-817) — sonst stünde die gespeicherte Stundenzeile
+    neben gebündelten Summanden, und «übrige» (Gesamt − Heizen − Warmwasser, je Slot ≥ 0) entstünde aus zwei Quellen.
+    Die Gesamt-Zähler: je an dem Tag aktiver Wärmepumpe die Zähler der Beitragsschicht (``_strom_zaehler_der_geraete``,
+    dieselbe Auswahl wie ``waermepumpe_kw`` der Stundenzeile). Nur, wenn jedes Gerät solche Zähler hat und jeder Stände
+    trägt, und nur, wenn die Stände denselben Tageswert ergeben wie die gespeicherte Zählerspalte (``gespeichert``, bis auf
+    deren Rundung ``_GESAMT_TOL_KWH``) — es wird nur die Verteilung auf die Stunden getauscht, nie die Menge (Kachel
+    «Strom verbraucht»). Sonst ``None``: die Zählerspalte der Stundenzeile bleibt (etwa ein Gerät nur mit
+    Leistungssensor, eine seither geänderte Zuordnung)."""
+    from backend.services.snapshot.stunden_leser import lade_stundenformen
+
+    if ctx.eingaenge.wp_aus_kanal:
+        return None
+    geraete = [i for i, inv in ctx.investitionen_by_id.items()
+               if getattr(inv, "typ", None) == "waermepumpe" and inv.ist_aktiv_an(datum)]
+    je_geraet = _strom_zaehler_der_geraete(ctx.anlage, ctx.investitionen_by_id, geraete, ctx.mqtt_keys)
+    if not geraete or not all(je_geraet.get(i) for i in geraete):
+        return None
+    keys = [k for i in geraete for k in je_geraet[i]]
+    fehlend = [k for k in keys if k not in ctx.formen_je_key]
+    formen = dict(ctx.formen_je_key)
+    if fehlend:
+        formen.update(await lade_stundenformen(db, ctx.anlage, datum, [(k, _sensor_id(ctx.anlage, k)) for k in fehlend]))
+    if any(k not in formen for k in keys):
+        return None
+    reihe = dict(enumerate(_summe_je_slot(formen, keys)))
+    tag_gespeichert = sum(v for v in (gespeichert or {}).values() if v is not None)
+    if abs(sum(v for v in reihe.values() if v is not None) - tag_gespeichert) > _GESAMT_TOL_KWH:
+        return None
+    return reihe
 
 
 def _funktions_segmente(ctx: _WaermeStundenKontext, h: int) -> dict:
