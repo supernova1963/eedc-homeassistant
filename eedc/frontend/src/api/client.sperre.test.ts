@@ -98,6 +98,38 @@ describe('API-Client mit Einstellungs-Sperre', () => {
     expect(f).toHaveBeenCalledTimes(1)
   })
 
+  it('Datei-Upload schickt den Nachweis mit, ohne festen Content-Type', async () => {
+    nachweisSetzen('nachweis-upload')
+    const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(antwort(201, { id: 1 }))
+
+    await api.upload('/infothek/1/dateien', new File(['x'], 'a.png', { type: 'image/png' }), 'datei')
+
+    const init = f.mock.calls[0][1] as RequestInit
+    const kopf = init.headers as Record<string, string>
+    expect(kopf[SPERRE_HEADER]).toBe('nachweis-upload')
+    expect(kopf['Content-Type']).toBeUndefined()
+    expect(init.body).toBeInstanceOf(FormData)
+  })
+
+  it('Datei-Upload nach 423: Wiederholung trägt den frischen Nachweis', async () => {
+    const f = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(antwort(423, { detail: 'gesperrt', sperre: true }))
+      .mockResolvedValueOnce(antwort(201, { id: 1 }))
+    entsperrDialogAnmelden(async () => {
+      nachweisSetzen('frisch-upload')
+      return true
+    })
+
+    await expect(
+      api.upload('/pvgis/horizont/1/upload', new File(['x'], 'h.csv', { type: 'text/csv' })),
+    ).resolves.toEqual({ id: 1 })
+
+    expect(f).toHaveBeenCalledTimes(2)
+    const zweiterKopf = (f.mock.calls[1][1] as RequestInit).headers as Record<string, string>
+    expect(zweiterKopf[SPERRE_HEADER]).toBe('frisch-upload')
+  })
+
   it('lesende Aufrufe lösen keinen Dialog aus', async () => {
     // Gegenprobe zur Zusage „Ansehen ist nie gesperrt": Selbst wenn der Server einen
     // 423 auf ein GET schickte, dürfte der Client daraus keinen Dialog machen — sonst

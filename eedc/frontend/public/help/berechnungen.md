@@ -1932,6 +1932,11 @@ aggregiert wurden, tragen `NULL`, und `NULL` heißt „keine Aussage", nicht „
 > * **Grenze — eine Stunde ohne Aussage** (fehlende Netzbezugs- oder Einspeisezeile, Zählerlücke über mehr als eine
 >   Stunde) trägt im Kanal keinen PV-Teil — ihre Ladung zählt im Anteil zum Netz. Die Tagesebene lässt eine solche Stunde
 >   ganz aus (Entscheid: so belassen; die Abweichung irrt zur kleineren Ersparnis).
+>   Dieselbe Regel gilt in der Tageszeile für die **Nachtragsstunde eines Erfassungs-Stillstands** (N-799, Fund-Päckchen G):
+>   der Schreiber der Heimladungs-Anteile eines Kanal-Tags (`kanal_stunden.ladeanteil_der_kanal_stunden`) bekommt die
+>   Stunden mit der Marke des Stillstands (`stillstand_marke.kanal_stunden_mit_marke`) — wie der Ladeblock-Eingang; trägt
+>   der Tag keine gedeckte Ladestunde, bleibt der Anteil leer («keine Aussage»). Der abgeleitete Kanal und der Bestandsweg
+>   des Aggregators sehen die Marke nicht (Grenze G-5).
 > * **Rückwirkung nur für den laufenden Monat:** ein neuer Kanal beginnt beim ersten Lauf mit dem laufenden Monat
 >   (`aufbaubar_ab` eine Stunde vor dem Monatsfenster), sobald der Spiegel die Stunden trägt; kein abgeschlossener Monat
 >   wird aus ihm neu gerechnet. Korrigiert der Konsistenzlauf den Spiegel, wird der Kanal ab der korrigierten Stunde neu
@@ -5906,6 +5911,17 @@ Temperatur_Min/Max     = min/max(Temperatur_C)        aus Open-Meteo
 Strahlung_Summe_Wh_m2  = Σ(Globalstrahlung_W/m²)     × 1h
 GTI_Summe_Wh_m2        = Σ(global_tilted_irradiance) × 1h        # ab v3.20.0
 ```
+
+> **Wetter und Börsenpreis beim Neu-Aggregieren (Fund-Päckchen G, 23.11.2026; `energie_profil/abruf_bestand.py`).** Beide
+> kommen aus einem **Abruf** (Open-Meteo, aWATTar/EPEX), nicht aus einer Quelle mit Historie in Home Assistant; ein
+> gescheiterter oder leerer Abruf ist keine Aussage der Quelle. **Je Feld gilt:** liefert der Abruf einen Wert, gewinnt er
+> (das Archiv-Upgrade des Wetters bleibt); liefert er nichts, bleibt der gespeicherte. Die gespeicherten Stundenwerte
+> (Temperatur, Globalstrahlung, Bewölkung, Niederschlag, Wettercode, Börsenpreis) gehen VOR dem Löschen der Tageszeilen als
+> Eingang in den Lauf — §51-Menge und Performance Ratio entstehen aus denselben Zahlen (auch an einem Kanal-Tag). GTI je
+> Stunde speichert eedc nicht: trägt keine Stunde des Abrufs GTI, gilt die gespeicherte Tagessumme. Lieferte ein Abruf des
+> Tages **gar nichts**, stehen seine Tageswerte (Temperatur min/max und Strahlungssumme bzw. Börse Ø/min und negative
+> Preisstunden) wie gespeichert in der neuen Zeile. Gilt für jeden Weg, der den Tag neu schreibt (alle über `aggregate_day`);
+> Felder aus Zählern und HA-Statistik folgen weiter der Quelle. Wächter: Klasse (d) in `test_konformitaet_tep_felder.py`.
 
 **Batterie-Vollzyklen (v3.22.0 verschärft):**
 

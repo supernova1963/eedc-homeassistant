@@ -9,7 +9,11 @@ genau einer von drei Mengen:
 (b) **gerettet, wenn leer** — ihre Quelle VERFÄLLT (HAs Recorder-Verlauf), der Wert
     überlebt das Neuschreiben nur über `_STUNDEN_FELDER_RETTEN` im Aggregator. Der Test
     liest **diese** Konstante, keine Kopie davon;
-(c) **Identität/ORM** — Schlüssel, Schreibzeit, Herkunft.
+(c) **Identität/ORM** — Schlüssel, Schreibzeit, Herkunft;
+(d) **aus einem Abruf, behalten, wenn er nichts liefert** — Wetter und Börsenpreis
+    (Fund-Päckchen G, 23.11.2026): der Abruf gewinnt, wo er liefert; liefert er nichts,
+    geht der gespeicherte Wert als Eingang in den Lauf. Der Test liest
+    `abruf_bestand.ABRUF_FELDER_BEHALTEN`, keine Kopie davon.
 
 Eine neue Spalte ohne Klasse macht den Test rot und zwingt zur Entscheidung, ob ihre
 Quelle beim Neu-Aggregieren noch liefert. Genau diese Frage war bei
@@ -29,11 +33,7 @@ _NEU_BERECHNET: frozenset[str] = frozenset({
     # Zählerpfad (HA-LTS bzw. Snapshots — rückwirkend lesbar)
     "pv_kw", "verbrauch_kw", "einspeisung_kw", "netzbezug_kw", "batterie_kw",
     "waermepumpe_kw", "wallbox_kw", "spannen", "ueberschuss_kw", "defizit_kw",
-    # Wetter (Open-Meteo-Archiv, rückwirkend abrufbar)
-    "temperatur_c", "globalstrahlung_wm2", "bewoelkung_prozent", "niederschlag_mm",
-    "wetter_code",
-    # Börse (aWATTar/EPEX, rückwirkend abrufbar — bewusst NICHT gerettet, Vorlage §6)
-    "boersenpreis_cent",
+    # Wetter und Börse: Klasse (d), `_abruf()` unten (Fund-Päckchen G)
     # Leistungspfad (Vollbackfill reicht ihn aus HA-LTS durch)
     "komponenten",
     # Counter (Snapshots, Boundary-Diff)
@@ -54,6 +54,12 @@ def _gerettet() -> frozenset[str]:
     return frozenset(_STUNDEN_FELDER_RETTEN)
 
 
+def _abruf() -> frozenset[str]:
+    from backend.services.energie_profil.abruf_bestand import ABRUF_FELDER_BEHALTEN
+
+    return frozenset(ABRUF_FELDER_BEHALTEN)
+
+
 def _tep_spalten() -> set[str]:
     from backend.models.tages_energie_profil import TagesEnergieProfil
 
@@ -61,7 +67,7 @@ def _tep_spalten() -> set[str]:
 
 
 def _unklassifiziert(spalten: set[str], gerettet: frozenset[str]) -> set[str]:
-    return spalten - (_NEU_BERECHNET | gerettet | _IDENTITAET_ORM)
+    return spalten - (_NEU_BERECHNET | gerettet | _IDENTITAET_ORM | _abruf())
 
 
 def test_k3_alle_tep_spalten_klassifiziert():
@@ -75,7 +81,7 @@ def test_k3_alle_tep_spalten_klassifiziert():
         "`fuehre_gerettete_stunden_zusammen`;\n"
         "  ORM  → (c) `_IDENTITAET_ORM` mit Begründung."
     )
-    abgelaufen = (_NEU_BERECHNET | _gerettet() | _IDENTITAET_ORM) - _tep_spalten()
+    abgelaufen = (_NEU_BERECHNET | _gerettet() | _abruf() | _IDENTITAET_ORM) - _tep_spalten()
     assert not abgelaufen, f"K3: Klassifikation nennt Phantom-Spalten: {sorted(abgelaufen)}"
 
 
@@ -84,10 +90,12 @@ def test_k3_klassen_disjunkt():
     assert not _NEU_BERECHNET & gerettet, sorted(_NEU_BERECHNET & gerettet)
     assert not _NEU_BERECHNET & _IDENTITAET_ORM, sorted(_NEU_BERECHNET & _IDENTITAET_ORM)
     assert not gerettet & _IDENTITAET_ORM, sorted(gerettet & _IDENTITAET_ORM)
+    for andere in (_NEU_BERECHNET, gerettet, _IDENTITAET_ORM):
+        assert not _abruf() & andere, sorted(_abruf() & andere)
 
 
 def test_k3_a_und_b_sind_genau_der_konstruktor():
-    """(a) ∪ (b) = die Datenspalten, die `baue_stundenzeile` setzt — am Quelltext gezählt.
+    """(a) ∪ (b) ∪ (d) = die Datenspalten, die `baue_stundenzeile` setzt — am Quelltext gezählt.
 
     Ohne diese Probe könnte (a) eine Spalte behaupten, die der Aggregator gar nicht
     schreibt (dann wäre sie beim Neuschreiben still NULL) — die Hand-Liste allein
@@ -102,9 +110,9 @@ def test_k3_a_und_b_sind_genau_der_konstruktor():
     ]
     assert len(aufrufe) == 1, "baue_stundenzeile baut genau eine Stundenzeile"
     gesetzt = {kw.arg for kw in aufrufe[0].keywords} - {"anlage_id", "datum", "stunde"}
-    assert gesetzt == _NEU_BERECHNET | _gerettet(), (
-        f"nur Konstruktor: {sorted(gesetzt - (_NEU_BERECHNET | _gerettet()))} · "
-        f"nur Klassen: {sorted((_NEU_BERECHNET | _gerettet()) - gesetzt)}"
+    assert gesetzt == _NEU_BERECHNET | _gerettet() | _abruf(), (
+        f"nur Konstruktor: {sorted(gesetzt - (_NEU_BERECHNET | _gerettet() | _abruf()))} · "
+        f"nur Klassen: {sorted((_NEU_BERECHNET | _gerettet() | _abruf()) - gesetzt)}"
     )
 
 

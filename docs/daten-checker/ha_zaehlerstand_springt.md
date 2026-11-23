@@ -12,6 +12,11 @@ etwa, weil sie importiert wurde: Home Assistant zählt diesen Stand als Menge de
 dann „die Statistik beginnt mit diesem Stand statt bei 0“. eedc nennt das nur, wenn der Stand mehr
 ist, als eine Anlage in einer Stunde erzeugen oder verbrauchen kann.
 
+Ein dritter Fall betrifft die **gefahrenen Kilometer**: Tag und Tabelle zählen die Zunahme des Kilometerstands, der Monatswert
+(Vorschlag im Monatsabschluss, „Aus HA laden“) die Summe der Statistik. Beginnt Home Assistant die Summe mitten in der Reihe
+neu — meist nach einer Lücke in der Statistik —, während der Stand weiterläuft, stehen für denselben Monat zwei Zahlen. Die
+Meldung sagt dann „die Summe beginnt neu, der Stand läuft weiter“ und nennt den Tag mit beiden Tageszahlen.
+
 ## Lösungsweg
 1. In Home Assistant unter *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) den genannten Sensor suchen und beim Symbol „Summe anpassen“ den Dialog
    „Eine Statistik anpassen“ öffnen: unter „Zeitpunkt auswählen“ die Zeit des Sprungs in der genannten Stunde wählen, bei
@@ -30,8 +35,14 @@ ist, als eine Anlage in einer Stunde erzeugen oder verbrauchen kann.
    Verbrauchszähler). Beim nächsten Tausch zählt kein Sprung, wenn du in Home Assistant für den neuen Zähler einen eigenen
    Sensor oder Helfer anlegst, ihn in eedc unter [Datenquellen](eedc:/einstellungen/datenquellen) dem Feld zuordnest
    und im Dialog «Bisherige Werte bleiben» wählst.
-5. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach den Schritten 1 und 2 ist der Sprung aus der Liste
-   verschwunden. Ein Sprung an einem Zählerstand bleibt stehen; die Zeile erklärt ihn weiterhin.
+5. **Summe beginnt neu, der Stand läuft weiter** (gefahrene Kilometer; die Meldung sagt es): wie in Schritt 1 „Summe
+   anpassen“ öffnen, unter „Zeitpunkt auswählen“ die genannte Stunde wählen und bei „Neuer Wert“ die Zunahme des Stands in
+   dieser Stunde eintragen (der Unterschied der beiden Stände, die die Meldung in Klammern nennt), dann „Anpassen“. Danach
+   Schritt 2 und, für gespeicherte Monate, Schritt 3 — oder den Monat unter
+   [Monatsdaten](eedc:/einstellungen/daten?block=monatsdaten) von Hand berichtigen. Damit zählen Tag, Tabelle und Monatswert
+   dieselbe Zahl; die Kilometer der Lücke stehen dann im Tag des Neubeginns, wie der Stand sie zeigt.
+6. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach den Schritten 1 und 2 (bzw. 5) ist der Befund aus der Liste
+   verschwunden. Ein Sprung an einem Zählerstand (Schritt 4) bleibt stehen; die Zeile erklärt ihn weiterhin.
 
 Bleibt der Befund danach: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das Diagnose-Paket:
 im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Herunterladen»** und die Datei

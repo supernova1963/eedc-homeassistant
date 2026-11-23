@@ -32,6 +32,7 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services.energie_profil._helpers import _speicher_investitionen
+from backend.services.energie_profil.abruf_bestand import abruf_mit_bestand
 from backend.services.energie_profil._provenance_helpers import (
     seed_tep_provenance,
     seed_tz_provenance,
@@ -112,8 +113,9 @@ _EXTERN_BEFUELLT_FELDER_RETTEN: tuple[str, ...] = (
 # * `soc_prozent` / `soc_je_speicher` / `strompreis_cent` — nur dann, wenn ihr
 #   Sensor keine Langzeitstatistik hat und der History-Fallback greift.
 #
-# ⚠ NICHT `boersenpreis_cent`: externe Quelle, rückwirkend abrufbar — dort gewinnt
-# immer der neue Abruf, auch ein leerer.
+# ⚠ NICHT `boersenpreis_cent` und das Wetter: externe Quelle, rückwirkend abrufbar — dort
+# gewinnt der neue Abruf, wo er liefert; liefert er nichts, bleibt der gespeicherte Wert
+# (Fund-Päckchen G, 23.11.2026; `abruf_bestand.py`, Klasse (d) im Wächter K3).
 #
 # Regel: **die Quelle gewinnt, wo sie liefert**; gerettet wird nur, was sonst leer
 # bliebe, und nur in Stunden, die der neue Lauf ohnehin schreibt (keine Zeile wird
@@ -2115,6 +2117,11 @@ async def aggregate_day(
             f"{type(e).__name__}: {e}"
         )
 
+    # Fund-Päckchen G: Wetter und Börsenpreis — was der Abruf nicht liefert, bleibt wie gespeichert (VOR dem Löschen gelesen,
+    # als Eingang gesetzt, damit alles Abgeleitete aus denselben Zahlen entsteht; `abruf_bestand.py`).
+    abruf = await abruf_mit_bestand(anlage.id, datum, db, wetter_stunden, strompreis_stunden)
+    wetter_stunden, strompreis_stunden = abruf.wetter_stunden, abruf.strompreis
+
     (
         preserved_felder, preserved_quellen,
         preserved_komponenten_kwh, preserved_komponenten_starts,
@@ -2168,6 +2175,7 @@ async def aggregate_day(
 
     for punkt in punkte:
         verarbeite_stunde(punkt, kontext, akku, db, auto_writer)
+    abruf.gti(akku)
 
     (
         boersenpreis_avg, boersenpreis_min, neg_stunden, einsp_neg_kwh,
@@ -2198,6 +2206,7 @@ async def aggregate_day(
         verworfen=(tages_tabelle.verworfen if tages_tabelle is not None else {}),
         nachtrag=(tages_tabelle.nachtrag if tages_tabelle is not None else None),
     )
+    abruf.tageswerte(zusammenfassung)
     # S5-R2 auf der fertigen Tageszeile, vor Provenance und Restore (gewinnt über die Preserve-Logik); an einem Kanal-Tag
     # die Mengen-Ableitungen (PR, §51-Menge, Heimladung) aus den Kanal-Stunden und die Herkunft `TZ_QUELLE_KANAL`.
     lade_anteil, tz_source_label = weiche.tageszeile(

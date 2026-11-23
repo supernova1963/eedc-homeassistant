@@ -64,6 +64,16 @@ ab dem Anfangsstand 0 zählt. Gemeldet wird allein über der Grenze (b): ohne Vo
 erste Stunde liegt weit darunter (gemessen: Wallbox 5 000,7, PV 1 000,4, Wärmepumpe 3 000,5 kWh in der ersten Stunde — bis
 Päckchen B ohne Befund an Wallbox und Wärmepumpe, an PV nur ``drift_tag``).
 
+**Sechster Fall «Summe beginnt neu, Stand läuft weiter»** (``SUMME_NEU``, Fund-Päckchen G 23.11.2026, ``finde_summe_neu``): an
+einem Stand-Zähler, dessen Kanal den Stand (``state``) liest, dessen Monatswert aber die Summe (``sum``, Leseregel ``snapshot/keys.
+ist_stand_sensor_key`` = nein; heute nur ``km_gefahren`` mit einer Sicht auf den Kanal), beginnt die Summe in HA mitten in der Reihe
+neu — meist nach einer Lücke der Statistik —, während der Stand weiterläuft. Tag und Tabelle zählen dann die Zunahme des Stands, der
+Monatswert verwirft den Neubeginn (R4) und zählt nur, was die Summe danach zeigt: für denselben Monat zwei Zahlen (gemessen:
+Produktiv-Kopie 10.05.2025, Stand +1 924 km am Tag, Summe +19 km; Mai 2 807 gegen 902 km). Ein Zeilenpaar zählt, wenn die Summe unter
+``NEUBEGINN_ANTEIL`` der vorigen fällt (die vorige mindestens ``MIN_STAND``), der Stand nicht fällt und um mehr zunimmt, als die
+Summe ab dem Neubeginn zählt (Toleranz wie «gleich»). Die Menge ist der Teil, den der Monatswert nicht zählt (Δ ``state`` − ``sum``
+danach). Kein Maß.
+
 **Vierter Arm «Zwischenstand»** (``ZWISCHENSTAND``, U3-K B4; nur mit ``zwischenstand=True``, den der MQTT-Erzeuger setzt): ein
 Gerät meldet innerhalb einer Stunde kurz 0 oder ein anderes Gerät sendet kurz seinen Stand — am Stundenende steht der alte
 Zähler wieder, HAs Summenregel hat dazwischen aber einen Neubeginn gezählt. Die Zeile zeigt dann Δ ``sum`` − Δ ``state``
@@ -121,6 +131,8 @@ MENGE_UNMOEGLICH_MIN = 100.0
 BEGINN = "beginn"
 #: Arm D (U3-K, B4): innerhalb der Stunde hat der Stand kurz eine andere Höhe gezeigt und ist zurückgekehrt.
 ZWISCHENSTAND = "zwischenstand"
+#: Sechster Fall (Fund-Päckchen G): die Summe beginnt neu, der Stand läuft weiter (nur Stand-Zähler mit Monatswert aus ``sum``).
+SUMME_NEU = "summe_neu"
 #: Arm D: Δ sum − Δ state ab diesem Anteil des Stands davor.
 ZWISCHEN_ANTEIL = 0.9
 #: Neubeginn: der Stand fällt unter diesen Anteil des vorigen.
@@ -239,6 +251,27 @@ def beginn_ueber_grenze(zeile: tuple, grenze: Optional[float]) -> Optional[Stand
     return Standsprung(int(zeile[0]), BEGINN, float(zeile[2]), 0.0, float(zeile[2]), 0.0)
 
 
+def _summe_neu(z0: tuple, z1: tuple) -> Optional[float]:
+    """Sechster Fall: die Summe beginnt neu, der Stand läuft weiter. Returns: die Menge, die der Monatswert nicht zählt (Δ
+    ``state`` − ``sum`` danach), sonst ``None``."""
+    st0, st1, su0, su1 = z0[1], z1[1], z0[2], z1[2]
+    if None in (st0, st1, su0, su1) or su0 < MIN_STAND or su1 >= NEUBEGINN_ANTEIL * su0 or st1 < st0:
+        return None
+    rest = (st1 - st0) - max(su1, 0.0)
+    return rest if rest > GLEICH_ABS + GLEICH_ANTEIL * (st1 - st0) else None
+
+
+def finde_summe_neu(zeilen: Sequence[tuple]) -> list[Standsprung]:
+    """Reine Funktion: ``zeilen`` = ``(start_ts, state, sum)`` EINES Quell-Abschnitts eines Stand-Zählers, aufsteigend. Je Stunde,
+    in der die Summe neu beginnt und der Stand weiterläuft, ein ``Standsprung`` (Art ``SUMME_NEU``, ohne Maß) in Zeitfolge."""
+    out: list[Standsprung] = []
+    for z0, z1 in zip(zeilen, zeilen[1:]):
+        menge = _summe_neu(z0, z1)
+        if menge is not None:
+            out.append(Standsprung(int(z1[0]), SUMME_NEU, menge, z0[1], z1[1], 0.0))
+    return out
+
+
 def finde_standspruenge(zeilen: Sequence[tuple], *, stand: bool = False,
                         ausgenommen: frozenset[int] | set[int] = frozenset(), rueckgang: bool = False,
                         grenze: Optional[float] = None, zwischenstand: bool = False) -> list[Standsprung]:
@@ -289,5 +322,5 @@ def finde_standspruenge(zeilen: Sequence[tuple], *, stand: bool = False,
 
 
 __all__ = ["BEGINN", "BEZUG_MIN_TAGE", "BEZUG_TAGE", "MENGE_UNMOEGLICH_MIN", "NEUBEGINN", "REIF_MIN_TAG", "RUECKGANG",
-           "RUECKGANG_SCHWELLE", "SCHWELLE_NEUBEGINN", "SCHWELLE_SPRUNG", "SPRUNG", "Standsprung", "ZWISCHENSTAND",
-           "ZWISCHEN_ANTEIL", "beginn_ueber_grenze", "bezug", "finde_standspruenge", "grenze_der_zeile", "grenze_unmoeglich", "mass", "reif", "tageszuwachs"]
+           "RUECKGANG_SCHWELLE", "SCHWELLE_NEUBEGINN", "SCHWELLE_SPRUNG", "SPRUNG", "SUMME_NEU", "Standsprung", "ZWISCHENSTAND",
+           "ZWISCHEN_ANTEIL", "beginn_ueber_grenze", "bezug", "finde_standspruenge", "finde_summe_neu", "grenze_der_zeile", "grenze_unmoeglich", "mass", "reif", "tageszuwachs"]

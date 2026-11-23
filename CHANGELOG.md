@@ -52,6 +52,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Menüwege von Home Assistant 2026.11** in Befunden, Lösungswegen, Handbüchern und Dialogen: „Einstellungen → Werkzeuge →
   Statistik (in älteren Home-Assistant-Versionen: Entwicklerwerkzeuge → Statistik)“, „Summe anpassen“, „Zeitpunkt auswählen“,
   „Neuer Wert“, „Anpassen“.
+- **Daten-Checker: gefahrene Kilometer, wenn Home Assistant die Summe neu beginnt.** Tag und Tabelle zählen die Zunahme des
+  Kilometerstands, der Monatswert (Vorschlag im Monatsabschluss, „Aus HA laden“) die Summe der Statistik. Beginnt Home
+  Assistant die Summe mitten in der Reihe neu – meist nach einer Lücke in der Statistik –, während der Stand weiterläuft,
+  standen für denselben Monat zwei Zahlen, ohne dass ein Befund es sagte (gemessen: Tag 1 924 km, Mai 2 807 km in der
+  Tabelle, 902 km als Monatswert). Der Befund „Zählerstände – Zählerstand springt“ nennt jetzt den Tag mit beiden Tageszahlen
+  und den Weg: in Home Assistant „Summe anpassen“ an der genannten Stunde auf die Zunahme des Stands, danach „Aus Home
+  Assistant neu übernehmen“ — dann zählen Tag, Tabelle und Monatswert dieselbe Zahl.
 
 ### Changed
 
@@ -74,6 +81,22 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **Wetter und Börsenpreis bleiben, wenn der Abruf beim Neu-Aggregieren nichts liefert.** Baute eedc einen Tag neu auf
+  („Tag neu aggregieren“, „Mehrere Tage neu aggregieren“, „Aus Home Assistant neu übernehmen“, Knöpfe im Daten-Checker,
+  nächtliche Läufe, „Lücken aus HA-LTS nachfüllen“) und lieferte der Wetter- oder Börsenpreis-Dienst in dem Moment nichts
+  (kein Netz, Fehler, Begrenzung), standen danach Temperatur, Einstrahlung, Performance Ratio, Börsenpreis und negative
+  Preisstunden des Tages leer — den Börsenpreis füllte kein späterer Lauf wieder. Jetzt gilt je Feld: liefert der Abruf
+  einen Wert, gewinnt er; liefert er nichts, bleibt der gespeicherte. Die Performance Ratio und die Einspeisung bei
+  negativem Preis rechnet eedc aus denselben Werten neu (gemessen: sechs Tage ohne Netz neu aufgebaut, alle Werte wie
+  vorher; mit Netz gewinnt der neue Abruf).
+- **Heimladung: die Stunde nach einem Erfassungs-Ausfall trägt keinen PV-Anteil mehr.** Stand die Erfassung einige Stunden
+  still und trug die Stunde danach die Ladung aller dieser Stunden, rechnete eedc den PV-/Netz-Anteil der Heimladung dieses
+  Tages aus dieser einen Stunde, als wäre es eine — die Ladeblöcke desselben Tages taten das schon nicht. Jetzt gilt für
+  beide dieselbe Regel: der Anteil dieser Stunde ist nicht bestimmbar, die Ladung zählt weiter in jeder Summe. Gilt für Tage,
+  die eedc neu bildet; gespeicherte Tage behalten ihren Wert bis dahin.
+- **Datei hochladen bei gesetzter PIN.** Mit Einstellungs-Sperre scheiterten das Hochladen einer Datei in der Infothek und
+  des Horizontprofils in der Solarprognose immer mit „Einstellungen sind gesperrt. Bitte mit der PIN entsperren.“ — auch
+  nach dem Entsperren. Der Upload trägt den Nachweis der Entsperrung jetzt mit wie jede andere Änderung.
 - **Zählerlücke ohne Home Assistant: die Menge steht in der ersten Stunde danach, wie in Home Assistant.** Fehlten einer
   Anlage ohne Home-Assistant-Statistik (Standalone, MQTT) Zählerstände einige Stunden lang, verteilte eedc die Menge
   zwischen dem letzten Stand davor und dem ersten danach gleichmäßig auf die Stunden dazwischen — Stundenwerte, die kein

@@ -43,13 +43,17 @@ class ApiClient {
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`
 
+    // Die Köpfe entstehen bei JEDEM Versuch neu und werden zuletzt gesetzt — so ersetzt ein
+    // `options.headers` sie nicht, und die Wiederholung nach dem Entsperren trägt den frischen
+    // Nachweis. Bei FormData setzt der Browser den Content-Type (multipart mit Grenze) selbst.
+    const istFormular = typeof FormData !== 'undefined' && options.body instanceof FormData
     const config: RequestInit = {
+      ...options,
       headers: {
-        'Content-Type': 'application/json',
+        ...(istFormular ? {} : { 'Content-Type': 'application/json' }),
         ...sperrHeader(),
         ...options.headers,
       },
-      ...options,
     }
 
     const response = await fetch(url, config)
@@ -152,7 +156,6 @@ class ApiClient {
 
     return this.request<T>(endpoint, {
       method: 'POST',
-      headers: {}, // Let browser set Content-Type for multipart
       body: formData,
     })
   }

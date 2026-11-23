@@ -11,6 +11,14 @@
 
 ## Unveröffentlicht
 
+**Wetter und Börsenpreis bleiben beim Neu-Aggregieren.** Baute eedc einen Tag neu auf und lieferte der Wetter- oder Börsenpreis-Dienst in dem Moment nichts, standen Temperatur, Einstrahlung, Performance Ratio, Börsenpreis und negative Preisstunden danach leer. Jetzt bleibt der gespeicherte Wert, wenn der Abruf nichts liefert; liefert er einen Wert, gewinnt der neue.
+
+**Daten-Checker: gefahrene Kilometer.** Beginnt Home Assistant die Summe des Kilometerstands mitten in der Reihe neu, während der Stand weiterläuft, zeigten Tag und Tabelle eine andere Monatszahl als der Monatsabschluss. Der Befund „Zählerstände – Zählerstand springt“ nennt den Tag mit beiden Zahlen und den Weg über „Summe anpassen“ in Home Assistant.
+
+**Heimladung nach einem Erfassungs-Ausfall.** Die Stunde, die die Ladung mehrerer ausgefallener Stunden nachträgt, bekommt keinen PV-Anteil mehr, als wäre sie eine einzige Stunde – wie schon bei den Ladeblöcken.
+
+**Datei hochladen bei gesetzter PIN.** Das Hochladen einer Datei in der Infothek und des Horizontprofils scheiterte mit Einstellungs-Sperre auch nach dem Entsperren; jetzt geht es.
+
 **Zählerlücke ohne Home Assistant: die Menge steht in der ersten Stunde danach.** Fehlten einer Anlage ohne Home-Assistant-Statistik (Standalone, MQTT) einige Stunden lang Zählerstände, verteilte eedc die Menge gleichmäßig auf die Stunden dazwischen. Jetzt bleiben diese Stunden leer und die erste Stunde danach trägt die ganze Menge – wie in Home Assistant; Überschuss, Defizit und Direktverbrauch sind für diese Stunden aus den Zählerständen gerechnet – mit einem Speicher „—“ (nicht bestimmbar), bei einer Lücke ohne PV wie jede Stunde –, und der Daten-Checker nennt den Tag unter „Stunden ohne Stundenwerte“, wenn die Lücke PV enthält. Tag, Monat und Jahr bleiben gleich. Vorher gespeicherte Tage behalten ihre Stunden, bis sie neu gebildet werden; der Wärme-Verlauf je Stunde zeigt die Regel sofort, den Gesamtstrom nur, wenn seine Zählerstände denselben Tageswert ergeben wie gespeichert. → [Daten-Checker: Stunden ohne Stundenwerte](HANDBUCH_DATEN_CHECKER.md#erfassung_stillstand)
 
 **Verbrauchsprognose: Lücke am Zähler der Wärmepumpe.** Fehlten nur dem Stromzähler der Wärmepumpe einige Stunden, lernte das Verbrauchsprofil die Menge der ganzen Lücke als eine Stunde, und der Wärmepumpen-Anteil der Prognose stieg dort; jetzt zählt diese Stunde für die Wärmepumpe nicht als Stichprobe – wie für Netz und PV –, Tag und Monat bleiben gleich.

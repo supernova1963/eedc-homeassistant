@@ -31,4 +31,10 @@ neuen Statistik bis zu dieser Grenze. Ein gefallener Zählerstand steht in
 Summe der Statistik — „Summe anpassen“ in Home Assistant ändert dort nichts. Der Befund ist dann eine Auskunft: er nennt den
 Weg, den getauschten Zähler als eigenes Gerät zu führen, und wie ein späterer Tausch ohne Sprung bleibt.
 
+**Summe beginnt neu, Stand läuft weiter** (gefahrene Kilometer): Tag und Tabelle zählen die Zunahme des Kilometerstands, der
+Monatswert (Vorschlag im Monatsabschluss, «Aus HA laden») die Summe der Statistik in Home Assistant. Beginnt Home Assistant die
+Summe mitten in der Reihe neu — meist nach einer Lücke in der Statistik —, während der Stand weiterläuft, stehen für denselben
+Monat zwei Zahlen. Der Befund nennt den Tag mit beiden Tageszahlen (Stand und Summe) und die Stunde des Neubeginns; „Summe
+anpassen“ an dieser Stunde bringt die Summe auf die Zunahme des Stands, danach zählen Tag, Tabelle und Monatswert dieselbe Zahl.
+
 ---

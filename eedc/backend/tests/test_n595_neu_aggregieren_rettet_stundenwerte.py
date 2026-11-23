@@ -419,7 +419,9 @@ async def test_p9_endkundenpreis_bleibt_boerse_folgt_der_quelle(db):
     with _umgebung(lts=_HaLts(), boerse={}):          # Sensor gepurgt, Börse leer
         ohne = await _lauf(db, anlage)
     assert {h: z.strompreis_cent for h, z in ohne.items()} == {0: None, 12: 31.5, 13: 33.0}
-    assert all(z.boersenpreis_cent is None for z in ohne.values())
+    # Fund-Päckchen G (23.11.2026): ein leerer Börsen-Abruf ist keine Aussage der Quelle — der gespeicherte Preis bleibt
+    # (bis dahin gewann auch ein leerer Abruf; `energie_profil/abruf_bestand.py`). Ein Abruf mit Werten gewinnt (unten).
+    assert {h: z.boersenpreis_cent for h, z in ohne.items()} == {0: None, 12: 9.1, 13: 10.2}
 
     with _umgebung(lts=_HaLts(), boerse={12: 11.0, 13: 12.0}):
         neu = await _lauf(db, anlage)
