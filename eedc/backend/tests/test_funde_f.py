@@ -223,3 +223,52 @@ async def test_hf1_gesamtstrom_aus_denselben_staenden_wie_die_summanden(db):
         assert await _gesamtstrom_aus_staenden(db, DATUM, _waerme_ctx(mapping=ohne_zaehler), gespeichert) is None
         anderer_tag = {h: 0.6 for h in range(24)}                  # Zählerspalte ≠ Stände (andere Menge) ⇒ sie bleibt
         assert await _gesamtstrom_aus_staenden(db, DATUM, _waerme_ctx(), anderer_tag) is None
+
+
+# ── Nachtrag 2: Bündel allein auf der WP-Achse ist keine Stichprobe des WP-Stundenprofils ───────────────────────────
+
+
+@pytest.mark.parametrize("raster", [None, "beginn"], ids=["bestandstag", "kanal_tag"])
+async def test_n2b_wp_buendel_keine_stichprobe_im_wp_profil(db, monkeypatch, raster):
+    """Hat nur der WP-Zähler eine Lücke (Bilanz lückenlos), trägt die Zeile danach ``spannen["waermepumpe"] > 1`` und die Menge
+    mehrerer Stunden. Sie ist keine Stichprobe des WP-Stundenprofils (``wp_werktag``) — der Hausverbrauch derselben Zeile
+    bleibt eine (seine Achsen sind ungebündelt). Messung ``test_mess_n2b_wp_buendel.py``: am HEAD Slot 13 = 1,867 statt 0,8
+    (Bestandstag, HA-Kanal-Tag) bzw. 1,8 (MQTT-Kanal-Tag)."""
+    import backend.services.energie_profil.kanal_stunden as ks
+    import backend.services.live_verbrauchsprofil_service as lvs
+    from backend.services.live_verbrauchsprofil_service import _profil_from_db
+
+    heute = date(2026, 10, 30)                                   # fest (Donnerstag): Lernwoche 23.–29.10.
+
+    class _Heute(date):
+        @classmethod
+        def today(cls):
+            return heute
+
+    monkeypatch.setattr(lvs, "date", _Heute)
+
+    anlage = Anlage(anlagenname="N2b", leistung_kwp=5.0)
+    db.add(anlage)
+    await db.flush()
+    db.add(Investition(anlage_id=anlage.id, typ="waermepumpe", bezeichnung="WP", anschaffungsdatum=date(2024, 1, 1)))
+    await db.commit()
+
+    werktage = [date(2026, 10, 27), date(2026, 10, 28), date(2026, 10, 29)]
+    buendel_tag = werktage[1]
+    # Zeile, die Slot 13 trägt: Bestandszeile 13 bzw. Mischzeile 12 (Beginn-Raster, Slot h + 1).
+    zeile_13 = 13 if raster is None else 12
+
+    def zeile(d, h):
+        gebuendelt = d == buendel_tag and h == zeile_13
+        return SimpleNamespace(datum=d, stunde=h, raster=raster, verbrauch_kw=1.5, temperatur_c=None,
+                               betriebsmodus_je_wp=None, komponenten=None,
+                               waermepumpe_kw=4.0 if gebuendelt else (None if d == buendel_tag and 8 <= h < zeile_13 else 0.8),
+                               spannen={"waermepumpe": 5} if gebuendelt else None)
+
+    async def stunden(_db, _aid, _von, _bis, felder=None):
+        return [zeile(d, h) for d in werktage for h in range(24)]
+
+    monkeypatch.setattr(ks, "stunden_der_tage", stunden)
+    prof = await _profil_from_db(anlage.id, db)
+    assert prof["wp_werktag"][13] == pytest.approx(0.8)          # am HEAD (0,8 + 0,8 + 4,0) / 3 = 1,867
+    assert prof["werktag"][13] == pytest.approx(1.5)             # Hausverbrauch der Zeile zählt weiter

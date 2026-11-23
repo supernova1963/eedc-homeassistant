@@ -95,6 +95,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Wärmepumpen-Auswertung und die Sensoren an Home Assistant; bisher bildete die Kachel die Summe der Stunden und wich an Tagen
   mit Starts zwischen 23 und 24 Uhr ab (gemessen: 5 Starts am Vortag zwischen 23 und 24 Uhr zeigte die Kachel bisher als
   Starts des Tages, jetzt nicht mehr; 3 Starts am Tag zwischen 23 und 24 Uhr fehlten bisher, jetzt stehen sie dort). Vorher gespeicherte Tage behalten ihre Stunden, bis sie neu gebildet werden.
+- **Verbrauchsprognose: eine Lücke nur am Zähler der Wärmepumpe verzerrt das gelernte Wärmepumpen-Profil nicht mehr.**
+  Fehlten nur dem Stromzähler der Wärmepumpe einige Stunden (der Netz- und PV-Zähler liefen weiter), lernte das
+  Verbrauchsprofil die Menge der ganzen Lücke als Wert einer einzigen Stunde — der Wärmepumpen-Anteil der Prognose stieg in
+  dieser Stunde (gemessen: 1,87 statt 0,8 kWh bei drei Lerntagen). Jetzt zählt diese Stunde für die Wärmepumpe nicht als
+  Stichprobe, wie es für Netz und PV schon galt; der Hausverbrauch der Stunde lernt weiter, und Tag und Monat bleiben gleich.
 - **Energieprofil → Monat: Wallbox und Wärmepumpe zählen jeden Tag mit.** Kam der Tageswert eines Geräts an einigen
   Tagen aus der Live-Leistung (ohne Zähler) und an anderen aus dem Zähler, rechnete die Monatssumme die Tage
   gegeneinander — die Live-Tage stehen intern mit negativem Vorzeichen (gemessen: Wallbox im November 108,8 statt

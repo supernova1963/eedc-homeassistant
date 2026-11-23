@@ -266,20 +266,23 @@ async def _profil_from_db(
     ))).all()) == 1
 
     from backend.core.berechnungen.slot_konvention import backward_slot_der_zeile
-    from backend.core.berechnungen.spannen import verbrauch_gebuendelt
+    from backend.core.berechnungen.spannen import verbrauch_gebuendelt, zeile_gebuendelt
 
     for row in rows:
         datum, stunde = backward_slot_der_zeile(row)
         if datum >= heute:
             continue  # Stunde 23 von gestern (Kanal-Tag) = Slot 0 von heute
         verbrauch_kw = row.verbrauch_kw
-        waermepumpe_kw, temperatur_c = row.waermepumpe_kw, row.temperatur_c
+        temperatur_c = row.temperatur_c
         if verbrauch_kw is None:
             continue
         # Zählerlücken wie HA (§2): eine gebündelte Stunde ist keine Stichprobe
         # für das Stundenprofil — ihre Energie bleibt in jeder Summe.
         if verbrauch_gebuendelt(row):
             continue
+        # Dasselbe je gelesener Achse: ist allein die WP-Achse gebündelt (Lücke nur am WP-Zähler), fällt die Zeile nur aus
+        # der WP-Reihe und ihren Teilmengen (N-594, gleiche Stichproben) — der Hausverbrauch der Zeile bleibt eine.
+        waermepumpe_kw = None if zeile_gebuendelt(row, "waermepumpe") else row.waermepumpe_kw
 
         ist_wochenende = datum.weekday() >= 5
         tag_str = datum.isoformat()
