@@ -7,7 +7,362 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.3.2] - 2026-11-24
+
+Wechselst du die Quelle eines Felds, fragt eedc jetzt, was mit den bisherigen Werten geschieht. In der Reparatur-Werkbank kannst du die Werte eines Felds vor einem Zeitpunkt verwerfen. Zählerlücken zeigt eedc wie Home Assistant: Die Menge steht in der ersten Stunde danach, nichts wird verteilt. Wetter, Börsenpreis und Stundenwerte bleiben beim Neu-Aggregieren und dauerhaft gespeichert. Dazu Korrekturen an Heimladung, Wärmepumpe, Daten-Checker und am Datei-Upload bei gesetzter PIN.
+
+### Added
+
+- **Sensorwechsel: eedc fragt, was mit den bisherigen Werten geschieht.** Änderst du unter *Einstellungen → Datenquellen*
+  die Quelle eines Felds, das schon eigene Werte hat, fragt der Dialog „Warum wechselt die Quelle?“ — mit genau zwei
+  Antworten: „Bisherige Werte bleiben — der neue Sensor setzt fort (Zähler oder Gerät getauscht, anderer Sensor für
+  dasselbe Gerät)“ oder „Daten vor der Änderung löschen — das Feld beginnt mit dem neuen Sensor neu“. Unter „Was danach
+  geschieht“ steht, bevor etwas geändert wird, was eedc tut. Bei „bleiben“ zwischen zwei Sensoren aus Home Assistant rechnet
+  eedc wie Home Assistant mit beiden: den bisherigen bis zu seinem letzten Wert, den neuen ab seinem ersten; haben sie eine
+  Zeit lang gleichzeitig gezählt, wählst du unter „Der neue Sensor zählt ab“ die Stunde. Bei „löschen“ gehen nur die Daten
+  dieses Felds aus der Zeit vor der Änderung weg; danach zeigt das Feld, was Home Assistant für den neuen Sensor führt, davor
+  „—“; jedes andere Feld bleibt — an den Tagen, die eedc danach neu bildet, ändert sich an ihm nur, was dort auch „Tag
+  neu aggregieren“ ändern würde. Gespeicherte Monatswerte bleiben bei beiden Antworten — der Dialog nennt die
+  Monate und den Weg, sie unter „Monatsdaten“ von Hand oder mit „Aus HA laden“ anzugleichen. „Löschen“ lässt sich nicht
+  zurücknehmen. Am Feld gibt es dazu **„Zähler getauscht (gleiche Quelle)“**: für einen Zähler aus Home Assistant nennt der
+  Dialog den Weg dort („Summe anpassen“) und trägt nichts ein; bei MQTT entscheidest du — eedc zeigt die Zählerstände vor
+  und nach der gewählten Zeit, die Menge, die danach nicht zählt, und ob es dort einen Sprung sieht, und trägt ein, sobald der
+  neue Zähler gemeldet hat. Neue Daten-Checker-Befunde: „Zählerstände – Zählerstand springt“ (Knopf „Aus Home Assistant neu
+  übernehmen“), „Zählerstände – Zählerstand springt (MQTT)“ (Knopf „Zähler getauscht“), „Zählerstände – Gespeicherter
+  Monatswert passt nicht mehr“ (Knopf „Monat öffnen“) und die Auskunft „Zählerstände – Daten vor der Änderung gelöscht“
+  (sagt danach je Feld, was gilt). Der Hinweis nach einer geänderten Zuordnung („Verstanden“, „Zur Reparatur-Werkbank“)
+  entfällt; an seine Stelle tritt der Dialog. Ein Wechsel, den du vor diesem Update vorgenommen hast, bleibt, wie er ist.
+  Was in welchem Fall geschieht — in eedc, in Home Assistant und was du tun kannst —, steht im Handbuch Einstellungen
+  §7.7 „Was passiert, wenn …“.
+
+  **Was sich an bestehenden Zahlen ändern kann:** Der Tag und der Monat, an dem die Statistik eines Sensors in Home
+  Assistant beginnt, zählen deren erste Stunde jetzt mit — wie Home Assistant (ab dem Stand 0). Tagesansicht, Monatssicht,
+  „Aus HA laden“ und der Vorschlag im Monatsabschluss können für diesen Tag und Monat um diese erste Stunde höher sein als
+  bisher (Beispiel aus der Messung: Netzbezug 47,5 → 48,0 kWh). Der erste Tag eines neuen Zählers zeigt einen Sprung beim
+  ersten Wert wie Home Assistant; der Weg ist, den Wert in Home Assistant zu berichtigen („Summe anpassen“) und danach im
+  Daten-Checker „Aus Home Assistant neu übernehmen“. Die Auskunft „Tage mit Mengen aus den gespeicherten Stundenwerten“
+  („… Tage ohne Kanal-Deckung …“) kann einen Tag weniger nennen — der Tag, an dem eine Statistik beginnt, zählt nicht mehr dazu.
+  Am ersten Tag einer Statistik kann „Abweichung zu Home Assistant an einem Tag (PV)“ den Tag nennen, obwohl eedc und Home
+  Assistant dieselbe Zahl zeigen — der Vergleichswert der PV endet an diesem Tag um 23 Uhr, bei einer importierten Statistik
+  mit großem ersten Wert lässt er die erste Stunde aus; nichts zu tun, der Lösungsweg sagt es. Die Werte der ersten Stunde nach „Werte vor dem
+  Sensorbeginn verwerfen“ und der erste Tag einer Wallbox bleiben, wie sie bisher waren (ohne die erste Stunde). Gespeicherte Monatswerte und gespeicherte Tageswerte ändern sich nicht von selbst. Ein leerer Tag sagt
+  jetzt nur „Zähler zugeordnet, aber für diesen Tag liegen keine Zählerstände vor — eedc bildet für diesen Tag deshalb keinen
+  Tageswert.“ (bisher versprach der Satz ein Nachrechnen in der Reparatur-Werkbank). **MQTT:** springt der Zählerstand eines PV- oder Einspeise-Felds,
+  steht der Sprung jetzt in Tag und Monat (bisher zählte die ganze Stunde nicht, auch ihre echte Menge, und kein Befund nannte
+  sie); der Daten-Checker nennt ihn unter „Zählerstand springt (MQTT)“ mit dem Knopf „Zähler getauscht“ — wie schon am
+  Netzbezug. An einem Tag ohne Kanal-Deckung (Tageswerte aus den gespeicherten Stundenwerten) und für schon gespeicherte
+  Stunden bleibt es wie bisher.
+- **Menüwege von Home Assistant 2026.11** in Befunden, Lösungswegen, Handbüchern und Dialogen: „Einstellungen → Werkzeuge →
+  Statistik (in älteren Home-Assistant-Versionen: Entwicklerwerkzeuge → Statistik)“, „Summe anpassen“, „Zeitpunkt auswählen“,
+  „Neuer Wert“, „Anpassen“.
+- **Daten-Checker: gefahrene Kilometer, wenn Home Assistant die Summe neu beginnt.** Bei den gefahrenen Kilometern (Feld
+  „Gefahrene km“) zählen Tag und Tabelle die Zunahme des Kilometerstands, der Monatswert (Vorschlag im Monatsabschluss, „Aus HA laden“) die Summe der Statistik. Beginnt Home
+  Assistant die Summe mitten in der Reihe neu – meist nach einer Lücke in der Statistik –, während der Stand weiterläuft,
+  standen für denselben Monat zwei Zahlen, ohne dass ein Befund es sagte (gemessen: Tag 1 924 km, Mai 2 807 km in der
+  Tabelle, 902 km als Monatswert). Der Befund „Zählerstände – Zählerstand springt“ nennt jetzt den Tag mit beiden Tageszahlen
+  und den Weg: in Home Assistant „Summe anpassen“ an der genannten Stunde auf die Zunahme des Stands, danach „Aus Home
+  Assistant neu übernehmen“ — dann zählen Tag, Tabelle und Monatswert dieselbe Zahl; ein schon gespeicherter Monat ändert
+  sich erst, wenn du ihn neu übernimmst oder von Hand berichtigst.
+- **Reparatur-Werkbank: „Werte eines Felds vor einem Zeitpunkt verwerfen“.** Für **ein** Feld mit Zähler oder Stand
+  verwirfst du alle Werte vor einem frei gewählten Tag und einer vollen Stunde — als wäre seine Quelle erst ab dann
+  zugeordnet; angeboten wird jedes zugeordnete Feld, nicht nur nach einem Sensortausch. Weg ist nur dieses Feld vor dem
+  Zeitpunkt: seine Stunden im HA-Spiegel, seine Zählerstände (bei MQTT auch die gespeicherten Rohwerte), sein Wert in
+  den Stunden- und Tageswerten, auch in Monaten mit Monatsabschluss, und verzeichnete Sensorwechsel dieses Felds bis zur
+  ersten Stunde ab dem Zeitpunkt; danach bildet eedc die betroffenen Tage im Hintergrund neu. Wetter, Börsen- und
+  Kraftstoffpreise, Prognosen und die gespeicherten Monatswerte bleiben — die Vorschau nennt die Monate, bevor etwas
+  geändert wird, und sagt, dass es sich nicht rückgängig machen lässt. Den Tag des Zeitpunkts bildet eedc für alle Felder
+  neu — aus der Statistik von Home Assistant bzw. den gespeicherten Zählerständen, bei jeder Quelle und auch bei 00:00 Uhr;
+  Werte anderer Felder können sich an diesem Tag ändern (gemessen: an einer MQTT-Anlage ein zweites PV-Feld 7,8 → 7,2 kWh).
+  Ein Feld aus Home Assistant mit Tageswert (etwa Einspeisung) zeigt dort den ganzen Tag, wie Home Assistant ihn führt. An den
+  übrigen neu gebildeten Tagen ändert sich an den anderen Feldern nur, was dort auch „Tag neu aggregieren“ ändern würde. Die
+  Vorschau sagt beides. Wo ein Neuaufbau den Wert wieder aus der Statistik von Home Assistant
+  schriebe, lehnt die Vorschau ab und nennt die Tage. Anlass: die gefahrenen Kilometer vor dem richtigen Sensor — der
+  Lösungsweg des Befunds „Zählerstand springt“ („die Summe beginnt neu“) nennt die Operation als zweiten Weg (gemessen an
+  einer Kopie: Mai 2 807 → 902 km in der Tabelle wie im Monatswert, der Tag des Neubeginns 1 924 → 19 km, Befund weg).
+
+### Changed
+
+- **Stundenwerte bleiben dauerhaft.** Bis 4.3.1 löschte eedc jede Nacht die Stundenwerte des Energieprofils, die älter als
+  zwei Jahre waren — darunter Werte, die keine Quelle zurückgibt (Betriebsart, Leistungsverlauf, Stundenwerte aus MQTT,
+  Ladestand von Sensoren ohne Langzeitstatistik). Jetzt löscht eedc Stundenwerte nicht mehr von selbst; schon gelöschte
+  kommen nicht zurück. Die Zwischenspeicher der MQTT-Werte (31 bzw. 15 Tage) bleiben, wie sie sind.
+- **„aus Zählerständen gerechnet“ statt „geschätzt“.** Überschuss, Defizit und Direktverbrauch eines Tages, an dem die
+  Erfassung einige Stunden ausfiel, tragen in der Tagestabelle und unter der Bilanz in *Cockpit → Tag* jetzt ein
+  Rechner-Zeichen statt des Warndreiecks („aus Zählerständen gerechnet“ statt „geschätzt“), in der CSV-Spalte „Kennzeichen
+  Überschuss/Defizit/Direktverbrauch“ das Wort „aus Zählerständen gerechnet“ — eedc schätzt dort nichts, die Rechnung ist
+  dieselbe.
+  Ebenso sagt der Dialog „Zähler getauscht (gleiche Quelle)“ jetzt „eedc trägt den Tausch … ein“ statt „überbrückt“.
+
+- **Verworfene Werte bleiben verworfen.** Hast du mit „Werte vor dem Sensorbeginn verwerfen“ die Werte des alten Sensors
+  verworfen und ordnest dem Feld später wieder diesen Sensor zu (oder hatte das Feld ihn schon wieder), holt eedc seine
+  Werte vor dem Zeitpunkt nicht mehr aus Home Assistant zurück — bisher kamen sie in den HA-Spiegel zurück. Für „Werte eines
+  Felds vor einem Zeitpunkt verwerfen“ gilt das von Anfang an.
+- **Reparatur-Werkbank „Werte vor dem Sensorbeginn verwerfen“:** hebt verzeichnete Sensorwechsel des Felds bis zur ersten
+  Stunde ab dem gewählten Zeitpunkt mit auf — danach rechnet eedc für das Feld, als hätte es den Wechsel nicht gegeben. Ein
+  „Zähler getauscht“ in dieser ersten Stunde bleibt eingetragen; sein Sprung zählt weiter nicht als Menge.
+- **Auswertungen → Prognose: die Abweichung heißt überall „MAPE“** — die Kachel nannte die mittlere prozentuale
+  Abweichung oben „MAPE“, der Satz zur besten Quelle, die Kopfzeile „Korrektur ausgesetzt“ und der Hinweis am Ausreißer
+  dieselbe Zahl „MAE“. Jetzt steht überall „MAPE“ (Mittel der täglichen Abweichung in Prozent vom IST); die Zahlen
+  bleiben gleich. Das Handbuch Prognosen und die Berechnungs-Referenz sagen es ebenso.
+- **API: die Route `GET /api/energie-profil/{anlage_id}/wochenmuster` entfällt.** Die Oberfläche hat sie nie gerufen;
+  wer sie über die API genutzt hat, bekommt jetzt 404.
+
+### Fixed
+
+- **Wetter und Börsenpreis bleiben, wenn der Abruf beim Neu-Aggregieren nichts liefert.** Baute eedc einen Tag neu auf
+  („Tag neu aggregieren“, „Mehrere Tage neu aggregieren“, „Aus Home Assistant neu übernehmen“, Knöpfe im Daten-Checker,
+  nächtliche Läufe) und lieferte der Wetter- oder Börsenpreis-Dienst in dem Moment nichts
+  (kein Netz, Fehler, Begrenzung), standen danach Temperatur, Einstrahlung, Performance Ratio, Börsenpreis und negative
+  Preisstunden des Tages leer — den Börsenpreis füllte kein späterer Lauf wieder. Jetzt gilt je Stunde und Feld: liefert der Abruf
+  einen Wert, gewinnt er; liefert er nichts, bleibt der gespeicherte. Die Performance Ratio und die Einspeisung bei
+  negativem Preis rechnet eedc aus denselben Werten neu (gemessen: sechs Tage ohne Netz neu aufgebaut, alle Werte wie
+  vorher; mit Netz gewinnt der neue Abruf).
+- **Neu-Aggregieren behält Stunden mit Wetter und Börsenpreis.** Fand eedc beim Neuaufbau eines Tages („Tag neu
+  aggregieren“, „Aus Home Assistant neu übernehmen“, Werkbank, nächtliche Läufe) für eine Stunde keine Menge mehr (keinen
+  Leistungswert, keinen Zählerstand), verschwand ihre Zeile samt Temperatur, Einstrahlung, Wetter und Börsenpreis (gemessen
+  an einer Kopie: ein Tag mit 24 gespeicherten Stunden hatte danach 11). Jetzt bleibt die Stunde mit Wetter und Börsenpreis
+  stehen, dazu wie an jeder neu geschriebenen Stunde Betriebsart, Ladestand und Strompreis — liefert Home Assistant sie
+  nicht mehr (Sensoren ohne Langzeitstatistik), die gespeicherten Werte. Ihre Mengen sind leer. In die Tageswerte
+  (Stundenzahl, Wetter-Tageswerte, Kennzahlen) geht sie nicht ein; die Vorschau von „Tag neu aggregieren“ zählt sie als
+  gespeicherte Stunde. Stunden, die ein Neuaufbau bis 4.3.1 schon entfernt hat, kommen nicht zurück.
+- **Heimladung ohne PV-Ladezähler: die Stunde nach einem Erfassungs-Ausfall zählt im PV-/Netz-Anteil nicht mehr als eine
+  Stunde.** Stand die Erfassung einige Stunden still und trug die Stunde danach die Ladung aller dieser Stunden, rechnete
+  eedc den PV-/Netz-Anteil der Heimladung aus dieser einen Stunde, als wäre es eine — die Ladeblöcke taten das schon nicht.
+  Jetzt gilt an Tagen aus dem HA-Spiegel bzw. den eigenen Zählerständen und im fortgeschriebenen Monatsanteil dieselbe
+  Regel: der Anteil dieser Stunde ist nicht bestimmbar, die Ladung zählt weiter in jeder Summe.
+  Im Anteil des Tages fällt die Stunde heraus (trägt der Tag keine andere Ladestunde, bleibt er leer); in dem Anteil, den
+  eedc mit Home Assistant Stunde für Stunde für den Monat fortschreibt, zählt ihre Ladung zum Netz — wie bei jeder Stunde,
+  über die die Zähler nichts sagen. Eine Wallbox oder ein E-Auto mit eigenem PV-Ladezähler ist nicht betroffen. Gilt für
+  Tage und Stunden, die eedc ab jetzt bildet: ein gespeicherter Tag ändert sich mit „Tag neu aggregieren“; den
+  fortgeschriebenen Monatsanteil schreibt eedc nach dem Update einmal ab dem ersten erkannten Erfassungs-Ausfall neu
+  (gemessen an einer Anlage ohne PV-Ladezähler mit fortgeschriebenem Monatsanteil und 12-stündigem Ausfall: November-Anteil
+  85,1 % → 70,5 %). Gespeicherte Monatswerte ändern sich nicht; ein abgeschlossener Monat ohne eingetragene PV-/Netz-
+  Aufteilung der Heimladung, den die Zähler decken, zeigt danach den neu geschriebenen Anteil.
+- **Cockpit → Monat: Heimladung ohne PV-Ladezähler zählte ganz als Netz.** Deckten die Zähler den Monat nicht ganz (etwa
+  nach einem Ausfall von Home Assistant) und trug keine gespeicherte Schätzung den Monat, rechnete *Cockpit → Monat* die
+  Heimladung eines Autos ohne PV-Ladezähler vollständig als Netzladung, der PV-Anteil stand leer; die Monats-Fakten (und
+  damit derselbe Monat nach dem Abschluss) nahmen den Anteil aus den Tageswerten. Jetzt nimmt *Cockpit → Monat* denselben
+  Anteil (gemessen an einer Kopie ohne PV-Ladezähler und ohne Kanal-Deckung, November: PV leer / Netz 104,98 kWh → PV
+  89,30 / Netz 15,68 kWh, 85,1 %).
+- **Datei hochladen bei gesetzter PIN.** Mit Einstellungs-Sperre scheiterten das Hochladen einer Datei in der Infothek und
+  des Horizontprofils in der Solarprognose immer mit „Einstellungen sind gesperrt. Bitte mit der PIN entsperren.“ — auch
+  nach dem Entsperren. Der Upload trägt den Nachweis der Entsperrung jetzt mit wie jede andere Änderung.
+- **Zählerlücke ohne Home Assistant: die Menge steht in der ersten Stunde danach, wie in Home Assistant.** Fehlten einer
+  Anlage ohne Home-Assistant-Statistik (Standalone, MQTT) Zählerstände einige Stunden lang, verteilte eedc die Menge
+  zwischen dem letzten Stand davor und dem ersten danach gleichmäßig auf die Stunden dazwischen — Stundenwerte, die kein
+  Zähler gemeldet hat. Jetzt bleiben diese Stunden leer, und die erste Stunde danach trägt die ganze Menge (in
+  *Cockpit → Tag* „· enthält n h“); Überschuss, Defizit und Direktverbrauch des Tages sind für diese Stunden aus den
+  Zählerständen gerechnet – mit einem Speicher „—“ (nicht bestimmbar), bei einer Lücke ohne PV wie jede Stunde –, und der
+  Daten-Checker nennt den Tag unter „Stunden ohne Stundenwerte“, wenn die Lücke PV enthält. Dasselbe gilt für die Stunden der
+  Wärmepumpe im Wärme-Verlauf an jedem Tag ohne Kanal der Wärmepumpe – auch mit Home Assistant. Tag, Monat und Jahr bleiben gleich (gemessen: Lücke 08:00–13:00, PV 10,0 kWh in
+  der Stunde bis 13 Uhr statt 2,0 je Stunde, Tag 48,0 kWh vorher wie nachher). **Was sich an bestehenden Zahlen ändern
+  kann:** die Stunden eines Tages mit Lücke, sobald eedc den Tag neu bildet (laufender Tag, Reparatur-Werkbank); vorher
+  gespeicherte Tage behalten ihre Stunden. Der Wärme-Verlauf je Stunde zeigt die Regel sofort für alle Tage; den
+  Gesamtstrom nur, wenn seine Zählerstände denselben Tageswert ergeben wie gespeichert, sonst die gespeicherten Stunden.
+- **Wärmepumpe: Kompressor-Starts und Betriebsstunden je Stunde aus den Zählerständen.** eedc rechnete die Stunden
+  dieser Zähler auf den Tageswert um — an einem Tag mit Lücke lagen die fehlenden Starts dann in den ersten Stunden
+  des Tages statt nach der Lücke, und Starts zwischen 23 und 24 Uhr des Vortags verschwanden aus den Stunden (der Tageswert
+  zählt den Kalendertag, die Stunden reichen von 23 Uhr des Vortags bis 23 Uhr). Jetzt tragen die Stunden, was die Zähler
+  gemeldet haben; nach einer Lücke steht die Menge in der Stunde danach. Der Tageswert bleibt der Kalendertag wie in Home
+  Assistant, und *Cockpit → Tag* zeigt ihn jetzt in den Kacheln „Kompressor-Starts“ und „Betriebsstunden“ – wie Monat,
+  Wärmepumpen-Auswertung und die Sensoren an Home Assistant; bisher bildete die Kachel die Summe der Stunden und wich an Tagen
+  mit Starts zwischen 23 und 24 Uhr ab (gemessen: 5 Starts am Vortag zwischen 23 und 24 Uhr zeigte die Kachel bisher als
+  Starts des Tages, jetzt nicht mehr; 3 Starts am Tag zwischen 23 und 24 Uhr fehlten bisher, jetzt stehen sie dort). Vorher gespeicherte Tage behalten ihre Stunden, bis sie neu gebildet werden.
+- **Verbrauchsprognose: eine Lücke nur am Zähler der Wärmepumpe verzerrt das gelernte Wärmepumpen-Profil nicht mehr.**
+  Fehlten nur dem Stromzähler der Wärmepumpe einige Stunden (der Netz- und PV-Zähler liefen weiter), lernte das
+  Verbrauchsprofil die Menge der ganzen Lücke als Wert einer einzigen Stunde — der Wärmepumpen-Anteil der Prognose stieg in
+  dieser Stunde (gemessen: 1,87 statt 0,8 kWh bei drei Lerntagen). Jetzt zählt diese Stunde für die Wärmepumpe nicht als
+  Stichprobe, wie es für Netz und PV schon galt; der Hausverbrauch der Stunde lernt weiter, und Tag und Monat bleiben gleich.
+- **Energieprofil → Monat: Wallbox und Wärmepumpe zählen jeden Tag mit.** Kam der Tageswert eines Geräts an einigen
+  Tagen aus der Live-Leistung (ohne Zähler) und an anderen aus dem Zähler, rechnete die Monatssumme die Tage
+  gegeneinander — die Live-Tage stehen intern mit negativem Vorzeichen (gemessen: Wallbox im November 108,8 statt
+  214,84 kWh; die Kategorie Wärmepumpe im Oktober 46,72 statt 98,88 kWh, weil eine Wärmepumpe aus dem Zähler und eine aus der
+  Live-Leistung kam). Jetzt liest eedc Wallbox, E-Auto und Wärmepumpe an jedem Tag als Menge. **Was sich an bestehenden Zahlen
+  ändern kann:** die Monatssumme und der Anteil eines solchen Geräts in Monaten, in denen beide Sorten Tage vorkommen;
+  an Anlagen, deren Geräte immer aus dem Zähler kommen, ändert sich nichts.
+
+- **Monatsdaten: «Wert entfernen» an einem Feld, das das Gerät führt, nennt den wahren Weg.** Die Ablehnung sagte «bitte
+  dort leeren» und verwies auf den Monatsabschluss, der kein Leeren kennt; jetzt nennt sie *Einstellungen → Daten →
+  Monatsdaten*: am Monat den Stift wählen und den Wert überschreiben. Über die API antwortet ein Speichern mit leerem
+  Netzbezug oder leerer Einspeisung jetzt mit einer verständlichen Ablehnung statt eines Fehlers.
+- **Wärmepumpe: kein „kein Stromverbrauch erfasst“ mehr für einen Zeitraum ohne Warmwasserbereitung oder Heizbetrieb
+  (#446).** Hatte eine Wärmepumpe mit getrennten Strom- und Wärmezählern an einem Tag noch kein Warmwasser bereitet
+  (Strom und Wärme 0), stand im Kasten „Was noch möglich wäre“ bei diesem Gerät „Arbeitszahl Warmwasser — kein
+  Stromverbrauch erfasst“ mit dem Rat, einen Stromzähler zuzuordnen, obwohl beide Zähler zugeordnet sind. Dasselbe galt
+  für „Arbeitszahl Heizen“ in einem Monat ohne Heizbetrieb, im Jahr und auf der Komponentenseite, wenn das Gerät im
+  ganzen Zeitraum nicht geheizt hat. Jetzt sagt die Zeile des Geräts in *Cockpit → Tag*, *Monat* und *Jahr* und auf der
+  Komponentenseite wie die Anlage „keine Warmwasserbereitung in diesem Zeitraum“ bzw. „kein Heizbetrieb in diesem
+  Zeitraum“, und der Kasten führt dafür keine Zeile. Fehlt der Stromzähler der Funktion wirklich, bleibt der Hinweis mit
+  dem Handgriff. Die Zahlen ändern sich nicht.
+- **Komponenten → Sonstiges: ein Speicher zeigt seine Ladung und Entladung.** Für ein Gerät der Kategorie „Speicher“
+  zeigte die Komponentenseite Ladung und Entladung 0, keinen Wirkungsgrad, keine Ersparnis aus dem Speicher und im Verlauf
+  „Ladung / Entladung“ sowie im Jahresvergleich leere Balken, obwohl die Monatswerte gepflegt waren: sie las zwei alte
+  Feldnamen statt der Felder, die das Monatsformular schreibt („Verbrauch/Ladung“ und „Erzeugung/Entladung“). Jetzt liest
+  sie diese Felder — Monate mit den alten Namen zählen weiter. Die Monatsauswertungen waren nicht betroffen.
+- **Stillstand der Erfassung: die Energie mehrerer Stunden zählt nicht mehr als eine Stunde.** Fällt Home Assistant
+  (oder die MQTT-Erfassung) einige Stunden aus, trägt es die Zählerstände danach ohne Zuwachs nach und schreibt die ganze
+  Energie dieser Stunden in die erste Stunde danach. eedc erkennt diesen Stillstand jetzt an Tagen, deren Werte aus dem
+  HA-Spiegel bzw. den eigenen Zählerständen kommen: in *Cockpit → Tag* steht an der Stunde mit der nachgetragenen Energie
+  „· enthält n h“ und an den stillen Stunden „· in späterer Zeile“ (mit Erklärung im Tooltip, ebenso im Tagesverlauf);
+  Überschuss und Defizit dieser Stunden bleiben leer. Was Stunde gegen Stunde vergleicht, lässt diese Stunden aus: die
+  Spitzen, die Heatmap und das typische Tagesprofil in *Cockpit → Monat*, die Verbrauchsprognose (Tagesprognose und
+  HA-Sensoren), Grundlast, Verbrauchsprofil, Lernfaktor der PV-Prognose, Speicher-Potenzial und -Größe sowie der Ladepreis
+  aus dem Netz; der Tagesvergleich lässt jeden Tag aus, den ein Stillstand über Mitternacht berührt.
+  Die Zählermengen der Tage und Monate (Erzeugung, Einspeisung, Netzbezug, Verbrauch, Speicher) bleiben gleich.
+  **Überschuss, Defizit und Direktverbrauch des Tages** waren an solchen Tagen dagegen falsch
+  (die Mengen mehrerer Stunden wurden wie eine Stunde gegeneinander gerechnet — etwa Überschuss 0 bei 8 kWh Einspeisung):
+  für die Stunden ohne Stundenwerte rechnet eedc sie jetzt aus den Zählerständen. Die Zahl trägt in der Tagestabelle das
+  Zeichen „aus Zählerständen gerechnet“, darunter steht, für welche Stunden das gilt, mit dem Link „Im Daten-Checker nachlesen“; *Cockpit → Tag*
+  nennt es unter der Bilanz. Passen die nachgetragenen Mengen nicht zu denselben Stunden, steht „—“ mit dem Grund, und die
+  Summe des Zeitraums sagt, wie viele Tage sie enthält bzw. auslässt. Der Ladepreis aus dem Netz sagt an einem solchen Tag
+  „nicht bestimmbar (Erfassungslücke)“ statt „keine Netzladung“. Erkannt wird nur der Stillstand aller Zähler zugleich, ab zwei Stunden; wiederholt
+  er sich auffällig oft (mehr als fünf Mal in 60 Tagen) oder sind die Zähler grob aufgelöst, gilt er nicht als Ausfall.
+  Der neue Daten-Checker-Befund **„Stunden ohne Stundenwerte“** (Energieprofil – Plausibilität) nennt die Tage der letzten
+  90 Tage mit Stunden, Mengen je Zähler und wie Überschuss, Defizit und Direktverbrauch bestimmt sind, und — wenn die
+  Erfassung regelmäßig stehen bleibt — dies in einem Satz; „Was gilt“ erklärt die Vorbehalte der Zähler-Rechnung (Netzladung
+  in diesen Stunden, keine Verrechnung innerhalb der Stunde: Überschuss und Defizit höchstens zu hoch, Direktverbrauch
+  höchstens zu niedrig) und was eedc nicht erkennt. Ohne solchen Tag steht der Befund unter den bestandenen Prüfungen, damit
+  der Link aus der Tagestabelle auch für ältere Tage die Erklärung öffnet. Ging in diesen Stunden mehr ins Netz und in den
+  Speicher, als die PV erzeugt hat, nennt der Satz unter der Tabelle zusätzlich, wie viel der Speicher mindestens aus dem
+  Netz geladen hat; bei einem Ausfall über Mitternacht sagt er, dass die
+  Tage davor für diese Stunden nichts zeigen; der CSV-Export trägt für solche Tage eine Spalte „Kennzeichen“.
+- **Anlage bearbeiten: die Koordinaten aus der Adresse berücksichtigen die Straße.** Das Formular ermittelte Breiten-
+  und Längengrad nur aus PLZ und Ort — der Punkt lag damit in der Ortsmitte, je nach Gemeinde einige hundert Meter bis
+  Kilometer vom Haus entfernt. Jetzt geht die Straße mit wie im Einrichtungs-Assistenten, und auch das Verlassen des
+  Felds „Straße“ ermittelt die Koordinaten. Von Hand eingetragene oder schon gespeicherte Koordinaten überschreibt eedc
+  weiterhin nicht.
+- **Daten-Checker: zwei Knöpfe führen wieder zu einem Feld.** „Batterie-Ladung/-Entladung ist negativ“ sprang bei einer
+  Anlage mit Speicher zu Feldern, die das Monatsformular mit Speicher nicht zeigt — jetzt in die Zeile des Speichers.
+  Befunde zur PV-Erzeugung eines Monats sprangen bei PV-Modulen ohne eigenen Gesamtwert ins Leere, weil dort nur die
+  berechnete Summe steht — jetzt in die Zeile des ersten PV-Moduls.
+- **Home Assistant: nach dem Abschalten der Remote-Verbindung fragt eedc Home Assistant nicht weiter ab.** Wurde die
+  Verbindung zu einem entfernten Home Assistant abgeschaltet, behielt eedc Adresse und Zugang bis zum nächsten Neustart und
+  galt weiter als verbunden. Jetzt kehrt eedc sofort zur Verbindung beim Start zurück.
+- **Handbuch: „Gesamt“ in *Cockpit → Jahr* ist nicht geplant.** Das Handbuch sagte, eine Selektor-Stellung für die ganze
+  Laufzeit stehe auf der Roadmap; sie ist seit dem 3.11.2026 verworfen. Die volle Laufzeit zeigen Komponenten-Hub,
+  Jahresbericht („Gesamtzeitraum“), Auswertungen („Alle Jahre“) und die Kachel „CO₂ kumuliert“.
+- **Daten-Checker: Herkunft in Worten.** Hinweise nennen die Herkunft eines Werts jetzt „Monatsabschluss“,
+  „HA-Spiegel“, „Wiederherstellung“, „Demo-Daten“ oder „Altbestand“ statt der internen Kennung (etwa
+  „auto:monatsabschluss“).
+- **Daten-Checker „Leistung (kW) fehlt“ am Wechselrichter nur noch, wenn eedc wirklich keine Leistung kennt.** Haben
+  Einrichtungs-Assistent oder Import die Leistung in der Leistungsspalte des Geräts abgelegt, rechnet die Prognose
+  damit — der Befund meldete trotzdem „fehlt“.
+- **Texte:** Reparatur-Werkbank „der laufende Tag ist noch nicht abgeschlossen“ statt eines Fachworts; Lösungsweg
+  „Zählerstand ist gefallen“ sagt genau, wann eedc keine Differenz zeigt; Handbuch Wärme & Klima: „Alternative“ ist die
+  Heizung, die du stattdessen angeschafft hättest, nicht dein Altgerät.
+- **Wärmepumpe: die bisherige Ersparnis zählt die Zusatzkosten der Alt-Heizung je Gerät.** Die bisherige Ersparnis der
+  Wärmepumpen, aus der *Auswertungen → ROI* den Amortisations-Fortschritt und das voraussichtliche Jahr der Amortisation
+  rechnet, zählte die *Zusatzkosten Alt-Heizung (€/Jahr)* aller Wärmepumpen über alle Monate, in denen irgendeine von ihnen
+  lief: zwei Wärmepumpen nacheinander (die alte bis Juni, die neue ab Juli, je 600 €/Jahr) trugen 600 € zu viel. Ebenso
+  zählte ein Monat, in dem eine Wärmepumpe weder Strom noch Wärme hatte, ein Zwölftel. Jetzt zählt jede Wärmepumpe ihr
+  Zwölftel nur in ihren eigenen Monaten mit Wärme — dieselbe Zahl wie die Summe ihrer Monate unter *Komponenten →
+  Wärmepumpe* und im Cockpit. Bei mehreren Wärmepumpen oder Monaten ohne Betrieb kann die bisherige Ersparnis deshalb
+  kleiner werden und die Amortisation später kommen. Anschaffungs- und Stilllegungsmonat zählen weiter als volles
+  Zwölftel; weichen deine Kosten dort ab, trägst du die Abweichung als Ausgabe an der Wärmepumpe ein (Handbuch Wärme &
+  Klima, #447).
+- **Wärmepumpe: die Arbeitszahl eines Tages rechnet mit Wärme und Strom aus demselben Zeitraum.** Beginnt der Stromzähler
+  einer Wärmepumpe an einem Tag später als ihr Wärmezähler (etwa nach „Daten vor der Änderung löschen“ am Stromfeld oder am
+  Tag, an dem du ihn zuordnest), teilte *Cockpit → Tag* die Wärme des ganzen Tages durch den Strom ab dem ersten Zählerstand —
+  im gemessenen Beispiel 9,0 statt 6,0 (57,6 ÷ 6,4 kWh, Strom ab 08:00 Uhr). Jetzt zählt die Wärme nur in den Stunden, in
+  denen auch Strom gemessen ist (38,4 ÷ 6,4 = 6,0); die Kachel „Wärme“ zeigt weiter die Wärme des ganzen Tages, die Zeile
+  des Geräts unter „Zahlen je Gerät“ die Wärme, mit der die Arbeitszahl rechnet. Hat der Tag keine Stundenwerte, steht „—“
+  mit „Zähler messen verschiedene Zeiträume“ (vorher etwa 4,5 statt keiner Zahl). Monat und Jahr bleiben in dieser Lage wie
+  bisher — Handbuch Wärme & Klima nennt die Grenze.
+- **Wärmepumpe: ein Monat mit Wärme, aber ohne gemessenen Strom zählt keine Ersparnis.** Die bisherige Ersparnis in
+  *Aussichten → Finanzen* und *Auswertungen → ROI*, die Jahres-Ersparnis des HA-Exports und der Sensor „Ersparnis“ je
+  Wärmepumpe zählten für einen solchen Monat die Gas-Ersparnis und ein Zwölftel der Zusatzkosten der Alt-Heizung
+  (im Beispiel 109,10 € bei 400 kWh Wärme), die Gerätezeile unter *Komponenten → Wärmepumpe* und im Cockpit nicht. Ohne
+  Strom ist die Ersparnis nicht bestimmbar — jetzt zählt der Monat in keiner Sicht (0 €); der Sensor entsteht erst, wenn
+  ein Monat Wärme und Strom trägt. Das trifft auch eine Wärmepumpe, bei der nur „Strom Heizen“ und „Strom Warmwasser“
+  gepflegt sind, während „Getrennte Strommessung (Heizen / Warmwasser)“ aus ist: eedc zählt dann nur den Gesamtzähler,
+  der Sensor „WP Ersparnis“ fällt weg oder wird kleiner. Sind diese Felder in den Datenquellen zugeordnet, nennt der
+  Daten-Checker die Lage unter „Strom Heizen/Warmwasser zugeordnet, aber „Getrennte Strommessung“ ist aus“ (Knopf „Gerät
+  bearbeiten“). Fehlenden Wärmepumpen-Strom nennt er unter „Stromverbrauch fehlt in … Monat(en)“ — jetzt auch einen Monat,
+  in dem der Strom mit 0 kWh eingetragen ist, obwohl die Wärmepumpe Wärme abgegeben hat („… fehlt oder ist 0 kWh bei
+  erfasster Wärme …“, mit Knopf „Monat öffnen“); ein Monat ohne Strom und ohne Wärme und ein Monat nur mit Strom
+  (Bereitschaft) bleiben ohne Befund.
+- **USt auf den Eigenverbrauch (Regelbesteuerung): Anschaffung und Betriebskosten einer Komponente zählen nur über ihre
+  Monate.** Kam eine Komponente im Lauf des Jahres dazu oder wurde stillgelegt, zählten ihre Abschreibung und ihre
+  Betriebskosten über alle Monate der Anlage — im gemessenen Beispiel (PV ganzjährig, Speicher ab Juli) 80,94 € statt
+  68,97 € USt. Jetzt zählt jede Komponente nur über die Monate, in denen sie lief, wie schon die Betriebskosten des
+  Zeitraums. Netto-Ertrag, USt-Anteil des Monats und Jahresbericht können dadurch im Anschaffungs- oder Stilllegungsjahr
+  einer Komponente etwas höher ausfallen. Die Hochrechnung auf zwölf Monate (ROI, Aussichten-Prognose) bleibt, wie sie ist.
+- **Aussichten → Finanzen: eine stillgelegte Wärmepumpe trägt keine Zusatzkosten der Alt-Heizung mehr in die Zukunft.**
+  Die Prognose zählte die *Zusatzkosten Alt-Heizung (€/Jahr)* jeder Wärmepumpe je Prognosejahr als Ersparnis, auch einer
+  stillgelegten — im Beispiel (alte Wärmepumpe bis Juni 2025, neue ab Juli, je 600 €/Jahr) 1 507,85 € statt 907,85 €
+  WP-Ersparnis je Jahr; der Jahres-Netto-Ertrag lag um 600 € zu hoch, die Amortisation zu früh. Jetzt zählen nur die
+  Wärmepumpen, die heute in Betrieb sind — wie schon die Betriebskosten.
+- **Stundenlauf um 03:05 Uhr: kein „database is locked“ mehr durch das nächtliche Aufräumen.** Das tägliche Aufräumen
+  der MQTT-Live-Werte (Tagesverlauf) startete um 03:05 Uhr in derselben Sekunde wie der stündliche Lauf, der die
+  Zählerstände der vergangenen Stunde übernimmt. Traf es sich ungünstig, brach dieser Lauf an allen Anlagen mit
+  „database is locked“ ab: die Stunde ab 02:00 Uhr fehlte bis zum nächsten Lauf um 04:05 Uhr, und ein Sensorwechsel in
+  dieser Stunde wurde eine Stunde später angesetzt. Das Aufräumen läuft jetzt um 03:18 Uhr, in einer Minute, in der kein
+  anderer Job mit fester Uhrzeit startet.
+- **„Aus Home Assistant neu übernehmen“ und „HA-Spiegel jetzt abgleichen“: Wallbox und E-Auto zeigen danach sofort,
+  was Home Assistant führt.** Hattest du in Home Assistant eine Statistik berichtigt („Summe anpassen“) und danach einen
+  dieser Knöpfe gedrückt, zeigten Wallbox und E-Auto bis zum nächsten stündlichen Lauf an den Tagen ab der berichtigten
+  Stunde „—“ und im Monat nur einen Teil (gemessen: Monat 36,96 statt 72,6 kWh) — auch wenn die Berichtigung an der PV
+  oder am Netzzähler lag, denn aus deren Stunden rechnet eedc den PV-Anteil der Heimladung. eedc rechnet diesen Anteil
+  jetzt gleich nach dem Abgleich neu, Tag und Monat stimmen sofort. Dasselbe gilt jetzt nach „Zähler getauscht (gleiche
+  Quelle)“ an einem MQTT-Feld: Wallbox und E-Auto zeigten bis zum nächsten stündlichen Lauf an den Tagen ab dem Tausch „—“.
+- **Ein neu zugeordneter Sensor nimmt den Tagen vor seinem Beginn nicht mehr die Zahlen der übrigen Felder.** Ordnest du
+  einem Feld (etwa einem neuen PV-Modul, einem Speicher oder einem Netzzähler) einen Sensor zu, dessen Statistik in Home
+  Assistant erst später beginnt als die der übrigen, zeigten die Tage davor für die ganze Anlage „—“ — Erzeugung, Netz,
+  Monatssicht auch eines unberührten PV-Felds (gemessen: Erzeugung „—“ statt 62,4 kWh, Oktober des unberührten PV-Felds „—“
+  statt 75,0 kWh); unmittelbar nach der Zuordnung bis zum nächsten stündlichen Lauf sogar an allen Tagen. Das war schon in
+  v4.3.1 so. Jetzt gilt wie in Home Assistant: vor dem Beginn seiner Statistik (bei MQTT: vor seinem ersten Zählerstand)
+  hat das neue Feld keinen Wert, alle anderen Felder zählen weiter. Der Tag, an dem eine MQTT-Quelle beginnt, zählt ab ihrem
+  ersten Zählerstand. **Was sich an bestehenden Zahlen ändern kann:** Tage und Monate, die bisher aus den gespeicherten
+  Stundenwerten kamen, weil ein später begonnener Zähler fehlte, kommen jetzt aus den Kanälen — sie zeigen dann den
+  Kalendertag wie Home Assistant (Abweichungen meist in der zweiten Nachkommastelle; was zwischen 23 und 24 Uhr gemessen
+  wurde, steht jetzt an diesem Tag statt am Folgetag). Die Auskunft „… Tage ohne Kanal-Deckung …“ nennt entsprechend
+  weniger Tage.
+- **Daten-Checker „Ein Gerät weicht an Tagen von Home Assistant ab“: kein Befund mehr an fehlerfreien Tagen.** Lief eine
+  Wärmepumpe, Wallbox oder ein anderes Gerät zwischen 23 und 24 Uhr an zwei aufeinanderfolgenden Tagen deutlich verschieden
+  (oder begann seine Statistik an diesem Tag), nannte der Befund eine Abweichung, obwohl eedc und Home Assistant für den Tag
+  dieselbe Zahl zeigten (gemessen: Wärmepumpe „67,5 → 60,0 kWh“, Tagesansicht und Home Assistant 67,5) — „Aus Home Assistant
+  neu übernehmen“ änderte daran nichts. Der Grund: eedc zeigt an Tagen aus dem Home-Assistant-Spiegel den Kalendertag (0 bis
+  24 Uhr), der Vergleichswert reichte von 23 Uhr des Vortags bis 23 Uhr. Jetzt vergleicht der Daten-Checker an diesen Tagen mit
+  dem Kalendertag von Home Assistant, zusammengesetzt nur aus Stunden, die Home Assistant führt; an Tagen aus den gespeicherten
+  Werten bleibt der Vergleich, wie er war. Eine echte Abweichung (etwa nach „Summe anpassen“ in Home Assistant) bleibt ein Befund.
+  Fehlt in Home Assistant die Stunde 23–24 Uhr eines Geräts, wird es an den beiden Tagen um diese Stunde nicht verglichen — eedc
+  setzt keinen Wert dafür ein. An der PV ändert sich nichts (sie erzeugt nachts nichts). Angezeigte Zahlen ändern sich nicht.
+- **Zählerlücke an Wallbox, E-Auto, Wärmepumpe oder Sonstigem: Tag und Monat wie Home Assistant.** Hatte der Zähler eines
+  Geräts einen ganzen Tag lang keinen Wert in Home Assistant (bzw. keinen MQTT-Zählerstand), las eedc für dieses Gerät die
+  Tage der Lücke aus den gespeicherten Werten — mit „—“ am Tag in der Lücke und, an der Grenze zum nächsten Tag, mit einer
+  Stunde 23–24 Uhr zu wenig oder doppelt (gemessen an einer echten Anlage: eine Wallbox im März 2025 3,47 kWh unter Home
+  Assistant). Jetzt zählt der Tag wie in Home Assistant und wie schon bei PV, Netz und Speicher: der Tag in der Lücke zeigt 0,
+  die Menge der Lücke steht am ersten Tag danach; Tag und Monat sind gleich Home Assistant (an der echten Anlage stimmen
+  alle 91 geänderten Tage und Monate mit Home Assistant überein, der März 2025 wieder 188,12 kWh). **Was sich an bestehenden
+  Zahlen ändern kann:** Tage in einer solchen Lücke zeigen 0 statt „—“; ein E-Auto, dessen Statistik erst später beginnt, zeigt
+  an diesen Tagen „—“ statt 0 — wie Home Assistant vor dem Beginn seiner Statistik. Was bleibt: grenzt ein Tag,
+  den eedc für ein Gerät aus den gespeicherten Werten liest (etwa vor dem ersten Zählerstand oder nach dem letzten), an einen
+  Tag aus den Kanälen, kann die Stunde 23–24 Uhr an dieser Grenze fehlen oder doppelt zählen.
+- **Ein Feld über MQTT neben Feldern aus Home Assistant zählt wieder mit.** Kam bei einer Anlage mit Home-Assistant-Feldern
+  ein Feld allein über MQTT — etwa der Netzbezug nach „Bisherige Werte bleiben“ beim Wechsel von Home Assistant zu MQTT,
+  oder die Ladung einer Wallbox über MQTT —, zeigten die Tageswerte dieses Feld an allen Tagen „—“ und der Monat 0 bzw. gar
+  nichts (gemessen: Netzbezug Monat 0,0 statt 71,33 kWh; Kosten und Autarkie des Monats rechneten mit 0). Das betraf auch
+  v4.3.1. Jetzt liest eedc jedes Feld aus der Quelle, der es zugeordnet ist — an Tagen mit Stundenwerten und an Tagen ohne
+  Stundenwerte, sobald eedc einen solchen Tag bildet (das MQTT-Feld aus seinen gespeicherten Zählerständen; ohne
+  Zählerstand an diesem Tag oder ohne einen Stand davor „—“; liegt der letzte Stand davor an einem früheren Tag, zählt die
+  Menge seither an diesem Tag, wie Home Assistant). **Was sich an bestehenden Zahlen ändern kann:** ein Tag ohne Stundenwerte, den eedc neu bildet
+  (laufender Tag, Reparatur-Werkbank), zeigt das MQTT-Feld (gemessen: Netzbezug „—“ → 11,5 bis 12,0 kWh je Tag, Monat 0,0 → 35,5 kWh);
+  vorher gespeicherte Tage bleiben, bis sie neu gebildet werden.
+- **Daten-Checker: eine Statistik, die mit einem großen Stand beginnt, nennt „Zählerstand springt“.** Beginnt die
+  Statistik eines Sensors in Home Assistant nicht bei 0, sondern mit einem großen Stand (etwa nach einem Import), zählen
+  Home Assistant und eedc diesen Stand als Menge der ersten Stunde — im gemessenen Beispiel 5 004,66 kWh Ladung an einem
+  Tag einer Wallbox. Bisher nannte das an einer Wallbox oder Wärmepumpe kein Befund, an einem PV-Feld nur „Abweichung zu
+  Home Assistant an einem Tag (PV)“. Jetzt nennt „Zählerstände – Zählerstand springt“ die Stunde an jedem Feld („die
+  Statistik beginnt mit diesem Stand statt bei 0“), sobald der Wert größer ist, als eine Anlage in einer Stunde erzeugen
+  oder verbrauchen kann, mit dem Weg in Home Assistant („Summe anpassen“) und dem Knopf „Aus Home Assistant neu
+  übernehmen“. Die Zahl selbst ändert eedc nicht — sie ist, was Home Assistant führt.
+- **Texte.** Die Vorschau der Reparatur-Werkbank „Werte vor dem Sensorbeginn verwerfen“ sagt „1 Tag“ statt „1 Tage“ bzw.
+  „Tag(e)“ (ebenso Stundenzeilen, Tageszeilen, Monate). „Zählerstände – Rücksprung“ nennt neben dem Feld,
+  das „heute“ meint, auch den einzelnen Rückgang (neuer Zähler, vorübergehend falscher Stand der Quelle) und den Weg
+  „Zähler getauscht (gleiche Quelle)“. Im Kasten „Was noch möglich wäre“ in *Cockpit → Tag* steht zu „Zähler messen
+  verschiedene Zeiträume“ kein Rat zum Monatsabschluss mehr (den gibt es im Tag nicht), und zu „für diesen Tag keine
+  Zählerstände“ an einem Tag vor dem ersten Wert eines gelöschten Wärmepumpen-Zählers („Daten vor der Änderung löschen“)
+  nicht mehr „Den Tag in der Reparatur-Werkbank nachrechnen“ — dort gibt es nichts nachzurechnen.
 
 ## [4.3.1] - 2026-11-15
 
