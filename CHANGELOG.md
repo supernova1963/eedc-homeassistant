@@ -7,7 +7,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.3.2] - 2026-11-24
+
+Wechselst du die Quelle eines Felds, fragt eedc jetzt, was mit den bisherigen Werten geschieht. In der Reparatur-Werkbank kannst du die Werte eines Felds vor einem Zeitpunkt verwerfen. Zählerlücken zeigt eedc wie Home Assistant: Die Menge steht in der ersten Stunde danach, nichts wird verteilt. Wetter, Börsenpreis und Stundenwerte bleiben beim Neu-Aggregieren und dauerhaft gespeichert. Dazu Korrekturen an Heimladung, Wärmepumpe, Daten-Checker und am Datei-Upload bei gesetzter PIN.
 
 ### Added
 

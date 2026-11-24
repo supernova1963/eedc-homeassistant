@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** November 2026 (v4.3.1)
+> **Stand:** November 2026 (v4.3.2)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,7 +9,7 @@
 
 ---
 
-## Unveröffentlicht
+## v4.3.2 — 24. November 2026
 
 **Reparatur-Werkbank: Werte eines Felds vor einem Zeitpunkt verwerfen.** Für **ein** Feld mit Zähler oder Stand verwirfst du alle Werte vor einem Tag und einer vollen Stunde, die du wählst – als wäre die Quelle erst ab dann zugeordnet; etwa die gefahrenen Kilometer vor dem richtigen Sensor. Weg ist nur dieses Feld vor dem Zeitpunkt (HA-Spiegel, Zählerstände, Stunden- und Tageswerte, auch in Monaten mit Abschluss, und seine verzeichneten Sensorwechsel bis dahin); die gespeicherten Werte jedes anderen Felds, Wetter, Preise und die gespeicherten Monatswerte bleiben – am Tag des Zeitpunkts selbst kann sich bei einem Feld aus Home Assistant mit Tageswert auch die Anzeige der übrigen Felder ändern, die Vorschau sagt es. Die Vorschau nennt vorher, was gelöscht wird, was bleibt und welche Monate gespeichert sind – rückgängig machen lässt es sich nicht. Der Lösungsweg „Zählerstand springt“ („die Summe beginnt neu“) nennt sie als zweiten Weg. [Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)
 
