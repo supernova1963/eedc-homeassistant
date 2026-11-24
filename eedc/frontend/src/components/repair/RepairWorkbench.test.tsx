@@ -188,11 +188,12 @@ const auswahlAlle = (): KanalAuswahlEintrag[] => [
 ]
 
 // Wortlaute der Vorschau wörtlich aus der Messung an der Produktiv-Kopie (`services/verwerfen_vor_zeitpunkt.klartext`,
-// `golden-master/funde-h-2026-11-23/aus/t2-prod-km.json`) — vom Backend, der Client zeigt sie nur.
+// `golden-master/funde-h-2026-11-23/aus/t2-prod-km.json`, Teil 3: `teil3/op-km-0600-h1.json`) — vom Backend, der Client zeigt sie nur.
 const SAETZE_ZEIT = [
   'Verworfen werden die Werte von «Smart #1 · Gefahrene km» (inv:1:km_gefahren) vor 10.05.2025 06:00. Danach verhält sich das Feld, als wäre seine Quelle erst ab diesem Zeitpunkt zugeordnet.',
   'Gelöscht werden nur Daten dieses Felds vor dem Zeitpunkt: 2.536 Stundenzeilen des Kanals (31.10.2024 … 17.02.2025); 2.536 Zählerstände.',
-  'Gespeichert bleiben: die Werte jedes anderen Felds, Wetter, Börsen- und Kraftstoffpreise, Prognosen und die gespeicherten Monatswerte.',
+  'Den Tag des Zeitpunkts (10.05.2025) bildet eedc für alle Felder neu — aus der Statistik von Home Assistant bzw. den gespeicherten Zählerständen; Werte anderer Felder können sich an diesem Tag ändern.',
+  'Gespeichert bleiben: Wetter, Börsen- und Kraftstoffpreise, Prognosen und die gespeicherten Monatswerte. An den übrigen neu gebildeten Tagen ändert der Neu-Aufbau an den anderen Feldern nur, was dort auch «Tag neu aggregieren» ändern würde.',
   'Für 10/2024 bis 05/2025 sind Monatswerte gespeichert. Sie bleiben, wie sie sind.',
   'Soll ein Monat zu den verbliebenen Werten passen, ändere ihn unter Einstellungen → «Daten» → «Monatsdaten» von Hand.',
   'Home Assistant behält seine Statistik. eedc holt die Zeit vor dem Zeitpunkt für dieses Feld nicht wieder — auch nicht mit «Aus Home Assistant neu übernehmen» oder «Tag neu aggregieren».',
@@ -206,7 +207,7 @@ const planAntwortZeit = (): PlanResponse => ({
     plan_id: 'p2', anlage_id: 7, operation: 'verwerfen_vor_zeitpunkt',
     operation_params: { kanal: 'inv:1:km_gefahren', zeitpunkt: '2025-05-10T06:00' },
     created_at: '2026-11-23T10:00:00Z', expires_at: '2026-11-23T11:00:00Z',
-    estimated_changes: { kanalzeilen: 2536, zaehlerstaende: 2536, mqtt_rohwerte: 0, bestand_tage: 1, monate_gespeichert: 8 },
+    estimated_changes: { kanalzeilen: 2536, zaehlerstaende: 2536, mqtt_rohwerte: 0, tage_mit_werten: 110, monate_gespeichert: 8 },
     diff_preview: [], diff_total_count: 0,
     warnings: SAETZE_ZEIT,
     operation_preview: {},
@@ -340,7 +341,41 @@ describe('RepairWorkbench — Chips von „Werte eines Felds vor einem Zeitpunkt
     const banner = await screen.findByText(/Werte eines Felds vor einem Zeitpunkt verwerfen ausgeführt:/)
     expect(banner.textContent).toContain('2536 Zählerstände gelöscht')
     expect(banner.textContent).toContain('1 Quelle geteilt')
-    expect(banner.textContent).toContain('1 Tage werden neu gebildet')
+    expect(banner.textContent).toContain('1 Tag wird neu gebildet')
+    expect(banner.textContent).toContain('0 Audit-Log-Einträge')
     for (const k of Object.keys(ERGEBNIS_ZEIT)) expect(banner.textContent).not.toContain(k)
+  })
+
+  // Lab-Probe rc49 (24.11.2026): «1 Zählerstände vor dem Zeitpunkt», «1 Quellen markiert», «1 Tage werden neu gebildet»,
+  // «0 Audit-Log-Eintrage». Beim Zähler 1 steht die Einzahl, sonst die Mehrzahl.
+  it('Einzahl beim Zähler 1, Mehrzahl sonst — in Vorschau und Banner', async () => {
+    kanalAuswahl.mockResolvedValue({ kanaele: auswahlAlle() })
+    const antwort = planAntwortZeit()
+    antwort.plan.estimated_changes = { kanalzeilen: 2, zaehlerstaende: 1, mqtt_rohwerte: 18, tage_mit_werten: 1,
+      monate_gespeichert: 1 }
+    planFn.mockResolvedValue(antwort)
+    executeFn.mockResolvedValue({
+      plan_id: 'p3', anlage_id: 7, operation: 'verwerfen_vor_zeitpunkt', executed_at: '2026-11-24T03:55:00Z',
+      actual_changes: { ...ERGEBNIS_ZEIT, kanalzeilen_geloescht: 2, zaehlerstaende_geloescht: 1, mqtt_rohwerte_geloescht: 18 },
+      audit_log_ids: [5], operation_summary: {},
+    })
+    renderMitProvidern(<RepairWorkbench anlageId={7} />)
+    waehleVerwerfenZeit()
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Feld' }), { target: { value: 'inv:1:km_gefahren' } })
+    fireEvent.click(screen.getByRole('button', { name: /Plan erstellen/ }))
+    expect(await screen.findByText('Zählerstand vor dem Zeitpunkt')).toBeInTheDocument()
+    expect(screen.getByText('Kanalzeilen vor dem Zeitpunkt')).toBeInTheDocument()
+    expect(screen.getByText('Tag mit Werten des Feldes')).toBeInTheDocument()
+    expect(screen.getByText('Monat mit gespeichertem Monatswert (bleibt)')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Operation ausführen/ }))
+    const banner = await screen.findByText(/Werte eines Felds vor einem Zeitpunkt verwerfen ausgeführt:/)
+    for (const teil of ['2 Kanalzeilen gelöscht', '1 Quelle markiert', '1 Quelle geteilt', '1 Zählerstand gelöscht',
+      '18 MQTT-Rohwerte gelöscht', '0 Sensorwechsel aufgehoben', '0 abgeleitete Stundenwerte neu zu bilden',
+      '0 Stundenzeilen geleert', '0 Tageszeilen geleert', '0 Werte geleert', '1 Tag wird neu gebildet',
+      '1 Audit-Log-Eintrag.']) {
+      expect(banner.textContent).toContain(teil)
+    }
+    expect(banner.textContent).not.toMatch(/\b1 (Zählerstände|Quellen|Tage)\b|Eintrage/)
   })
 })

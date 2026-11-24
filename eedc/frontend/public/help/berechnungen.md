@@ -5771,7 +5771,8 @@ löschen(Feld, T = Zeitpunkt der Änderung)              (services/feld_loeschen
   Wechsel-Zeilen = alle des Schlüssels weg (es wird nichts verzeichnet)
   Bestand        = Feld-Schlüssel in Stunden- und Tageszeilen bis zum Bestandstag von T, in ALLEN Monaten (leere_bestand)
   abgeleitet     = abhängige abgeleitete Kanäle (PV-Anteil Heimladung, Strom je Betriebsart, Kosten) ab der ersten gelöschten Zeile
-  bleibt         = jedes andere Feld; gespeicherte Monatswerte (Monatsabschluss/Handeingabe)
+  bleibt         = jedes andere Feld (an den neu gebildeten Tagen ändert der Neu-Aufbau, was auch «Tag neu aggregieren» dort
+                   ändert); gespeicherte Monatswerte (Monatsabschluss/Handeingabe)
 Lauf (Art loeschen, korrektur_lauf) = mit HA: Nachfüllen der Geschichte des neuen Sensors (das Nachfüllen übergeht nur den
                    Platzhalter, nachfuellen._erste_ohne_platzhalter; HA nicht erreichbar ⇒ der Lauf bleibt offen, der
                    Stundenlauf holt es nach) → abgeleitete Kanäle neu → Tage neu bilden (Tageszeile trug das Feld, Tag von T)
@@ -5779,7 +5780,11 @@ Lauf (Art loeschen, korrektur_lauf) = mit HA: Nachfüllen der Geschichte des neu
 
 Danach verhält sich das Feld, als wäre der neue Sensor von Anfang an zugeordnet: was Home Assistant für ihn führt, zählt eedc
 wie Home Assistant (Regel «Anfangsstand 0», Abschnitt 1); davor zeigt das Feld «—»; die übrigen Felder behalten an jedem Tag ihre
-Kanal-Deckung (der Platzhalter macht das Feld dort bewusst leer, `bilanz_adapter.BewusstLeer`). Reicht die Geschichte des neuen
+Kanal-Deckung (der Platzhalter macht das Feld dort bewusst leer, `bilanz_adapter.BewusstLeer`) — auch am Tag der Änderung
+(gemessen 24.11.2026 mit der Saat `sensorwechsel-saat/mess-loeschen`, Änderung 18.11. 10:20 an einem PV-Feld, neuer Sensor mit
+HA-Statistik ab 08:00 bzw. mit sechs Wochen Geschichte: 18.11. bleibt Kanal-Tag, Kontroll-PV 48,0 und Wallbox 31,68 kWh wie
+vorher). Die neu gebildeten Tage (`korrektur_lauf._ein_tag`, derselbe Neu-Aufbau wie «Tag neu aggregieren») ändern an den übrigen
+Feldern, was «Tag neu aggregieren» dort ändert; der Dialog sagt es (`feld_loeschen.SATZ_NUR_DIESES`). Reicht die Geschichte des neuen
 Sensors weiter zurück als die gelöschten Daten, rückt der Platzhalter vor seine erste Zeile. MQTT: der Kanal beginnt mit dem
 ersten gespeicherten Stand der neuen Quelle (wie jede neue MQTT-Zuordnung). Nicht rücknehmbar. Der Dialog nennt die Monate mit
 gespeichertem Monatswert vom ersten eigenen Wert bis zur Änderung (benannte Grenze: eedc sieht den Monat, nicht ob er dieses Feld
@@ -5800,9 +5805,9 @@ Quelle teilen    = kanal/verwerfen.teile_quelle: die bei t geltende kanal_quelle
 weg (vor t)      = feld_loeschen.loesche_vor(teilen=True, auch_abschluss=True) — dieselben Teile wie die Lösch-Antwort:
                    Kanalzeilen · Zählerstände und MQTT-Rohstände des Schlüssels · der Feld-Schlüssel in Stunden- und
                    Tageszeilen bis zum Bestandstag von t in ALLEN Monaten · abgeleitete Kanäle des Felds · Wechsel bis t + 1 h
-bleibt           = die gespeicherten Werte jedes anderen Felds · Wetter, Preise, Prognosen · gespeicherte Monatswerte (die
-                   Vorschau nennt die Monate) ·
-                   die Nachfüll-Marke des Kanals
+bleibt           = Wetter, Preise, Prognosen · gespeicherte Monatswerte (die Vorschau nennt die Monate) · die Nachfüll-Marke
+                   des Kanals · die Werte jedes anderen Felds außer am Tag von t (s. u.) und außer dem, was der Neu-Aufbau
+                   der übrigen Tage ändert (wie «Tag neu aggregieren»)
 Lauf             = korrektur_lauf, Art loeschen, OHNE Nachfüllen aus HA: abgeleitete Kanäle neu → betroffene Tage neu
                    (Wetter und Preise wie vorher, korrektur_lauf._ein_tag)
 ```
@@ -5818,11 +5823,25 @@ Tageszeilen). Die gespeicherten Zählerstände (`sensor_snapshots`) sind davon a
 Ziehen schreibt für einen Tag vor `t` wieder Stände des zugeordneten Sensors (`snapshot/writer` liest die Zuordnung, nicht die
 Marke der Kanal-Quelle) — gemessen 0 → 50 Stände an zwei Tagen, keine Zahl einer Sicht ändert sich.
 
-**Tag von `t` (benannte Grenze, die Vorschau sagt es):** ein Feld aus Home Assistant mit Tageswert (Feld mit Schlüssel in der
-Tageszeile, `ziele.tz_keys`) zeigt am Kalendertag von `t` den ganzen Tag, wie Home Assistant ihn führt — der Tag verliert mit der
-Zeile vor `t` seine Kanal-Deckung, der Neuaufbau schreibt den Tageswert aus der HA-Statistik; die übrigen Felder dieses Tages
-liest eedc dann aus den gespeicherten Tageswerten, sie können sich an diesem Tag ändern (gemessen: Wallbox 0,0 → «—» nach
-Verwerfen der Einspeisung; `SATZ_TAG_VON_T`; bei `t` = 00:00 kein Satz). Bei MQTT und bei Stand-Feldern ohne Tageswert zählt der Tag ab `t`. **Nicht freigegeben** (die Vorschau lehnt mit
+**Tag von `t` (benannte Grenze, Entscheid Gernot 24.11.2026 «Weg 1»: das Verhalten bleibt, die Vorschau sagt es für jede
+Quelle):** der Kalendertag von `t` verliert mit der Zeile vor `t` seine Kanal-Deckung — bei jeder Quelle (HA, MQTT), jedem Feld
+und auch bei `t` = 00:00 (dann fehlt der Anker, die Zeile 23:00 des Vortags) — und wird für **alle** Felder aus dem Bestand neu
+gebildet (Statistik von Home Assistant bzw. gespeicherte Zählerstände; `korrektur_lauf._ein_tag`). Werte anderer Felder können
+sich an diesem Tag ändern. Gemessen: Produktiv-Kopie, `basis:einspeisung`, `t` = 10.05.2025 00:00 und 06:00 gleich — 10.05.
+Netzbezug 0,139 → 0,138, Speicher-Ladung 9,651 → 9,183 kWh, Wallbox 0,0 → «—»; der Vortag 09.05. bleibt (Netzbezug 0,13,
+Wallbox 0,0). Lab-Anlage 9 (MQTT), `inv:69`, `t` = 22.11.2026 12:00: `inv:68` 7,8 → 7,2 kWh, Erzeugung 12,48 → 11,16 kWh — dazu
+die **Tagesnaht**: der neu gebildete Bestandstag 22.11. hat das Fenster [Vortag 23:00, 23:00), der Kanal-Tag 23.11. beginnt um
+00:00; die Stunde 23–24 Uhr des 22.11. (0,96 kWh) steht danach in keinem der beiden Tage. Lab-Anlage 6 (HA), Gaszähler
+`inv:53:zaehlerstand` (ohne Tageswert), `t` = 10.10.2026 12:00: Erzeugung des Tages 316,8 → 737,28 kWh. Ein Feld aus Home
+Assistant mit Tageswert (`ziele.tz_keys`) zeigt am Tag von `t` den ganzen Tag, wie Home Assistant ihn führt (bei `t` ≠ 00:00
+auch die Stunden vor `t`); bei MQTT und bei Stand-Feldern ohne Tageswert zählt das Feld ab `t`. Bei `t` = 23:00 ist der
+Bestandstag von `t` der Folgetag; den Kalendertag bildet der Lauf dann nur, wenn seine Tageszeile das Feld trägt — sonst entfällt
+der Satz (`LageZ.tag_neu`). Die Vorschau: `SATZ_TAG` (jede Quelle), `SATZ_TAG_VON_T` (Zusatz HA mit Tageswert, `t` ≠ 00:00).
+**Die übrigen neu gebildeten Tage** (vor `t`, deren Tageszeile das Feld trug) behalten ihre Kanal-Deckung; ihr Neu-Aufbau ändert
+an den anderen Feldern, was «Tag neu aggregieren» dort ändert — gemessen an der Produktiv-Kopie (192 Tage): 01.11.2024 Wallbox
+0,0 → «—» (Tag ohne E-Mob-Kanal-Deckung), Speicher-Wirkungsgrad an 8 Tagen 02.–09.11.2024 (etwa 03.11. 42,0 → 87,6 %),
+Performance Ratio an 28 Tagen um 0,001 … 0,005; «Tag neu aggregieren» allein am 01.11. und 03.11.2024 ändert dasselbe
+(`golden-master/funde-h-2026-11-23/teil3/`). `SATZ_BLEIBT` sagt es. **Nicht freigegeben** (die Vorschau lehnt mit
 `SATZ_NICHT_FREI` ab und nennt die Tage): ein Feld aus Home Assistant, dessen Wert der Neuaufbau eines Tages vor `t` wieder aus
 der HA-Statistik in Stunden- und Tageszeilen schriebe (`_ha_bestandstage` über `mengen_weiche` — Tage ohne Kanal-Deckung der
 Gruppe; der Strom von Wärmepumpe und Sonstiges, deren Tages-Schlüssel nur am Tageswert des Kanals leer werden). Leistungssensoren (W) bietet

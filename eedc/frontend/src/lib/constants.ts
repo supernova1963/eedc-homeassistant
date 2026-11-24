@@ -280,12 +280,14 @@ export const REPARATUR_AENDERUNG_LABELS: Record<string, string> = {
   // Fund-Päckchen H: „Werte eines Felds vor einem Zeitpunkt verwerfen" (Vorschau · Ergebnis, `services/verwerfen_vor_zeitpunkt.py`)
   zaehlerstaende: 'Zählerstände vor dem Zeitpunkt',
   mqtt_rohwerte: 'MQTT-Rohwerte vor dem Zeitpunkt',
+  // Teil 3 (4c): Tage mit Kanalzeilen vor dem Zeitpunkt oder gespeichertem Wert des Felds (`verwerfen_vor_zeitpunkt.geschaetzt`)
+  tage_mit_werten: 'Tage mit Werten des Feldes',
   monate_gespeichert: 'Monate mit gespeichertem Monatswert (bleiben)',
   zaehlerstaende_geloescht: 'Zählerstände gelöscht',
   mqtt_rohwerte_geloescht: 'MQTT-Rohwerte gelöscht',
   wechsel_geloescht: 'Sensorwechsel aufgehoben',
   abgeleitet_verworfen: 'abgeleitete Stundenwerte neu zu bilden',
-  quelle_geteilt: 'Quelle geteilt',
+  quelle_geteilt: 'Quellen geteilt',
   tage_neu: 'Tage werden neu gebildet',
   // E3 Daten-Checker: Vorschau-Zähler der Aktionen (eine Zeile im Vorschau-Kasten; Wächter W-4 —
   // keine Mechanik-Wörter, `backend/tests/test_daten_checker_texte.py`).
@@ -303,6 +305,27 @@ export const REPARATUR_AENDERUNG_LABELS: Record<string, string> = {
   spiegel_kanaele: 'Zähler aus Home Assistant',
   spiegel_abschnitte: 'Zeitabschnitte',
   tage_neu_aufgebaut: 'Tag neu aufgebaut',
+}
+
+/** Einzahl zu `REPARATUR_AENDERUNG_LABELS` für den Zähler 1 (Regel 0a, `lib/plural.ts`) — nur wo sie sich von der
+ *  Mehrzahl unterscheidet; ohne Eintrag gilt die Bezeichnung oben. Lab-Probe rc49 (24.11.2026): «1 Zählerstände»,
+ *  «1 Quellen markiert», «1 Tage werden neu gebildet» an der Werkbank «Werte eines Felds vor einem Zeitpunkt verwerfen». */
+export const REPARATUR_AENDERUNG_LABELS_EINZAHL: Record<string, string> = {
+  kanalzeilen: 'Kanalzeile vor dem Zeitpunkt',
+  tage_mit_werten: 'Tag mit Werten des Feldes',
+  kanalzeilen_geloescht: 'Kanalzeile gelöscht',
+  quellen_markiert: 'Quelle markiert',
+  stundenzeilen_geleert: 'Stundenzeile geleert',
+  tageszeilen_geleert: 'Tageszeile geleert',
+  felder_geleert: 'Wert geleert',
+  zaehlerstaende: 'Zählerstand vor dem Zeitpunkt',
+  mqtt_rohwerte: 'MQTT-Rohwert vor dem Zeitpunkt',
+  monate_gespeichert: 'Monat mit gespeichertem Monatswert (bleibt)',
+  zaehlerstaende_geloescht: 'Zählerstand gelöscht',
+  mqtt_rohwerte_geloescht: 'MQTT-Rohwert gelöscht',
+  abgeleitet_verworfen: 'abgeleiteter Stundenwert neu zu bilden',
+  quelle_geteilt: 'Quelle geteilt',
+  tage_neu: 'Tag wird neu gebildet',
 }
 
 export const WIRKUNGSGRAD_QUELLE_LABELS: Record<string, string> = {

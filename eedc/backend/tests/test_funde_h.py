@@ -122,7 +122,8 @@ async def test_h1_operation_ueber_den_orchestrator_stand_feld(ha, datei, monkeyp
         p = await plan(req, s)
     assert p.warnings[0].startswith("Verworfen werden die Werte von «Gas")
     assert p.warnings[-1] == "Das lässt sich nicht rückgängig machen."
-    assert any(x.startswith("Gespeichert bleiben: die Werte jedes anderen Felds, Wetter") for x in p.warnings)
+    assert any(x.startswith("Gespeichert bleiben: Wetter, Börsen- und Kraftstoffpreise") for x in p.warnings)
+    assert any(x.startswith("Den Tag des Zeitpunkts (") for x in p.warnings)       # Teil 3: jede Quelle, auch ein Stand-Feld
     async with sitzungen() as s:
         res = await execute(p.plan_id, s)
     summary = res.operation_summary
@@ -255,24 +256,64 @@ async def test_t1_stunde_ohne_menge_behaelt_wetter_und_boerse(db):
     assert (wieder[5].boersenpreis_cent, wieder[5].strompreis_cent, wieder[5].soc_prozent) == (9.9, 31.0, 50.0)
 
 
-def test_t2_tag_von_t_nur_fuer_ha_feld_mit_tageswert():
-    """Halt 2 (a): «Tag von t» als Satz — ein HA-Feld mit Tageswert zeigt am Tag des Zeitpunkts den ganzen Tag aus Home
-    Assistant. Kein Satz bei MQTT, bei einem Stand-Feld ohne Tageswert und bei t = 00:00 (der ganze Tag liegt ab t)."""
+def test_t2_tag_von_t_fuer_jede_quelle_ha_zusatz_nur_mit_tageswert():
+    """Teil 3 (Entscheid Gernot 24.11.2026, Weg 1): der Satz zum Tag des Zeitpunkts gilt für jede Quelle und jedes Feld, auch
+    bei 00:00 — der Tag wird für alle Felder neu gebildet. Der Zusatz «ganzer Tag wie Home Assistant» (Halt 2 a) nur für ein
+    HA-Feld mit Tageswert und t ≠ 00:00. Kein Satz, wenn der Lauf den Kalendertag nicht neu bildet (t = 23:00 ohne Feld in der
+    Tageszeile)."""
     from datetime import datetime
 
     from backend.services import verwerfen_vor_zeitpunkt as vz
 
-    def la(quelle, tz_keys, t):
+    def la(quelle, tz_keys, t, tag_neu=True):
         return SimpleNamespace(quelle=quelle, ziele=SimpleNamespace(tz_keys=frozenset(tz_keys)),
-                               t=int(t.timestamp()))
+                               t=int(t.timestamp()), tag_neu=tag_neu)
 
+    tag = ("Den Tag des Zeitpunkts (10.05.2025) bildet eedc für alle Felder neu — aus der Statistik von Home Assistant bzw. den "
+           "gespeicherten Zählerständen; Werte anderer Felder können sich an diesem Tag ändern.")
     mit = vz._tag_von_t(la(vz.QUELLE_HA, {"einspeisung"}, datetime(2025, 5, 10, 6, 0)))
-    assert mit == ("Am 10.05.2025 zeigt dieses Feld den ganzen Tag, wie Home Assistant ihn führt — auch die Stunden vor 06:00 "
-                   "Uhr; die übrigen Felder dieses Tages liest eedc dann aus den gespeicherten Tageswerten, sie können sich an "
-                   "diesem Tag ändern.")
-    assert vz._tag_von_t(la(vz.QUELLE_MQTT, {"einspeisung"}, datetime(2025, 5, 10, 6, 0))) == ""
-    assert vz._tag_von_t(la(vz.QUELLE_HA, set(), datetime(2025, 5, 10, 6, 0))) == ""
-    assert vz._tag_von_t(la(vz.QUELLE_HA, {"einspeisung"}, datetime(2025, 5, 10, 0, 0))) == ""
+    assert mit == tag + " Dieses Feld zeigt dort den ganzen Tag, wie Home Assistant ihn führt — auch die Stunden vor 06:00 Uhr."
+    assert vz._tag_von_t(la(vz.QUELLE_MQTT, {"einspeisung"}, datetime(2025, 5, 10, 6, 0))) == tag
+    assert vz._tag_von_t(la(vz.QUELLE_HA, set(), datetime(2025, 5, 10, 6, 0))) == tag
+    assert vz._tag_von_t(la(vz.QUELLE_HA, {"einspeisung"}, datetime(2025, 5, 10, 0, 0))) == tag
+    assert vz._tag_von_t(la(vz.QUELLE_ANDERE, set(), datetime(2025, 5, 10, 12, 0))) == tag
+    assert vz._tag_von_t(la(vz.QUELLE_HA, {"einspeisung"}, datetime(2025, 5, 10, 23, 0), tag_neu=False)) == ""
+
+
+async def test_teil3_tag_neu_folgt_der_auswahl_des_laufs(monkeypatch):
+    """Der Lauf bildet ``bis_tag`` (Datum von t + 1 h) und die Tage, deren Tageszeile das Feld trägt
+    (``feld_loeschen._tage_mit_feld``). Bei t = 23:00 ist ``bis_tag`` der Folgetag — der Kalendertag von t nur mit Feld."""
+    from datetime import datetime
+
+    from backend.services import feld_loeschen
+    from backend.services import verwerfen_vor_zeitpunkt as vz
+    from backend.services.kanal.abgeleitet import tag_der_stunde
+
+    tage: list = []
+
+    async def _tage(db, anlage_id, ziele, bis_tag):
+        return list(tage)
+
+    monkeypatch.setattr(feld_loeschen, "_tage_mit_feld", _tage)
+    for h, tage_mit_feld, soll in ((6, [], True), (0, [], True), (23, [], False), (23, [date(2025, 5, 10)], True)):
+        tage[:] = tage_mit_feld
+        t = int(datetime(2025, 5, 10, h, 0).timestamp())
+        assert await vz._tag_neu(None, 1, None, t, tag_der_stunde(t)) is soll, (h, tage_mit_feld)
+
+
+def test_teil3_tage_mit_werten_zaehlt_kanal_und_bestand():
+    """4c: Lab-Probe rc49 2a — am 22.11. stand der Wert nur im Kanal (Tageszeile ohne Feld), der Chip zeigte «0 Tage mit Werten
+    des Feldes». Jetzt zählt er Kanal-Tage und Tage mit gespeichertem Wert (Vereinigung)."""
+    from backend.services import verwerfen_vor_zeitpunkt as vz
+
+    def la(kanal_tage, bestand, abschluss=()):
+        return SimpleNamespace(kanal=SimpleNamespace(zeilen=2, tage=tuple(kanal_tage)), staende=1, rohstaende=18, monate=(),
+                               bestand=SimpleNamespace(tage=set(bestand), abschluss_tage=set(abschluss)))
+
+    lab = vz.geschaetzt(la([date(2026, 11, 22)], []))
+    assert lab["tage_mit_werten"] == 1 and "bestand_tage" not in lab
+    assert vz.geschaetzt(la([date(2025, 5, 9)], [date(2025, 5, 9), date(2025, 5, 10)], [date(2025, 4, 30)]))[
+        "tage_mit_werten"] == 3
 
 
 def test_t2_was_weg_nennt_die_verzeichneten_sensorwechsel():

@@ -40,6 +40,6 @@ describe('Reparatur-Werkbank: die Zähler tragen deutsche Namen', () => {
     // dem Zahlwert. Genau diese Form darf nicht zurückkommen.
     const roh = /<\/strong>\s*\{k(?:ey)?\}/.test(quelle)
     expect(roh, 'RepairWorkbench rendert einen Zähler-Schlüssel wieder roh').toBe(false)
-    expect(quelle).toContain('aenderungLabel(k)')
+    expect(quelle).toMatch(/aenderungLabel\(k, (v|val)\)/)
   })
 })

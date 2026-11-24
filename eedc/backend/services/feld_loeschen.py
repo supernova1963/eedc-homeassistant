@@ -25,7 +25,8 @@ ihrem eigenen Weg wie in v4.3.1 (sie löscht keine Zählerstände, füllt nichts
 * **Abgeleitete Kanäle** der Familien dieses Felds (PV-Anteil der Heimladung, Strom je Betriebsart, Kosten —
   ``kanal/korrektur.abhaengige_abgeleitete``) ab dem ersten gelöschten Stand; der Lauf schreibt sie neu.
 
-**Was bleibt:** jedes andere Feld; die **gespeicherten Monatswerte** (Monatsabschluss, Handeingabe — eedc kann beide nicht
+**Was bleibt:** jedes andere Feld (an den neu gebildeten Tagen ändert der Neu-Aufbau nur, was auch «Tag neu aggregieren» dort
+ändert); die **gespeicherten Monatswerte** (Monatsabschluss, Handeingabe — eedc kann beide nicht
 unterscheiden; der Dialog nennt die Monate und den Weg zur Handkorrektur).
 
 **Danach im Hintergrund** (``korrektur_lauf`` mit Art ``loeschen``; ``nachlauf``): mit Home Assistant zuerst die Geschichte des
@@ -204,7 +205,12 @@ async def loesche_vor(db: AsyncSession, anlage, key: str, t: datetime, *, auch_a
 
 # ── Dialog: was «löschen» tut (Wortlaute, Weg B) ────────────────────────────────────────────────────────────────────────
 
-SATZ_NUR_DIESES = "Gelöscht werden nur die Daten dieses Felds vor der Änderung; alle anderen Felder bleiben, wie sie sind."
+#: Teil 3 Fund-Päckchen H (Entscheid Master 24.11.2026): der Lauf bildet die Tage mit dem Neu-Aufbau von «Tag neu aggregieren»
+#: neu (``korrektur_lauf._ein_tag``) — was der an anderen Feldern ändert, ändert er auch hier (Produktiv-Kopie: 01.11.2024
+#: Wallbox 0,0 → «—», Speicher-Wirkungsgrad 02.–09.11.2024; gemessen an der Werkbank-Operation, derselbe Baustein).
+SATZ_NUR_DIESES = ("Gelöscht werden nur die Daten dieses Felds vor der Änderung; die anderen Felder bleiben — an den Tagen, die "
+                   "eedc danach neu bildet, ändert der Neu-Aufbau an ihnen nur, was dort auch «Tag neu aggregieren» ändern "
+                   "würde.")
 SATZ_DANACH_HA = ("Danach verhält sich das Feld, als wäre der neue Sensor von Anfang an zugeordnet: Was Home Assistant für ihn "
                   "führt, übernimmt eedc, für die Zeit davor zeigt das Feld «—».")
 SATZ_DANACH_ANDERE = ("Danach verhält sich das Feld, als wäre die neue Quelle von Anfang an zugeordnet: eedc zählt ab ihrem "

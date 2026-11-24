@@ -42,19 +42,23 @@ import {
   repairApi,
 } from '../../api/repair'
 import { energieProfilApi } from '../../api/energie_profil'
-import { REPARATUR_AENDERUNG_LABELS } from '../../lib/constants'
+import { REPARATUR_AENDERUNG_LABELS, REPARATUR_AENDERUNG_LABELS_EINZAHL } from '../../lib/constants'
 import {
   baueRohdatenLoeschRueckfrage,
   baueRohdatenLoeschMeldung,
   ROHDATEN_LOESCH_BESCHREIBUNG,
 } from '../../pages/datenCheckerMeldungen'
-import { mitAnzahl } from '../../lib/plural'
+import { mitAnzahl, plural } from '../../lib/plural'
 import { useWerkbankPlanAusUrl } from '../../hooks/useWerkbankPlanAusUrl'
 import { VERWERFEN_LEER, VerwerfenParams, verwerfenParams, zeitpunktInZukunft, type VerwerfenWerte } from './VerwerfenParams'
 
 /** Deutscher Name eines Vorschau-/Ergebnis-Zählers; unbekannte Schlüssel
- *  bleiben roh stehen, damit ein neuer Zähler nicht still verschwindet. */
-const aenderungLabel = (key: string) => REPARATUR_AENDERUNG_LABELS[key] ?? key
+ *  bleiben roh stehen, damit ein neuer Zähler nicht still verschwindet. Beim
+ *  Zähler 1 die Einzahl, wo die Map eine kennt (`REPARATUR_AENDERUNG_LABELS_EINZAHL`). */
+const aenderungLabel = (key: string, anzahl: number) => {
+  const mehrzahl = REPARATUR_AENDERUNG_LABELS[key] ?? key
+  return plural(anzahl, REPARATUR_AENDERUNG_LABELS_EINZAHL[key] ?? mehrzahl, mehrzahl)
+}
 
 // D14-8 (detLAN #113/#123, Gernot #128): „Energieprofil-Daten löschen" wandert als
 // Eintrag ins Werkbank-Auswahlfeld — EINE Reparatur-UI. Technisch bleibt es der
@@ -738,7 +742,7 @@ function PlanPreviewBlock({
       <div className="mb-3 flex flex-wrap gap-2">
         {Object.entries(plan.estimated_changes).map(([k, v]) => (
           <span key={k} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs text-gray-700 dark:text-gray-300">
-            <strong>{v}</strong> {aenderungLabel(k)}
+            <strong>{v}</strong> {aenderungLabel(k, v)}
           </span>
         ))}
       </div>
@@ -887,10 +891,10 @@ function HistoryList({ views }: { views: RepairPlanView[] }) {
             <div className="mt-1 text-xs text-gray-600 dark:text-gray-400 flex flex-wrap gap-2">
               {v.result
                 ? Object.entries(v.result.actual_changes).map(([k, val]) => (
-                    <span key={k}><strong>{val}</strong> {aenderungLabel(k)}</span>
+                    <span key={k}><strong>{val}</strong> {aenderungLabel(k, val)}</span>
                   ))
                 : Object.entries(v.plan.estimated_changes).map(([k, val]) => (
-                    <span key={k}>geschätzt <strong>{val}</strong> {aenderungLabel(k)}</span>
+                    <span key={k}>geschätzt <strong>{val}</strong> {aenderungLabel(k, val)}</span>
                   ))
               }
               {v.result && v.result.audit_log_ids.length > 0 && (
@@ -954,10 +958,9 @@ function formatTime(iso: string): string {
 function summarizeResult(result: RepairResult): string {
   const parts: string[] = []
   for (const [k, v] of Object.entries(result.actual_changes)) {
-    parts.push(`${v} ${aenderungLabel(k)}`)
+    parts.push(`${v} ${aenderungLabel(k, v)}`)
   }
-  const audit = result.audit_log_ids.length
-  parts.push(`${audit} Audit-Log-Eintrag${audit === 1 ? '' : 'e'}`)
+  parts.push(mitAnzahl(result.audit_log_ids.length, 'Audit-Log-Eintrag', 'Audit-Log-Einträge'))
   const meta = OPERATION_META.find((o) => o.type === result.operation)
   const opLabel = meta?.label ?? result.operation
   // N-791: der Satz zur Quelle aus dem Backend (Tag ohne Leistungskurve: Zähler neu, Verlauf bleibt).

@@ -21,7 +21,8 @@ Wechselst du die Quelle eines Felds, fragt eedc jetzt, was mit den bisherigen We
   eedc wie Home Assistant mit beiden: den bisherigen bis zu seinem letzten Wert, den neuen ab seinem ersten; haben sie eine
   Zeit lang gleichzeitig gezählt, wählst du unter „Der neue Sensor zählt ab“ die Stunde. Bei „löschen“ gehen nur die Daten
   dieses Felds aus der Zeit vor der Änderung weg; danach zeigt das Feld, was Home Assistant für den neuen Sensor führt, davor
-  „—“; jedes andere Feld bleibt, wie es ist. Gespeicherte Monatswerte bleiben bei beiden Antworten — der Dialog nennt die
+  „—“; jedes andere Feld bleibt — an den Tagen, die eedc danach neu bildet, ändert sich an ihm nur, was dort auch „Tag
+  neu aggregieren“ ändern würde. Gespeicherte Monatswerte bleiben bei beiden Antworten — der Dialog nennt die
   Monate und den Weg, sie unter „Monatsdaten“ von Hand oder mit „Aus HA laden“ anzugleichen. „Löschen“ lässt sich nicht
   zurücknehmen. Am Feld gibt es dazu **„Zähler getauscht (gleiche Quelle)“**: für einen Zähler aus Home Assistant nennt der
   Dialog den Weg dort („Summe anpassen“) und trägt nichts ein; bei MQTT entscheidest du — eedc zeigt die Zählerstände vor
@@ -67,12 +68,14 @@ Wechselst du die Quelle eines Felds, fragt eedc jetzt, was mit den bisherigen We
   zugeordnet; angeboten wird jedes zugeordnete Feld, nicht nur nach einem Sensortausch. Weg ist nur dieses Feld vor dem
   Zeitpunkt: seine Stunden im HA-Spiegel, seine Zählerstände (bei MQTT auch die gespeicherten Rohwerte), sein Wert in
   den Stunden- und Tageswerten, auch in Monaten mit Monatsabschluss, und verzeichnete Sensorwechsel dieses Felds bis zur
-  ersten Stunde ab dem Zeitpunkt; danach bildet eedc die betroffenen Tage im Hintergrund neu. Die gespeicherten Werte jedes
-  anderen Felds, Wetter, Börsen- und Kraftstoffpreise, Prognosen und die gespeicherten Monatswerte bleiben — die Vorschau
-  nennt die Monate, bevor etwas geändert wird, und sagt, dass es sich nicht rückgängig machen lässt. Ein Feld aus Home
-  Assistant mit Tageswert (etwa Einspeisung) zeigt am Tag des Zeitpunkts den ganzen Tag, wie Home Assistant ihn führt; die
-  übrigen Felder dieses Tages liest eedc dann aus den gespeicherten Tageswerten, sie können sich an diesem Tag ändern. Die
-  Vorschau sagt es. Wo ein Neuaufbau den Wert wieder aus der Statistik von Home Assistant
+  ersten Stunde ab dem Zeitpunkt; danach bildet eedc die betroffenen Tage im Hintergrund neu. Wetter, Börsen- und
+  Kraftstoffpreise, Prognosen und die gespeicherten Monatswerte bleiben — die Vorschau nennt die Monate, bevor etwas
+  geändert wird, und sagt, dass es sich nicht rückgängig machen lässt. Den Tag des Zeitpunkts bildet eedc für alle Felder
+  neu — aus der Statistik von Home Assistant bzw. den gespeicherten Zählerständen, bei jeder Quelle und auch bei 00:00 Uhr;
+  Werte anderer Felder können sich an diesem Tag ändern (gemessen: an einer MQTT-Anlage ein zweites PV-Feld 7,8 → 7,2 kWh).
+  Ein Feld aus Home Assistant mit Tageswert (etwa Einspeisung) zeigt dort den ganzen Tag, wie Home Assistant ihn führt. An den
+  übrigen neu gebildeten Tagen ändert sich an den anderen Feldern nur, was dort auch „Tag neu aggregieren“ ändern würde. Die
+  Vorschau sagt beides. Wo ein Neuaufbau den Wert wieder aus der Statistik von Home Assistant
   schriebe, lehnt die Vorschau ab und nennt die Tage. Anlass: die gefahrenen Kilometer vor dem richtigen Sensor — der
   Lösungsweg des Befunds „Zählerstand springt“ („die Summe beginnt neu“) nennt die Operation als zweiten Weg (gemessen an
   einer Kopie: Mai 2 807 → 902 km in der Tabelle wie im Monatswert, der Tag des Neubeginns 1 924 → 19 km, Befund weg).

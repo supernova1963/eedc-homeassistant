@@ -159,8 +159,10 @@ export const OPERATION_META: OperationMeta[] = [
     description:
       'Verwirft für EIN Feld alle Werte vor einem gewählten Zeitpunkt — im HA-Spiegel, in den Zählerständen und in ' +
       'den Stunden- und Tageswerten dieses Felds, auch in Monaten mit Monatsabschluss —, als wäre seine Quelle erst ' +
-      'ab dann zugeordnet; danach bildet eedc die betroffenen Tage im Hintergrund neu. Jedes andere Feld, Wetter, ' +
-      'Preise und gespeicherte Monatswerte bleiben. Kein Rückweg in eedc: die Vorschau sagt, was danach geschieht.',
+      'ab dann zugeordnet; danach bildet eedc die betroffenen Tage im Hintergrund für alle Felder neu — am Tag des ' +
+      'Zeitpunkts können sich auch Werte anderer Felder ändern, an den übrigen Tagen nur, was auch «Tag neu ' +
+      'aggregieren» ändert. Wetter, Preise und gespeicherte Monatswerte bleiben. ' +
+      'Kein Rückweg in eedc: die Vorschau sagt, was danach geschieht.',
     inWorkbench: true,
   },
   // E3 Daten-Checker: die Knöpfe der Befunde als Operationen (Labels wörtlich wie `repair_protokoll.OPERATION_LABELS`,

@@ -15,7 +15,14 @@ Stand-Kanal ``basis:<feld>`` / ``inv:<id>:<feld>``) und einen frei gewählten Ze
   bis zum Bestandstag von ``t`` in **allen** Monaten, die abgeleiteten Kanäle dieses Felds; die verzeichneten Wechsel wie die
   Werkbank-Form (bis zum Ende der ersten Stunde ab ``t``). Danach im Hintergrund der bestehende Lauf (``korrektur_lauf``, Art
   ``loeschen``, ohne Nachfüllen aus Home Assistant): abgeleitete Kanäle neu, betroffene Tage neu — ohne Abruf, Wetter und Preise
-  wie vorher (``korrektur_lauf._ein_tag``). **Gespeicherte Monatswerte bleiben** (die Vorschau nennt die Monate).
+  wie vorher (``korrektur_lauf._ein_tag``, derselbe Neu-Aufbau wie «Tag neu aggregieren»). **Gespeicherte Monatswerte bleiben**
+  (die Vorschau nennt die Monate).
+* **Tag des Zeitpunkts (Entscheid Gernot 24.11.2026, Weg 1 — das Verhalten bleibt, die Vorschau sagt es):** der Kalendertag von
+  ``t`` verliert mit der Zeile vor ``t`` seine Kanal-Deckung (auch bei 00:00 — der Anker fehlt) und wird für ALLE Felder aus dem
+  Bestand neu gebildet; Werte anderer Felder können sich dort ändern (gemessen: Lab Anl. 9 ``inv:68`` 7,8 → 7,2 kWh, Lab Anl. 6
+  Erzeugung 316,8 → 737,28 kWh, Produktiv-Kopie Netzbezug 0,139 → 0,138). An den übrigen neu gebildeten Tagen ändert sich, was
+  dort auch «Tag neu aggregieren» ändert (Produktiv-Kopie: 01.11.2024 Wallbox 0,0 → «—», Speicher-Wirkungsgrad 02.–09.11.2024).
+  Bei ``t`` = 23:00 bildet der Lauf den Kalendertag nur, wenn seine Tageszeile das Feld trägt (``bis_tag`` ist dann der Folgetag).
 * **Nicht freigegeben (Matrix H1, Zelle ohne eindeutige Antwort):** ein Feld, das Home Assistant führt und das der Neu-Aufbau
   eines Tages vor ``t`` direkt aus der HA-Statistik in Stunden- und Tageszeilen schreibt, weil der Tag für seine Gruppe keine
   Kanal-Deckung hat (``mengen_weiche``: der Schlüssel bliebe in der Tageszeile) — dort käme der Wert mit jedem «Tag neu
@@ -69,6 +76,8 @@ class LageZ:
     ha_bestandstage: tuple[date, ...] = ()
     #: Verzeichnete Sensorwechsel, die mit verworfen werden (``feld_loeschen.zaehle_wechsel``, dieselbe Auswahl wie das Löschen).
     wechsel: int = 0
+    #: Bildet der Lauf den Kalendertag von ``t`` neu? Immer, außer bei ``t`` = 23:00 ohne Feld in dessen Tageszeile.
+    tag_neu: bool = True
 
     @property
     def bis_tag(self) -> date:
@@ -182,24 +191,37 @@ async def lage(db: AsyncSession, anlage_id: int, params: dict[str, Any]) -> Lage
     wechsel = await zaehle_wechsel(db, anlage_id, key, bis=datetime.fromtimestamp(t + 3600),
                                    gleiche_quelle_bis=datetime.fromtimestamp(t))
     return LageZ(anlage, key, vq.feld_label(key, await vq._investitionen(db, anlage_id)), t, kanal_v, ziele, bestand,
-                 staende, roh, tuple(monate), quelle, bilanz, ha_tage, wechsel)
+                 staende, roh, tuple(monate), quelle, bilanz, ha_tage, wechsel, await _tag_neu(db, anlage_id, ziele, t, bis_tag))
+
+
+async def _tag_neu(db: AsyncSession, anlage_id: int, ziele: vq.BestandZiele, t: int, bis_tag: date) -> bool:
+    """Bildet der Lauf den Kalendertag von ``t`` neu? Er bildet ``bis_tag`` und die Tage, deren Tageszeile das Feld trägt
+    (``feld_loeschen.loesche_vor``, dieselbe Auswahl) — der Kalendertag ist ``bis_tag`` außer bei ``t`` = 23:00."""
+    from backend.services.feld_loeschen import _tage_mit_feld
+
+    tag = datetime.fromtimestamp(t).date()
+    return tag == bis_tag or tag in set(await _tage_mit_feld(db, anlage_id, ziele, bis_tag))
 
 
 # ── Vorschau ────────────────────────────────────────────────────────────────
 
-SATZ_BLEIBT = ("Gespeichert bleiben: die Werte jedes anderen Felds, Wetter, Börsen- und Kraftstoffpreise, Prognosen und die "
-               "gespeicherten Monatswerte.")
-SATZ_BILANZ = ("Das Feld gehört zur Energiebilanz: vor dem Zeitpunkt zeigt es «—» wie ein nicht zugeordnetes Feld, die übrigen "
-               "Felder des Tages bleiben. Was eedc aus ihm rechnet (etwa Eigenverbrauch, Hausverbrauch, Überschuss), ändert "
-               "sich an denselben Tagen mit.")
+#: Teil 3 (Entscheid Gernot 24.11.2026, Option A): die übrigen Felder bleiben nur, soweit der Neu-Aufbau sie nicht ändert —
+#: gemessen an der Produktiv-Kopie (01.11.2024 Wallbox 0,0 → «—», Speicher-Wirkungsgrad 02.–09.11.2024, Performance Ratio).
+SATZ_BLEIBT = ("Gespeichert bleiben: Wetter, Börsen- und Kraftstoffpreise, Prognosen und die gespeicherten Monatswerte. An den "
+               "übrigen neu gebildeten Tagen ändert der Neu-Aufbau an den anderen Feldern nur, was dort auch «Tag neu "
+               "aggregieren» ändern würde.")
+SATZ_BILANZ = ("Das Feld gehört zur Energiebilanz: vor dem Zeitpunkt zeigt es «—» wie ein nicht zugeordnetes Feld. Was eedc aus "
+               "ihm rechnet (etwa Eigenverbrauch, Hausverbrauch, Überschuss), ändert sich an denselben Tagen mit.")
 SATZ_HA = ("Home Assistant behält seine Statistik. eedc holt die Zeit vor dem Zeitpunkt für dieses Feld nicht wieder — auch "
            "nicht mit «Aus Home Assistant neu übernehmen» oder «Tag neu aggregieren».")
 SATZ_MQTT = "Die Quelle ist MQTT: die verworfenen Werte sind nicht wiederholbar — keine Quelle holt sie zurück."
+#: Teil 3 (Entscheid Gernot 24.11.2026, Weg 1): für jede Quelle und jedes Feld, auch bei 00:00 — der Tag verliert mit der Zeile
+#: vor ``t`` die Kanal-Deckung und wird für alle Felder aus dem Bestand neu gebildet.
+SATZ_TAG = ("Den Tag des Zeitpunkts ({tag}) bildet eedc für alle Felder neu — aus der Statistik von Home Assistant bzw. den "
+            "gespeicherten Zählerständen; Werte anderer Felder können sich an diesem Tag ändern.")
 #: Halt 2 (a), Entscheid Master 23.11.2026: ein HA-Feld mit Tageswert zeigt am Tag des Zeitpunkts den ganzen Tag aus der
-#: HA-Statistik (der Tag verliert mit der Zeile vor ``t`` die Kanal-Deckung, der Neu-Aufbau schreibt den Tageswert aus HA).
-SATZ_TAG_VON_T = ("Am {tag} zeigt dieses Feld den ganzen Tag, wie Home Assistant ihn führt — auch die Stunden vor {uhrzeit} "
-                  "Uhr; die übrigen Felder dieses Tages liest eedc dann aus den gespeicherten Tageswerten, sie können sich an "
-                  "diesem Tag ändern.")
+#: HA-Statistik (der Neu-Aufbau schreibt den Tageswert aus HA).
+SATZ_TAG_VON_T = "Dieses Feld zeigt dort den ganzen Tag, wie Home Assistant ihn führt — auch die Stunden vor {uhrzeit} Uhr."
 SATZ_MONAT = "Für {monate} ist ein Monatswert gespeichert. Er bleibt, wie er ist."
 SATZ_MONATE = "Für {monate} sind Monatswerte gespeichert. Sie bleiben, wie sie sind."
 SATZ_MONATE_WEG = "Soll ein Monat zu den verbliebenen Werten passen, ändere ihn unter Einstellungen → «Daten» → «Monatsdaten» von Hand."
@@ -256,16 +278,24 @@ def klartext(la: LageZ) -> list[str]:
 
 
 def _tag_von_t(la: LageZ) -> str:
-    """Der Satz «Tag von t» — nur für ein Feld aus Home Assistant mit Tageswert und einen Zeitpunkt nach Mitternacht."""
+    """Der Satz «Tag von t» für jede Quelle (entfällt nur, wenn der Lauf den Kalendertag von ``t`` nicht neu bildet), dazu für
+    ein Feld aus Home Assistant mit Tageswert und einen Zeitpunkt nach Mitternacht der Zusatz «ganzer Tag wie HA»."""
     z = datetime.fromtimestamp(la.t)
-    if la.quelle != QUELLE_HA or not la.ziele.tz_keys or z.hour == 0:
+    if not la.tag_neu:
         return ""
-    return SATZ_TAG_VON_T.format(tag=vq._spanne([z.date()]), uhrzeit=z.strftime("%H:%M"))
+    satz = SATZ_TAG.format(tag=vq._spanne([z.date()]))
+    if la.quelle != QUELLE_HA or not la.ziele.tz_keys or z.hour == 0:
+        return satz
+    return satz + " " + SATZ_TAG_VON_T.format(uhrzeit=z.strftime("%H:%M"))
 
 
 def geschaetzt(la: LageZ) -> dict[str, int]:
+    """Die Chips der Vorschau. ``tage_mit_werten`` (Teil 3, 4c): Tage, an denen das Feld vor ``t`` Werte hat — Kanal-Tage und
+    Tage mit gespeichertem Wert (dieselben Mengen wie die Spannen in ``_was_weg``); die Werkbank-Form «Werte vor dem
+    Sensorbeginn verwerfen» zählt mit ``bestand_tage`` weiter nur den gespeicherten Bestand."""
     return {"kanalzeilen": la.kanal.zeilen, "zaehlerstaende": la.staende, "mqtt_rohwerte": la.rohstaende,
-            "bestand_tage": len(la.bestand.tage | la.bestand.abschluss_tage), "monate_gespeichert": len(la.monate)}
+            "tage_mit_werten": len(set(la.kanal.tage) | la.bestand.tage | la.bestand.abschluss_tage),
+            "monate_gespeichert": len(la.monate)}
 
 
 def vorschau_daten(la: LageZ) -> dict[str, Any]:

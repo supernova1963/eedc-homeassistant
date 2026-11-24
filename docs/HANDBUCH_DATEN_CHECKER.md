@@ -3520,14 +3520,17 @@ Meldung sagt dann „die Summe beginnt neu, der Stand läuft weiter“ und nennt
    2. Unter „Feld“ das Feld aus der Meldung wählen („… · Gefahrene km“ mit dem Namen deines Autos), unter
       „Verwerfen vor (Tag)“ den Tag und unter „Uhrzeit“ die Stunde aus der Meldung („am …, Stunde ab …“).
    3. **«Plan erstellen»** und die Vorschau lesen: sie nennt, was gelöscht wird (die Stunden des Felds im HA-Spiegel,
-      seine Zählerstände und seine Stunden- und Tageswerte vor dem Zeitpunkt), was bleibt (jedes andere Feld, Wetter,
-      Preise, Prognosen und die gespeicherten Monatswerte — mit den Monaten), und endet mit „Das lässt sich nicht
-      rückgängig machen.“
+      seine Zählerstände und seine Stunden- und Tageswerte vor dem Zeitpunkt), dass eedc den Tag des Zeitpunkts für alle
+      Felder neu bildet (Werte anderer Felder können sich an diesem Tag ändern), was bleibt (Wetter, Preise, Prognosen und
+      die gespeicherten Monatswerte — mit den Monaten; an den übrigen neu gebildeten Tagen ändert sich an den anderen
+      Feldern nur, was dort auch „Tag neu aggregieren“ ändern würde), und endet mit „Das lässt sich nicht rückgängig
+      machen.“
    4. **«Operation ausführen»** — eedc bildet die betroffenen Tage im Hintergrund neu.
 
    Danach zeigt das Feld vor dem Zeitpunkt „—“ in Tag und Tabelle; der Tag des Neubeginns zählt die Kilometer ab der
    gewählten Stunde (die Stunde selbst zeigt „—“, sie hat keinen Stand davor); die Kilometer, um die der Stand über die
-   Lücke gesprungen ist, zählen nicht mehr. Home Assistant behält seine Statistik; eedc holt die Zeit vor dem Zeitpunkt
+   Lücke gesprungen ist, zählen nicht mehr. Diesen Tag bildet eedc für alle Felder neu — aus der Statistik von Home
+   Assistant bzw. den gespeicherten Zählerständen —, die Werte anderer Felder können sich an diesem Tag ändern. Home Assistant behält seine Statistik; eedc holt die Zeit vor dem Zeitpunkt
    nicht wieder — auch nicht mit «Aus Home Assistant neu übernehmen» oder „Tag neu aggregieren“. Gespeicherte Monatswerte bleiben, wie sie sind: soll ein
    Monat zu den verbliebenen Werten passen, berichtige ihn unter
    [Monatsdaten](eedc:/einstellungen/daten?block=monatsdaten) von Hand. Der Rückweg ist eine Sicherung der
